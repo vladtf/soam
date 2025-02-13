@@ -1,0 +1,9 @@
+.idea/
+.code/
+.vscode/
+*.log
+*.db
+*.sqlite
+*.bin
+*.exe
+node_modules/
