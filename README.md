@@ -13,5 +13,23 @@
 
 ### Local Development
 
+- Start Mqtt Server:
+
+```powershell
+docker-compose up -d
+```
+
+- Start the backend:
+
+```powershell
+pipenv run uvicorn main:app --reload
+```
+
+- Start the frontend:
+
+```powershell
+npm run dev
+```
+
 ### Cloud Deployment
 

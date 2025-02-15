@@ -1,44 +1,27 @@
-import { useEffect, useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-
-interface SensorData {
-  temperature?: number;
-  humidity?: number;
-}
-
+import { Routes, Route, BrowserRouter } from 'react-router-dom';
+import './App.css';
+import AppFooter from './components/Footer';
+import Home from './pages/Home';
+import SensorDataPage from './pages/SensorDataPage';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import AppNavbar from './components/AppNavbar';
+import { Suspense } from 'react';
 
 function App() {
-  const [data, setData] = useState<SensorData>({});
-
-  const fetchData = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/data');
-      const json = await response.json();
-      setData(json);
-    } catch (error) {
-      console.error('Error fetching sensor data:', error);
-    }
-  };
-
-  useEffect(() => {
-    // Fetch data immediately and then every 5 seconds
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
-    <div className="App">
-      <h1>Sensor Data</h1>
-      <div>
-        <p>Temperature: {data.temperature !== undefined ? data.temperature : 'N/A'}</p>
-        <p>Humidity: {data.humidity !== undefined ? data.humidity : 'N/A'}</p>
-      </div>
-    </div>
+    <BrowserRouter>
+      <Suspense fallback={<div>Loading...</div>}>
+        <div className="App">
+          <AppNavbar />
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/sensor-data" element={<SensorDataPage />} />
+          </Routes>
+          <AppFooter />
+        </div>
+      </Suspense>
+    </BrowserRouter>
   );
-
 }
 
-export default App
+export default App;
