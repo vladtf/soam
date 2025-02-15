@@ -27,14 +27,14 @@ const Home: React.FC = () => {
           <Card>
             <Card.Body>
               <Card.Title>Features</Card.Title>
-              <Card.Text>
+              <div>
                 <ul>
                   <li>Real-time sensor data monitoring</li>
                   <li>Data analytics and visualization</li>
                   <li>Automated alerts and notifications</li>
                   <li>Integration with existing city infrastructure</li>
                 </ul>
-              </Card.Text>
+              </div>
             </Card.Body>
           </Card>
         </Col>
