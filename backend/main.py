@@ -1,5 +1,6 @@
 import json
 import threading
+from collections import deque
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import paho.mqtt.client as mqtt
@@ -8,7 +9,7 @@ import paho.mqtt.client as mqtt
 class SmartCityBackend:
     def __init__(self):
         self.app = FastAPI()
-        self.latest_data = {}
+        self.data_buffer = deque(maxlen=100)  # Buffer to store the last 100 messages
 
         # Enable CORS
         self.app.add_middleware(
@@ -37,21 +38,21 @@ class SmartCityBackend:
     def on_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-            self.latest_data = payload
+            self.data_buffer.append(payload)
             print("Received message:", payload)
         except Exception as e:
             print("Error parsing message:", e)
 
     def mqtt_loop(self):
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, "BackendListener")
+        client = mqtt.Client()
         client.on_connect = self.on_connect
         client.on_message = self.on_message
         client.connect(self.MQTT_BROKER, self.MQTT_PORT, 60)
         client.loop_forever()
 
     def get_data(self):
-        """Returns the latest sensor data."""
-        return self.latest_data
+        """Returns the buffered sensor data."""
+        return list(self.data_buffer)
 
 
 # Instantiate the backend and expose its app
