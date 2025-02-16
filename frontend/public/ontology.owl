@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<rdf:RDF
+    xmlns="http://example.org/smartcity#"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#">
+
+  <!-- Ontology Declaration -->
+  <owl:Ontology rdf:about="http://example.org/smartcity">
+    <rdfs:comment>A minimal ontology for smart city applications, including detailed address information.</rdfs:comment>
+  </owl:Ontology>
+
+  <!-- Define the SmartCity class -->
+  <owl:Class rdf:about="http://example.org/smartcity#SmartCity">
+    <rdfs:label>Smart City</rdfs:label>
+    <rdfs:comment>A city that leverages technology to improve quality of life and efficiency of services.</rdfs:comment>
+  </owl:Class>
+
+  <!-- Define the Building class -->
+  <owl:Class rdf:about="http://example.org/smartcity#Building">
+    <rdfs:label>Building</rdfs:label>
+    <rdfs:comment>An infrastructure element in the city, such as residential or commercial buildings.</rdfs:comment>
+  </owl:Class>
+
+  <!-- Define the Sensor class -->
+  <owl:Class rdf:about="http://example.org/smartcity#Sensor">
+    <rdfs:label>Sensor</rdfs:label>
+    <rdfs:comment>A device that collects data from the environment.</rdfs:comment>
+  </owl:Class>
+  
+  <!-- Define the Address class -->
+  <owl:Class rdf:about="http://example.org/smartcity#Address">
+    <rdfs:label>Address</rdfs:label>
+    <rdfs:comment>A physical address including street, city, and country details.</rdfs:comment>
+  </owl:Class>
+
+  <!-- Object Property: hasSensor -->
+  <owl:ObjectProperty rdf:about="http://example.org/smartcity#hasSensor">
+    <rdfs:label>has sensor</rdfs:label>
+    <rdfs:comment>Associates a SmartCity with one or more sensors.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#SmartCity"/>
+    <rdfs:range rdf:resource="http://example.org/smartcity#Sensor"/>
+  </owl:ObjectProperty>
+
+  <!-- Object Property: locatedIn -->
+  <owl:ObjectProperty rdf:about="http://example.org/smartcity#locatedIn">
+    <rdfs:label>located in</rdfs:label>
+    <rdfs:comment>Specifies the building in which a sensor is located.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Sensor"/>
+    <rdfs:range rdf:resource="http://example.org/smartcity#Building"/>
+  </owl:ObjectProperty>
+  
+  <!-- Object Property: hasAddress -->
+  <owl:ObjectProperty rdf:about="http://example.org/smartcity#hasAddress">
+    <rdfs:label>has address</rdfs:label>
+    <rdfs:comment>Associates a Building with its Address.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Building"/>
+    <rdfs:range rdf:resource="http://example.org/smartcity#Address"/>
+  </owl:ObjectProperty>
+
+  <!-- Data Property: dataValue -->
+  <owl:DatatypeProperty rdf:about="http://example.org/smartcity#dataValue">
+    <rdfs:label>data value</rdfs:label>
+    <rdfs:comment>The measured value produced by a sensor.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Sensor"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+  </owl:DatatypeProperty>
+
+  <!-- Data Property: measurementTime -->
+  <owl:DatatypeProperty rdf:about="http://example.org/smartcity#measurementTime">
+    <rdfs:label>measurement time</rdfs:label>
+    <rdfs:comment>The time at which the sensor measurement was taken.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Sensor"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+  </owl:DatatypeProperty>
+  
+  <!-- Data Property: street -->
+  <owl:DatatypeProperty rdf:about="http://example.org/smartcity#street">
+    <rdfs:label>street</rdfs:label>
+    <rdfs:comment>The street component of an address.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Address"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+  </owl:DatatypeProperty>
+  
+  <!-- Data Property: city -->
+  <owl:DatatypeProperty rdf:about="http://example.org/smartcity#city">
+    <rdfs:label>city</rdfs:label>
+    <rdfs:comment>The city component of an address.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Address"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+  </owl:DatatypeProperty>
+  
+  <!-- Data Property: country -->
+  <owl:DatatypeProperty rdf:about="http://example.org/smartcity#country">
+    <rdfs:label>country</rdfs:label>
+    <rdfs:comment>The country component of an address.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Address"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+  </owl:DatatypeProperty>
+
+</rdf:RDF>

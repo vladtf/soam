@@ -14,6 +14,7 @@ const AppNavbar: React.FC = () => {
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
               <Nav.Link as={Link} to="/sensor-data">Sensor Data</Nav.Link>
+              <Nav.Link as={Link} to="/ontology">Ontology</Nav.Link>
           </Nav>
         </Navbar.Collapse>
       </Container>
