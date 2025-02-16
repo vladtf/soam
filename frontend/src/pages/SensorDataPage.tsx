@@ -1,15 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Spinner, Form, Button } from 'react-bootstrap';
 import ReactJson from 'react-json-view';
-import DynamicSensorForm from '../components/DynamicSensorForm';
+import DynamicForm from '../components/DynamicForm';
+import SensorForm from '../components/SensorForm';
 
 interface SensorData {
     temperature?: number;
     humidity?: number;
 }
 
+
+interface SensorFormData {
+    [propertyURI: string]: string;
+}
+
 const SensorDataPage: React.FC = () => {
     const [data, setData] = useState<SensorData[]>([]);
+    const [formData, setFormData] = useState<SensorFormData>({});
+
 
     const fetchData = async () => {
         try {
@@ -28,13 +36,20 @@ const SensorDataPage: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        // You can add further validation if needed.
+        console.log("Submitted Sensor Data:", formData);
+        // Process formData as needed (e.g. create RDF triples for the sensor instance)
+    };
+
     return (
         <Container>
             <Row>
-                <Col md={4}>
-                    <DynamicSensorForm />
+                <Col md={6}>
+                    <SensorForm />
                 </Col>
-                <Col md={8}>
+                <Col md={6}>
                     <h1>Sensor Data</h1>
                     {data && data.length > 0 ? (
                         <div style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', maxHeight: '70vh', overflowY: 'auto' }}>
