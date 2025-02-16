@@ -8,7 +8,13 @@ const RDFS_DOMAIN = 'http://www.w3.org/2000/01/rdf-schema#domain';
 const RDFS_RANGE = 'http://www.w3.org/2000/01/rdf-schema#range';
 const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 
-const SensorForm: React.FC = () => {
+interface SensorFormProps {
+	dataSchema: { [propertyURI: string]: string };
+}
+
+
+
+const SensorForm: React.FC = ({ dataSchema }) => {
 	const [fields, setFields] = useState<FormField[]>([]);
 	const [formData, setFormData] = useState<{ [propertyURI: string]: string }>({});
 	const [loading, setLoading] = useState<boolean>(true);
@@ -46,6 +52,7 @@ const SensorForm: React.FC = () => {
 		loadOntology();
 	}, []);
 
+
 	const handleFieldChange = (propertyURI: string, value: string) => {
 		setFormData(prev => ({ ...prev, [propertyURI]: value }));
 	};
@@ -53,7 +60,6 @@ const SensorForm: React.FC = () => {
 	const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
 		console.log('Submitted Sensor Data:', formData);
-		// Process formData as needed
 	};
 
 	if (loading)
@@ -67,7 +73,11 @@ const SensorForm: React.FC = () => {
 	return (
 		<Form onSubmit={handleSubmit}>
 			<h2>Add New Sensor</h2>
-			<DynamicFields fields={fields} onFieldChange={handleFieldChange} />
+			<DynamicFields
+				fields={fields}
+				onFieldChange={handleFieldChange}
+				dropdownOptions={dataSchema}
+			/>
 			<Button variant="primary" type="submit">
 				Submit
 			</Button>

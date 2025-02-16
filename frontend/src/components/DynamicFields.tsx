@@ -12,6 +12,7 @@ export interface DynamicFieldsProps {
 	fields: FormField[];
 	onFieldChange: (propertyURI: string, value: string) => void;
 	depth?: number;
+	dropdownOptions?: Record<string, string[]>;
 }
 
 export const mapXSDToInputType = (xsdType: string): string => {
@@ -29,25 +30,46 @@ export const mapXSDToInputType = (xsdType: string): string => {
 	}
 };
 
-const DynamicFields: React.FC<DynamicFieldsProps> = ({ fields, onFieldChange, depth = 0 }) => (
+const DynamicFields: React.FC<DynamicFieldsProps> = ({ fields, onFieldChange, depth = 0, dropdownOptions }) => (
 	<div style={{ marginLeft: depth * 20 }}>
-		{fields.map(field => (
-			<Form.Group key={field.propertyURI} controlId={field.propertyURI} className="mb-3">
-				<Form.Label>
-					{depth > 0 && <span style={{ marginRight: 5 }}>└─</span>}
-					{field.label} ({field.xsdType.split('#').pop()}):
-				</Form.Label>
-				{mapXSDToInputType(field.xsdType) === 'complex' ? (
-					<DynamicFieldsWrapper classURI={field.xsdType} onFieldChange={onFieldChange} depth={depth + 1} />
-				) : (
-					<Form.Control
-						type={mapXSDToInputType(field.xsdType)}
-						onChange={e => onFieldChange(field.propertyURI, e.target.value)}
-						required
-					/>
-				)}
-			</Form.Group>
-		))}
+		{fields.map(field => {
+			const inputType = mapXSDToInputType(field.xsdType);
+			return (
+				<Form.Group key={field.propertyURI} controlId={field.propertyURI} className="mb-3">
+					<Form.Label>
+						{depth > 0 && <span style={{ marginRight: 5 }}>└─</span>}
+						{field.label} ({field.xsdType.split('#').pop()}):
+					</Form.Label>
+					{inputType === 'complex' ? (
+						<DynamicFieldsWrapper
+							classURI={field.xsdType}
+							onFieldChange={onFieldChange}
+							depth={depth + 1}
+							dropdownOptions={depth === 0 ? dropdownOptions : undefined}
+						/>
+					) : (
+						<>
+							{depth === 0 && dropdownOptions ? (
+								<Form.Select onChange={e => onFieldChange(field.propertyURI, e.target.value)} required>
+									<option value="">Select {field.label}</option>
+									{Object.keys(dropdownOptions).map(option => (
+										<option key={option} value={option}>
+											{option} ({dropdownOptions[option].toString().split('#').pop()})
+										</option>
+									))}
+								</Form.Select>
+							) : (
+								<Form.Control
+									type={inputType}
+									onChange={e => onFieldChange(field.propertyURI, e.target.value)}
+									required
+								/>
+							)}
+						</>
+					)}
+				</Form.Group>
+			);
+		})}
 	</div>
 );
 
@@ -55,9 +77,11 @@ interface DynamicFieldsWrapperProps {
 	classURI: string;
 	onFieldChange: (propertyURI: string, value: string) => void;
 	depth?: number;
+	// Pass dropdownOptions down only at top level.
+	dropdownOptions?: Record<string, string[]>;
 }
 
-export const DynamicFieldsWrapper: React.FC<DynamicFieldsWrapperProps> = ({ classURI, onFieldChange, depth = 0 }) => {
+export const DynamicFieldsWrapper: React.FC<DynamicFieldsWrapperProps> = ({ classURI, onFieldChange, depth = 0, dropdownOptions }) => {
 	const [fields, setFields] = useState<FormField[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
@@ -101,7 +125,7 @@ export const DynamicFieldsWrapper: React.FC<DynamicFieldsWrapperProps> = ({ clas
 	if (loading) return <Spinner animation="border" size="sm" role="status" />;
 	if (error) return <Alert variant="danger">Error: {error}</Alert>;
 
-	return <DynamicFields fields={fields} onFieldChange={onFieldChange} depth={depth} />;
+	return <DynamicFields fields={fields} onFieldChange={onFieldChange} depth={depth} dropdownOptions={dropdownOptions} />;
 };
 
 export default DynamicFields;

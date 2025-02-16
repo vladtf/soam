@@ -17,6 +17,20 @@ interface SensorFormData {
 const SensorDataPage: React.FC = () => {
     const [data, setData] = useState<SensorData[]>([]);
     const [formData, setFormData] = useState<SensorFormData>({});
+    const [dataSchema, setDataSchema] = useState<{ [propertyURI: string]: string }>({});
+
+
+    const extractDataSchema = (data: SensorData[]) => {
+        const schema: { [propertyURI: string]: string } = {};
+        data.forEach((sensorData) => {
+            Object.keys(sensorData).forEach((key) => {
+                schema[key] = 'http://www.w3.org/2001/XMLSchema#float'; // TODO: the type should be extracted from the data
+            });
+        });
+
+        console.log('Data schema keys:', Object.keys(schema));
+        return schema;
+    }
 
 
     const fetchData = async () => {
@@ -24,6 +38,7 @@ const SensorDataPage: React.FC = () => {
             const response = await fetch('http://localhost:8000/data');
             const json = await response.json();
             setData(json);
+            setDataSchema(extractDataSchema(json));
         } catch (error) {
             console.error('Error fetching sensor data:', error);
         }
@@ -36,18 +51,12 @@ const SensorDataPage: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        // You can add further validation if needed.
-        console.log("Submitted Sensor Data:", formData);
-        // Process formData as needed (e.g. create RDF triples for the sensor instance)
-    };
 
     return (
         <Container>
             <Row>
                 <Col md={6}>
-                    <SensorForm />
+                    <SensorForm dataSchema={dataSchema}  />
                 </Col>
                 <Col md={6}>
                     <h1>Sensor Data</h1>
