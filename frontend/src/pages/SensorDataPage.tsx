@@ -10,10 +10,8 @@ interface SensorData {
 const SensorDataPage: React.FC = () => {
     const [data, setData] = useState<SensorData[]>([]);
     const [selectedPlace, setSelectedPlace] = useState<string>('');
-    const [loading, setLoading] = useState<boolean>(true);
 
     const fetchData = async () => {
-        setLoading(true);
         try {
             const response = await fetch('http://localhost:8000/data');
             const json = await response.json();
@@ -21,7 +19,6 @@ const SensorDataPage: React.FC = () => {
         } catch (error) {
             console.error('Error fetching sensor data:', error);
         } finally {
-            setLoading(false);
         }
     };
 
@@ -64,14 +61,14 @@ const SensorDataPage: React.FC = () => {
                 </Col>
                 <Col md={8}>
                     <h1>Sensor Data</h1>
-                    {loading ? (
-                        <Spinner animation="border" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                        </Spinner>
-                    ) : (
+                    {data && data.length > 0 ? (
                         <div style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', maxHeight: '70vh', overflowY: 'auto' }}>
                             <ReactJson src={data} theme="tomorrow" collapsed={false} />
                         </div>
+                    ) : (
+                        <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                        </Spinner>
                     )}
                 </Col>
             </Row>
