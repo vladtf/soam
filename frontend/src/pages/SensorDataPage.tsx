@@ -60,7 +60,7 @@ const SensorDataPage: React.FC = () => {
                 </Col>
                 <Col md={8}>
                     <h1>Sensor Data</h1>
-                    <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '5px' }}>
+                    <div style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', maxHeight: '70vh', overflowY: 'auto' }}>
                         <ReactJson src={data} theme="tomorrow" collapsed={false} />
                     </div>
                 </Col>
