@@ -107,3 +107,4 @@ Below is a list of tasks that need to be completed for the project. This list wi
 - Use Prometheus and Grafana as APIs for monitoring and visualizing system metrics.
 - To validate whether the device is linked to the correct location, consider using geospatial data and algorithms.
 - To start from MQTT, consider using the Mosquitto broker and Paho client libraries.
+- Integrate WebVOWL for visualizing the ontology and its relationships. (https://service.tib.eu/webvowl/#file=m3-lite.owl)

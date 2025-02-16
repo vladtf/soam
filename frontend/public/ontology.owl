@@ -8,7 +8,7 @@
 
   <!-- Ontology Declaration -->
   <owl:Ontology rdf:about="http://example.org/smartcity">
-    <rdfs:comment>A minimal ontology for smart city applications, including detailed address information.</rdfs:comment>
+    <rdfs:comment>A minimal ontology for smart city applications, including detailed address information and sensor data for humidity and temperature.</rdfs:comment>
   </owl:Ontology>
 
   <!-- Define the SmartCity class -->
@@ -97,6 +97,22 @@
     <rdfs:comment>The country component of an address.</rdfs:comment>
     <rdfs:domain rdf:resource="http://example.org/smartcity#Address"/>
     <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+  </owl:DatatypeProperty>
+  
+  <!-- Data Property: temperature -->
+  <owl:DatatypeProperty rdf:about="http://example.org/smartcity#temperature">
+    <rdfs:label>temperature</rdfs:label>
+    <rdfs:comment>The temperature measured by the sensor.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Sensor"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+  </owl:DatatypeProperty>
+  
+  <!-- Data Property: humidity -->
+  <owl:DatatypeProperty rdf:about="http://example.org/smartcity#humidity">
+    <rdfs:label>humidity</rdfs:label>
+    <rdfs:comment>The humidity measured by the sensor.</rdfs:comment>
+    <rdfs:domain rdf:resource="http://example.org/smartcity#Sensor"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
   </owl:DatatypeProperty>
 
 </rdf:RDF>
