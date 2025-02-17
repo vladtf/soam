@@ -7,6 +7,7 @@ import OntologyPage from './pages/OntologyPage';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import AppNavbar from './components/AppNavbar';
 import { Suspense } from 'react';
+import MapPage from './pages/MapPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/sensor-data" element={<SensorDataPage />} />
             <Route path="/ontology" element={<OntologyPage />} />
+            <Route path="/map" element={<MapPage />} />
           </Routes>
           <AppFooter />
         </div>
