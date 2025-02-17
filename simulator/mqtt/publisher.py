@@ -2,8 +2,9 @@ import time
 import json
 import random
 import paho.mqtt.client as mqttClient
+import os
 
-broker = "localhost"         # Replace with your MQTT broker address
+broker = os.getenv("MQTT_BROKER", "localhost")
 port = 1883                  # Default MQTT port
 topic = "smartcity/sensor"   # Topic for the sensor data
 client_id = "publisher"      # Client ID
