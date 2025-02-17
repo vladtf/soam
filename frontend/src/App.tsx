@@ -4,10 +4,11 @@ import AppFooter from './components/Footer';
 import Home from './pages/Home';
 import SensorDataPage from './pages/SensorDataPage';
 import OntologyPage from './pages/OntologyPage';
+import DashboardPage from './pages/DashboardPage';
+import MapPage from './pages/MapPage';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import AppNavbar from './components/AppNavbar';
 import { Suspense } from 'react';
-import MapPage from './pages/MapPage';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/sensor-data" element={<SensorDataPage />} />
             <Route path="/ontology" element={<OntologyPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/map" element={<MapPage />} />
           </Routes>
           <AppFooter />
