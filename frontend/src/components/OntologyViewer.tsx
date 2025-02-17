@@ -3,7 +3,7 @@ import * as rdflib from 'rdflib';
 import * as d3 from 'd3';
 import { Button } from 'react-bootstrap'; // new import
 
-interface GraphNode {
+interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
   label: string;
   isClass: boolean; // true for class nodes, false for property nodes
@@ -122,22 +122,22 @@ const OntologyViewer: React.FC = () => {
         .append("circle")
         .attr("r", (d: GraphNode) => d.isClass ? 15 : 5)
         .attr("fill", (d: GraphNode) => d.isClass ? "#69b3a2" : "#ffb347")
-        .call(d3.drag()
+        .call(d3.drag<SVGCircleElement, GraphNode>()
           .on("start", dragstarted)
           .on("drag", dragged)
           .on("end", dragended))
         // Add hover and click event listeners
-        .on("mouseover", function(event, d) {
+        .on("mouseover", function() {
           d3.select(this)
             .attr("stroke", "black")
             .attr("stroke-width", 2);
         })
-        .on("mouseout", function(event, d) {
+        .on("mouseout", function() {
           d3.select(this)
             .attr("stroke", null)
             .attr("stroke-width", null);
         })
-        .on("click", function(event, d) {
+        .on("click", function(_event, d) {
           alert("Node: " + d.label);
         });
       

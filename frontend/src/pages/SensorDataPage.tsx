@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Spinner, Form, Button } from 'react-bootstrap';
+import { Container, Row, Col, Spinner } from 'react-bootstrap';
 import ReactJson from 'react-json-view';
-import DynamicForm from '../components/DynamicForm';
 import SensorForm from '../components/SensorForm';
 
 interface SensorData {
@@ -10,21 +9,17 @@ interface SensorData {
 }
 
 
-interface SensorFormData {
-    [propertyURI: string]: string;
-}
 
 const SensorDataPage: React.FC = () => {
     const [data, setData] = useState<SensorData[]>([]);
-    const [formData, setFormData] = useState<SensorFormData>({});
-    const [dataSchema, setDataSchema] = useState<{ [propertyURI: string]: string }>({});
+    const [dataSchema, setDataSchema] = useState<Record<string, string[]>>({});
 
 
-    const extractDataSchema = (data: SensorData[]) => {
-        const schema: { [propertyURI: string]: string } = {};
+    const extractDataSchema = (data: SensorData[]): Record<string, string[]> => {
+        const schema: Record<string, string[]> = {};
         data.forEach((sensorData) => {
             Object.keys(sensorData).forEach((key) => {
-                schema[key] = 'http://www.w3.org/2001/XMLSchema#float'; // TODO: the type should be extracted from the data
+                schema[key] = ['http://www.w3.org/2001/XMLSchema#float']; // TODO: the type should be extracted from the data
             });
         });
 

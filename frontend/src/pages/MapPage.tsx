@@ -14,7 +14,7 @@ const MapPage: React.FC = () => {
   return (
     <Container className="mt-3">
       <h1>Sensor Map</h1>
-      <MapContainer center={[44.4268, 26.1025]} zoom={13} style={{ height: '80vh', width: '100%' }}>
+      <MapContainer center={[51.505, -0.09]} zoom={13} style={{ height: '80vh', width: '100%' }}>
         <TileLayer
           attribution='&copy; <a href="http://osm.org/copyright">OSM</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

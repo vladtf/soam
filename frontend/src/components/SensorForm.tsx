@@ -9,14 +9,14 @@ const RDFS_RANGE = 'http://www.w3.org/2000/01/rdf-schema#range';
 const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 
 interface SensorFormProps {
-	dataSchema: { [propertyURI: string]: string };
+	dataSchema: Record<string, string[]>;
 }
 
 
 
-const SensorForm: React.FC = ({ dataSchema }) => {
+const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 	const [fields, setFields] = useState<FormField[]>([]);
-	const [formData, setFormData] = useState<{ [propertyURI: string]: string }>({});
+	const [formData, setFormData] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 

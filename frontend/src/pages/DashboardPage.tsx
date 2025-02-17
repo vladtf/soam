@@ -97,7 +97,7 @@ const DashboardPage: React.FC = () => {
                   dataKey="value"
                   label
                 >
-                  {pieData.map((entry, index) => (
+                  {pieData.map((_entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
