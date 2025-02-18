@@ -9,24 +9,28 @@ import MapPage from './pages/MapPage';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import AppNavbar from './components/AppNavbar';
 import { Suspense } from 'react';
+import { ConfigProvider } from './context/ConfigContext';
 
 function App() {
+
   return (
-    <BrowserRouter>
-      <Suspense fallback={<div>Loading...</div>}>
-        <div className="App">
-          <AppNavbar />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/sensor-data" element={<SensorDataPage />} />
-            <Route path="/ontology" element={<OntologyPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/map" element={<MapPage />} />
-          </Routes>
-          <AppFooter />
-        </div>
-      </Suspense>
-    </BrowserRouter>
+    <ConfigProvider>
+      <BrowserRouter>
+        <Suspense fallback={<div>Loading...</div>}>
+          <div className="App">
+            <AppNavbar />
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/sensor-data" element={<SensorDataPage />} />
+              <Route path="/ontology" element={<OntologyPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/map" element={<MapPage />} />
+            </Routes>
+            <AppFooter />
+          </div>
+        </Suspense>
+      </BrowserRouter>
+    </ConfigProvider>
   );
 }
 
