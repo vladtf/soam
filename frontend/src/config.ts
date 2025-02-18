@@ -7,7 +7,7 @@ export interface AppConfig {
   
   export const loadConfig = async (): Promise<AppConfig> => {
     if (config) return config; // already loaded
-    const response = await fetch('/config.json');
+    const response = await fetch('/config/config.json');
     config = await response.json();
     return config;
   };

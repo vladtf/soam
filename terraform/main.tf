@@ -165,7 +165,22 @@ resource "kubernetes_deployment" "simulator" {
   }
 }
 
-# Kubernetes Deployment for Frontend
+# Modified: Kubernetes ConfigMap for the frontend.
+resource "kubernetes_config_map" "frontend_config" {
+  metadata {
+    name = "frontend-config"
+  }
+  data = {
+    # Replace with your actual configuration items.
+    "config.json" = <<EOF
+{
+  "backendUrl": "http://${kubernetes_service.backend.status[0].load_balancer[0].ingress[0].ip}:8000"
+}
+EOF
+  }
+}
+
+# Modified: Kubernetes Deployment for Frontend with ConfigMap volume mounted.
 resource "kubernetes_deployment" "frontend" {
   metadata {
     name = "frontend"
@@ -192,6 +207,17 @@ resource "kubernetes_deployment" "frontend" {
           image = "${azurerm_container_registry.acr.login_server}/frontend:latest"  # updated image reference
           port {
             container_port = 3000
+          }
+          volume_mount {
+            name       = "frontend-config-volume"
+            mount_path = "/app/public/config"
+            read_only  = true
+          }
+        }
+        volume {
+          name = "frontend-config-volume"
+          config_map {
+            name = kubernetes_config_map.frontend_config.metadata[0].name
           }
         }
       }
