@@ -53,6 +53,13 @@ resource "azurerm_kubernetes_cluster" "aks" {
   }
 }
 
+# New: Assign the AcrPull role to AKS managed identity for pulling images from ACR.
+resource "azurerm_role_assignment" "aks_acr_pull" {
+  scope                = azurerm_container_registry.acr.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
+}
+
 # Configure the Kubernetes provider using the AKS cluster's credentials.
 provider "kubernetes" {
   host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
