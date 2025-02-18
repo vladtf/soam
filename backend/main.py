@@ -4,6 +4,7 @@ from collections import deque
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import paho.mqtt.client as mqtt
+import os
 
 
 class SmartCityBackend:
@@ -21,7 +22,7 @@ class SmartCityBackend:
         )
 
         # MQTT configuration
-        self.MQTT_BROKER = "localhost"
+        self.MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
         self.MQTT_PORT = 1883
         self.MQTT_TOPIC = "smartcity/sensor"
 

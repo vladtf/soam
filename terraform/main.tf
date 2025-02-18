@@ -154,6 +154,10 @@ resource "kubernetes_deployment" "simulator" {
         container {
           name  = "simulator"
           image = "${azurerm_container_registry.acr.login_server}/simulator:latest"  # updated image reference
+          env {
+            name  = "MQTT_BROKER"
+            value = "mosquitto"
+          }
           # No exposed port if not required.
         }
       }
@@ -239,6 +243,11 @@ resource "kubernetes_deployment" "backend" {
           image = "${azurerm_container_registry.acr.login_server}/backend:latest"  # updated image reference
           port {
             container_port = 8000
+          }
+
+          env {
+            name  = "MQTT_BROKER"
+            value = "mosquitto"
           }
         }
       }
