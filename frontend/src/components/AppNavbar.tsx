@@ -15,8 +15,9 @@ const AppNavbar: React.FC = () => {
           <Nav className="me-auto">
               <Nav.Link as={Link} to="/sensor-data">Sensor Data</Nav.Link>
               <Nav.Link as={Link} to="/ontology">Ontology</Nav.Link>
-              <Nav.Link as={Link} to="/dashboard">Dashboard</Nav.Link> {/* new link */}
+              <Nav.Link as={Link} to="/dashboard">Dashboard</Nav.Link>
               <Nav.Link as={Link} to="/map">Map</Nav.Link>
+              <Nav.Link as={Link} to="/feedback">Feedback</Nav.Link>
           </Nav>
         </Navbar.Collapse>
       </Container>

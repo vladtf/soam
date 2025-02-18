@@ -10,6 +10,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import AppNavbar from './components/AppNavbar';
 import { Suspense } from 'react';
 import { ConfigProvider } from './context/ConfigContext';
+import FeedbackPage from './pages/FeedbackPage';
 
 function App() {
 
@@ -25,6 +26,7 @@ function App() {
               <Route path="/ontology" element={<OntologyPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/map" element={<MapPage />} />
+              <Route path="/feedback" element={<FeedbackPage />} />
             </Routes>
             <AppFooter />
           </div>
