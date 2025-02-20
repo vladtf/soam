@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Spinner, Button } from 'react-bootstrap';
 import ReactJson from 'react-json-view';
 import SensorForm from '../components/SensorForm';
+import ConnectionConfigModal from '../components/ConnectionConfigModal';
+import ConnectionStatus from '../components/ConnectionStatus';
+import MQTTBrokerSwitcher from '../components/MQTTBrokerSwitcher';
 import { fetchSensorData, extractDataSchema, SensorData } from '../api/backendQuery';
 
 const SensorDataPage: React.FC = () => {
     const [data, setData] = useState<SensorData[]>([]);
     const [dataSchema, setDataSchema] = useState<Record<string, string[]>>({});
+    const [showConfig, setShowConfig] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -27,6 +31,12 @@ const SensorDataPage: React.FC = () => {
 
     return (
         <Container>
+            <Button variant="secondary" onClick={() => setShowConfig(true)} className="mb-3">
+                Configure Connection
+            </Button>
+            <ConnectionConfigModal show={showConfig} handleClose={() => setShowConfig(false)} />
+            <ConnectionStatus />
+            <MQTTBrokerSwitcher />
             <Row>
                 <Col md={6}>
                     <SensorForm dataSchema={dataSchema}  />

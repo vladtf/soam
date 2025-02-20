@@ -12,7 +12,6 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
             schema[key] = ['http://www.w3.org/2001/XMLSchema#float']; // TODO: actual type extraction
         });
     });
-    console.log('Data schema keys:', Object.keys(schema));
     return schema;
 }
 
