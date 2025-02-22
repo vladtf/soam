@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Card, ListGroup } from 'react-bootstrap';
+import { Card, ListGroup, Button } from 'react-bootstrap';
+import ConnectionConfigModal from './ConnectionConfigModal';
 
 interface ConnectionInfo {
     id?: number;
@@ -12,6 +13,7 @@ interface ConnectionInfo {
 const ConnectionStatus: React.FC = () => {
     const [connections, setConnections] = useState<ConnectionInfo[]>([]);
     const [active, setActive] = useState<ConnectionInfo | null>(null);
+    const [showConfig, setShowConfig] = useState(false);
 
     useEffect(() => {
         const fetchConnections = async () => {
@@ -31,26 +33,34 @@ const ConnectionStatus: React.FC = () => {
     }, []);
 
     return (
-        <Card className="mb-3">
-            <Card.Header>Connection Status</Card.Header>
-            <ListGroup variant="flush">
-                {connections.length > 0 ? (
-                    connections.map((info, idx) => (
-                        <ListGroup.Item key={info.id || idx}>
-                            <strong>ID:</strong> {info.id || 'N/A'} | <strong>Status:</strong> {active && active.id === info.id ? "Active" : "Inactive"}<br />
-                            <strong>Connection Type:</strong> {info.connectionType || 'N/A'}<br />
-                            {info.connectionType === 'mqtt' && (
-                                <>
-                                    <strong>Broker:</strong> {info.broker || 'N/A'}, <strong>Port:</strong> {info.port || 'N/A'}, <strong>Topic:</strong> {info.topic || 'N/A'}
-                                </>
-                            )}
-                        </ListGroup.Item>
-                    ))
-                ) : (
-                    <ListGroup.Item>No connections configured</ListGroup.Item>
-                )}
-            </ListGroup>
-        </Card>
+        <>
+            <Card className="mb-3">
+                <Card.Header>Connection Status</Card.Header>
+                <ListGroup variant="flush">
+                    {connections.length > 0 ? (
+                        connections.map((info, idx) => (
+                            <ListGroup.Item key={info.id || idx}>
+                                <strong>ID:</strong> {info.id || 'N/A'} | <strong>Status:</strong> {active && active.id === info.id ? "Active" : "Inactive"}<br />
+                                <strong>Connection Type:</strong> {info.connectionType || 'N/A'}<br />
+                                {info.connectionType === 'mqtt' && (
+                                    <>
+                                        <strong>Broker:</strong> {info.broker || 'N/A'}, <strong>Port:</strong> {info.port || 'N/A'}, <strong>Topic:</strong> {info.topic || 'N/A'}
+                                    </>
+                                )}
+                            </ListGroup.Item>
+                        ))
+                    ) : (
+                        <ListGroup.Item>No connections configured</ListGroup.Item>
+                    )}
+                </ListGroup>
+                <Card.Footer>
+                    <Button variant="secondary" onClick={() => setShowConfig(true)}>
+                        Configure Connection
+                    </Button>
+                </Card.Footer>
+            </Card>
+            <ConnectionConfigModal show={showConfig} handleClose={() => setShowConfig(false)} />
+        </>
     );
 };
 

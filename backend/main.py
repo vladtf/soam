@@ -37,6 +37,8 @@ class SmartCityBackend:
 
         # Start the MQTT client thread
         threading.Thread(target=self.mqtt_loop, daemon=True).start()
+        # Register shutdown event to gracefully close MQTT client
+        self.app.on_event("shutdown")(self.shutdown_event)
 
     def on_connect(self, client, userdata, flags, rc):
         print("Connected to MQTT broker with result code", rc)
@@ -79,7 +81,7 @@ class SmartCityBackend:
         config['id'] = config_id
         self.connection_configs.append(config)
         # If no active connection, set the new config as active
-        if self.active_connection is None:
+        if (self.active_connection is None):
             self.active_connection = config
             self.MQTT_BROKER = config.get("broker", "localhost")
             self.MQTT_PORT = config.get("port", 1883)
@@ -115,6 +117,15 @@ class SmartCityBackend:
             "connections": self.connection_configs,
             "active": self.active_connection
         }
+
+    async def shutdown_event(self):
+        # Gracefully disconnect the MQTT client on shutdown
+        if self.mqtt_client is not None:
+            try:
+                self.mqtt_client.disconnect()
+            except Exception as e:
+                print("Error disconnecting MQTT client during shutdown:", e)
+        print("Shutdown event triggered")
 
 
 # Instantiate the backend and expose its app
