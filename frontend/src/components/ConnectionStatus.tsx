@@ -32,23 +32,61 @@ const ConnectionStatus: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const handleSwitch = async (id: number) => {
+        try {
+            await fetch('http://localhost:8000/switchBroker', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+        } catch (error) {
+            console.error(`Error switching to connection ${id}:`, error);
+        }
+    };
+
     return (
         <>
             <Card className="mb-3">
                 <Card.Header>Connection Status</Card.Header>
                 <ListGroup variant="flush">
                     {connections.length > 0 ? (
-                        connections.map((info, idx) => (
-                            <ListGroup.Item key={info.id || idx}>
-                                <strong>ID:</strong> {info.id || 'N/A'} | <strong>Status:</strong> {active && active.id === info.id ? "Active" : "Inactive"}<br />
-                                <strong>Connection Type:</strong> {info.connectionType || 'N/A'}<br />
-                                {info.connectionType === 'mqtt' && (
-                                    <>
-                                        <strong>Broker:</strong> {info.broker || 'N/A'}, <strong>Port:</strong> {info.port || 'N/A'}, <strong>Topic:</strong> {info.topic || 'N/A'}
-                                    </>
-                                )}
-                            </ListGroup.Item>
-                        ))
+                        connections.map((info, idx) => {
+                            const isActive = active && active.id === info.id;
+                            return (
+                                <ListGroup.Item key={info.id || idx}>
+                                    <div>
+                                        <strong>ID:</strong> {info.id || 'N/A'} | <strong>Status:</strong>{" "}
+                                        <span style={{
+                                            display: "inline-block",
+                                            width: "10px",
+                                            height: "10px",
+                                            borderRadius: "50%",
+                                            backgroundColor: isActive ? "green" : "red",
+                                            marginRight: "5px"
+                                        }}></span>
+                                        {isActive ? "Active" : "Inactive"}
+                                    </div>
+                                    <div>
+                                        <strong>Connection Type:</strong> {info.connectionType || 'N/A'}
+                                    </div>
+                                    {info.connectionType === 'mqtt' && (
+                                        <div>
+                                            <strong>Broker:</strong> {info.broker || 'N/A'}, <strong>Port:</strong> {info.port || 'N/A'}, <strong>Topic:</strong> {info.topic || 'N/A'}
+                                        </div>
+                                    )}
+                                    <div className="mt-2">
+                                        <Button
+                                            variant={isActive ? "success" : "primary"}
+                                            size="sm"
+                                            onClick={() => handleSwitch(info.id!)}
+                                            disabled={isActive ?? false}
+                                        >
+                                            {isActive ? "Active" : "Switch"}
+                                        </Button>
+                                    </div>
+                                </ListGroup.Item>
+                            );
+                        })
                     ) : (
                         <ListGroup.Item>No connections configured</ListGroup.Item>
                     )}

@@ -3,7 +3,6 @@ import { Container, Row, Col, Spinner } from 'react-bootstrap';
 import ReactJson from 'react-json-view';
 import SensorForm from '../components/SensorForm';
 import ConnectionStatus from '../components/ConnectionStatus';
-import MQTTBrokerSwitcher from '../components/MQTTBrokerSwitcher';
 import { fetchSensorData, extractDataSchema, SensorData } from '../api/backendQuery';
 
 const SensorDataPage: React.FC = () => {
@@ -28,9 +27,8 @@ const SensorDataPage: React.FC = () => {
     }, []);
 
     return (
-        <Container>
+        <Container className="mt-3">
             <ConnectionStatus />
-            <MQTTBrokerSwitcher />
             <Row>
                 <Col md={6}>
                     <SensorForm dataSchema={dataSchema}  />
