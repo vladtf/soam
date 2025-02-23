@@ -1,0 +1,84 @@
+// Create a SmartCity node
+MERGE (sc:SmartCity {
+  name: "Metropolis",
+  description: "A smart city leveraging technology to improve quality of life."
+});
+
+// Create a Building nodes
+MERGE (corp_ec:Building {
+  name: "Corp EC",
+  description: "The central administrative building."
+});
+
+MERGE (corp_ed:Building {
+  name: "Corp ED",
+  description: "The central administrative building."
+});
+
+MERGE (c_precis:Building {
+  name: "Centrul PRECIS",
+  description: "The central administrative building."
+});
+
+
+// Create an Address node
+MERGE (a_corp_ec:Address {
+  street: "Splaiul Independenței, 313",
+  city: "Bucharest",
+  country: "Romania",
+  location: point({latitude: 44.435907, longitude: 26.047295})
+});
+
+MERGE (a_corp_ed:Address {
+  street: "Splaiul Independenței, 313",
+  city: "Bucharest",
+  country: "Romania",
+  location: point({latitude: 44.435751, longitude: 26.048120})
+});
+
+MERGE (a_c_precis:Address {
+  street: "Splaiul Independenței, 313",
+  city: "Bucharest",
+  country: "Romania",
+  location: point({latitude: 44.435013, longitude: 26.047758})
+});
+
+
+// Create a Sensor node with sensor data properties
+MERGE (s:Sensor {
+  sensorId: "Sensor123",
+  measurementTime: datetime("2023-10-14T12:00:00"),
+  temperature: 22.5,
+  humidity: 45.0
+});
+
+// Link the Building with its Address using the hasAddress relationship
+MATCH (b:Building), (a:Address)
+WHERE b.name = "Corp EC" AND a.street = "Splaiul Independenței, 313"
+MERGE (b)-[:hasAddress]->(a);
+
+MATCH (b:Building), (a:Address)
+WHERE b.name = "Corp ED" AND a.street = "Splaiul Independenței, 313"
+MERGE (b)-[:hasAddress]->(a);
+
+MATCH (b:Building), (a:Address)
+WHERE b.name = "Centrul PRECIS" AND a.street = "Splaiul Independenței, 313"
+MERGE (b)-[:hasAddress]->(a);
+
+
+// Link the SmartCity with the Sensor using the hasSensor relationship
+MATCH (sc:SmartCity), (s:Sensor)
+WHERE sc.name = "Metropolis" AND s.sensorId = "Sensor123"
+MERGE (sc)-[:hasSensor]->(s);
+
+// Link the Sensor to the Building using the locatedIn relationship
+MATCH (s:Sensor), (b:Building)
+WHERE s.sensorId = "Sensor123" AND b.name = "Corp EC"
+MERGE (s)-[:locatedIn]->(b);
+
+// Clear
+MATCH (n)
+DETACH DELETE n
+
+// Show
+MATCH (n) RETURN n
