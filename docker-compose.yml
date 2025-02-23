@@ -36,5 +36,29 @@ services:
       - "8000:8000"
     environment:
       - MQTT_BROKER=mosquitto
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=verystrongpassword
     depends_on:
       - mosquitto
+
+  neo4j:
+    image: neo4j:5.17.0
+    ports:
+      - "7474:7474"   # HTTP interface (UI)
+      - "7687:7687"   # Bolt protocol
+    environment:
+      - NEO4J_AUTH=neo4j/verystrongpassword  # update credentials as required
+      - NEO4J_PLUGINS=["apoc", "graph-data-science", "n10s"]
+      # - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      # - apoc.import.file.enabled=true
+    # volumes:
+    #   - ./frontend/public/ontology.owl:/var/lib/neo4j/import/ontology.owl:ro
+
+  # neo4j_importer:
+  #   image: neo4j:latest
+  #   depends_on:
+  #     - neo4j
+  #   volumes:
+  #     - ./neo4j/init_ontology.sh:/init_ontology.sh:ro
+  #   entrypoint: ["bash", "/init_ontology.sh"]

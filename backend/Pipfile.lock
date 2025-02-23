@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "41ced83af0e4ca48fed0c39167872d3b291e2c84958ec38d91e02bc88d3f7eb8"
+            "sha256": "466a32413bf4e66e207305fe6a6a61126f5f69d0b6cb4cbbd42bb5417d4a9fa5"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -72,6 +72,15 @@
             ],
             "markers": "python_version >= '3.6'",
             "version": "==3.10"
+        },
+        "neo4j": {
+            "hashes": [
+                "sha256:6755ef9e5f4e14b403aef1138fb6315b120631a0075c138b5ddb2a06b87b09fd",
+                "sha256:ae8e37a1d895099062c75bc359b2cce62099baac7be768d0eba7180c1298e214"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.7'",
+            "version": "==5.28.1"
         },
         "paho-mqtt": {
             "hashes": [
@@ -195,6 +204,13 @@
             ],
             "markers": "python_version >= '3.8'",
             "version": "==2.27.2"
+        },
+        "pytz": {
+            "hashes": [
+                "sha256:89dd22dca55b46eac6eda23b2d72721bf1bdfef212645d81513ef5d03038de57",
+                "sha256:c2db42be2a2518b28e65f9207c4d05e6ff547d1efa4086469ef855e4ab70178e"
+            ],
+            "version": "==2025.1"
         },
         "sniffio": {
             "hashes": [

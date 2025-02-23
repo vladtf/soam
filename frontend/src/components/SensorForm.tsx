@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import * as rdflib from 'rdflib';
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
 import DynamicFields, { FormField } from './DynamicFields';
+import { useNavigate } from 'react-router-dom'; // replaced useHistory with useNavigate
 
 const SENSOR_CLASS = 'http://example.org/smartcity#Sensor';
 const RDFS_DOMAIN = 'http://www.w3.org/2000/01/rdf-schema#domain';
@@ -12,13 +13,13 @@ interface SensorFormProps {
 	dataSchema: Record<string, string[]>;
 }
 
-
-
 const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 	const [fields, setFields] = useState<FormField[]>([]);
 	const [formData, setFormData] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
+	const [buildings, setBuildings] = useState<{ name: string }[]>([]); // new state for buildings
+	const navigate = useNavigate(); // new hook for navigation
 
 	useEffect(() => {
 		const loadOntology = async () => {
@@ -52,9 +53,25 @@ const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 		loadOntology();
 	}, []);
 
+	useEffect(() => {
+		// Fetch buildings from backend
+		fetch('http://localhost:8000/buildings')
+			.then(res => res.json())
+			.then((data: { name: string }[]) => setBuildings(data))
+			.catch(err => console.error("Error fetching buildings:", err));
+	}, []);
 
 	const handleFieldChange = (propertyURI: string, value: string) => {
 		setFormData(prev => ({ ...prev, [propertyURI]: value }));
+	};
+
+	const handleBuildingChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+		const selected = e.target.value;
+		if (selected === 'add_new') {
+			navigate('/map'); // use navigate instead of history.push
+		} else {
+			setFormData(prev => ({ ...prev, building: selected }));
+		}
 	};
 
 	const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -73,6 +90,16 @@ const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 	return (
 		<Form onSubmit={handleSubmit}>
 			<h2>Add New Sensor</h2>
+			<Form.Group controlId="buildingDropdown">
+				<Form.Label>Select Building</Form.Label>
+				<Form.Control as="select" onChange={handleBuildingChange} defaultValue="">
+					<option value="" disabled>Select a building</option>
+					{buildings.map((b, i) => (
+						<option key={i} value={b.name}>{b.name}</option>
+					))}
+					<option value="add_new">Add new building</option>
+				</Form.Control>
+			</Form.Group>
 			<DynamicFields
 				fields={fields}
 				onFieldChange={handleFieldChange}

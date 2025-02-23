@@ -5,8 +5,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import paho.mqtt.client as mqtt
 import os
-from dataclasses import dataclass  # added import
-import asyncio  # added import
+from dataclasses import dataclass
+import asyncio
+from neo4j import GraphDatabase
+import logging
+
 
 @dataclass
 class ConnectionConfig:  # new class for connection configuration
@@ -15,6 +18,7 @@ class ConnectionConfig:  # new class for connection configuration
     port: int
     topic: str
     connectionType: str = "mqtt"
+
 
 class SmartCityBackend:
     def __init__(self):
@@ -25,7 +29,11 @@ class SmartCityBackend:
         self.mqtt_client = None               # Store current mqtt client instance
         self.threads = {}                     # Map to store threads for later shutdown
         self.thread_counter = 1               # Counter for unique thread keys
-        self.last_connection_error = None     # new attribute
+        self.last_connection_error = None
+        self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "verystrongpassword")
+        self.neo4j_driver = GraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password))  # new driver initialization
 
         # Enable CORS
         self.app.add_middleware(
@@ -57,6 +65,7 @@ class SmartCityBackend:
         self.app.post("/addConnection")(self.add_connection)
         self.app.post("/switchBroker")(self.switch_broker)
         self.app.get("/connections")(self.get_connections)
+        self.app.get("/buildings")(self.get_buildings)  # new route to fetch buildings
 
         # Start the MQTT client thread
         mqtt_thread = threading.Thread(target=self.mqtt_loop, daemon=True)
@@ -166,6 +175,19 @@ class SmartCityBackend:
             "connections": [c.__dict__ for c in self.connection_configs],
             "active": self.active_connection.__dict__ if self.active_connection else None
         }
+
+    def get_buildings(self):
+        """Query Neo4j for all buildings with their address coordinates."""
+        query = """
+        MATCH (b:Building)-[:hasAddress]->(a:Address)
+        RETURN b.name AS name, a.location.latitude AS lat, a.location.longitude AS lng
+        """
+        with self.neo4j_driver.session() as session:
+            result = session.run(query)
+            buildings = [{"name": record["name"], "lat": record["lat"], "lng": record["lng"]} for record in result]
+
+        logging.info("Fetched buildings from Neo4j. Count: %s", len(buildings))
+        return buildings
 
     async def shutdown_event(self):
         # Gracefully disconnect the MQTT client on shutdown

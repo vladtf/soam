@@ -1,27 +1,35 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Container } from 'react-bootstrap';
 
-// Mock sensor data with coordinates and labels
-const sensors = [
-    { id: 1, name: "Sensor A", lat: 44.4268, lng: 26.1025 },
-    { id: 2, name: "Sensor B", lat: 44.4278, lng: 26.1035 },
-    { id: 3, name: "Sensor C", lat: 44.4288, lng: 26.1045 }
-  ];
+interface Building {
+  name: string;
+  lat: number;
+  lng: number;
+}
 
 const MapPage: React.FC = () => {
+  const [buildings, setBuildings] = useState<Building[]>([]);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/buildings')
+      .then(res => res.json())
+      .then(data => setBuildings(data))
+      .catch(err => console.error("Error fetching buildings:", err));
+  }, []);
+
   return (
     <Container className="mt-3">
-      <h1>Sensor Map</h1>
+      <h1>Building Map</h1>
       <MapContainer center={[44.436170, 26.102765]} zoom={13} style={{ height: '80vh', width: '100%' }}>
         <TileLayer
           attribution='&copy; <a href="http://osm.org/copyright">OSM</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {sensors.map(sensor => (
-          <Marker key={sensor.id} position={[sensor.lat, sensor.lng]}>
-            <Popup>{sensor.name}</Popup>
+        {buildings.map((b, i) => (
+          <Marker key={i} position={[b.lat, b.lng]}>
+            <Popup>{b.name}</Popup>
           </Marker>
         ))}
       </MapContainer>
