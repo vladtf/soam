@@ -65,8 +65,8 @@ const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 		setFormData(prev => ({ ...prev, [propertyURI]: value }));
 	};
 
-	const handleBuildingChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-		const selected = e.target.value;
+	const handleBuildingChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+		const selected = event.target.value;
 		if (selected === 'add_new') {
 			navigate('/map'); // use navigate instead of history.push
 		} else {
