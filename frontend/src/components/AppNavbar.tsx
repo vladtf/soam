@@ -17,6 +17,7 @@ const AppNavbar: React.FC = () => {
               <Nav.Link as={Link} to="/ontology">Ontology</Nav.Link>
               <Nav.Link as={Link} to="/dashboard">Dashboard</Nav.Link>
               <Nav.Link as={Link} to="/map">Map</Nav.Link>
+              <Nav.Link as={Link} to="/new-events">New Events</Nav.Link>
               <Nav.Link as={Link} to="/feedback">Feedback</Nav.Link>
           </Nav>
         </Navbar.Collapse>

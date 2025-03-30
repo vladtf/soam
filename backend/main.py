@@ -66,6 +66,10 @@ class SmartCityBackend:
         self.app.post("/switchBroker")(self.switch_broker)
         self.app.get("/connections")(self.get_connections)
         self.app.get("/buildings")(self.get_buildings)  # new route to fetch buildings
+        self.app.post("/addBuilding")(self.add_building)  # new endpoint to add a building
+
+        # Provision Neo4j with initial data from utils.txt
+        self.provision_data()
 
         # Start the MQTT client thread
         mqtt_thread = threading.Thread(target=self.mqtt_loop, daemon=True)
@@ -188,6 +192,108 @@ class SmartCityBackend:
 
         logging.info("Fetched buildings from Neo4j. Count: %s", len(buildings))
         return buildings
+
+    async def add_building(self, request: Request):
+        # Extract building and address details from the request
+        data = await request.json()
+        try:
+            name = data["name"]
+            description = data.get("description", "")
+            street = data["street"]
+            city = data["city"]
+            country = data["country"]
+            lat = data["lat"]
+            lng = data["lng"]
+        except KeyError as e:
+            return {"status": "error", "detail": f"Missing field: {str(e)}"}
+        
+        query = """
+        MERGE (b:Building { name: $name })
+        SET b.description = $description
+        MERGE (a:Address { street: $street, city: $city, country: $country })
+        SET a.location = point({ latitude: $lat, longitude: $lng })
+        MERGE (b)-[:hasAddress]->(a)
+        RETURN b, a
+        """
+        try:
+            with self.neo4j_driver.session() as session:
+                result = session.run(query, name=name, description=description,
+                                     street=street, city=city, country=country,
+                                     lat=lat, lng=lng)
+                record = result.single()
+                if record is None:
+                    return {"status": "No building added"}
+                # Return simplified representations of the nodes
+                b = record["b"]
+                a = record["a"]
+                return {"status": "Building added", "building": dict(b), "address": dict(a)}
+        except Exception as e:
+            return {"status": "error", "detail": str(e)}
+
+    def provision_data(self):
+        # Pre-provision data from utils.txt (excluding clear and show queries)
+        queries = [
+            """
+            MERGE (sc:SmartCity { name: "Metropolis", description: "A smart city leveraging technology to improve quality of life." })
+            """,
+            """
+            MERGE (corp_ec:Building { name: "Corp EC", description: "The central administrative building." })
+            """,
+            """
+            MERGE (corp_ed:Building { name: "Corp ED", description: "The central administrative building." })
+            """,
+            """
+            MERGE (c_precis:Building { name: "Centrul PRECIS", description: "The central administrative building." })
+            """,
+            """
+            MERGE (a_corp_ec:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania",
+                                         location: point({latitude: 44.435907, longitude: 26.047295}) })
+            """,
+            """
+            MERGE (a_corp_ed:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania",
+                                         location: point({latitude: 44.435751, longitude: 26.048120}) })
+            """,
+            """
+            MERGE (a_c_precis:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania",
+                                         location: point({latitude: 44.435013, longitude: 26.047758}) })
+            """,
+            """
+            MERGE (s:Sensor { sensorId: "Sensor123", measurementTime: datetime("2023-10-14T12:00:00"),
+                               temperature: 22.5, humidity: 45.0 })
+            """,
+            """
+            MATCH (b:Building), (a:Address)
+            WHERE b.name = "Corp EC" AND a.street = "Splaiul Independenței, 313"
+            MERGE (b)-[:hasAddress]->(a)
+            """,
+            """
+            MATCH (b:Building), (a:Address)
+            WHERE b.name = "Corp ED" AND a.street = "Splaiul Independenței, 313"
+            MERGE (b)-[:hasAddress]->(a)
+            """,
+            """
+            MATCH (b:Building), (a:Address)
+            WHERE b.name = "Centrul PRECIS" AND a.street = "Splaiul Independenței, 313"
+            MERGE (b)-[:hasAddress]->(a)
+            """,
+            """
+            MATCH (sc:SmartCity), (s:Sensor)
+            WHERE sc.name = "Metropolis" AND s.sensorId = "Sensor123"
+            MERGE (sc)-[:hasSensor]->(s)
+            """,
+            """
+            MATCH (s:Sensor), (b:Building)
+            WHERE s.sensorId = "Sensor123" AND b.name = "Corp EC"
+            MERGE (s)-[:locatedIn]->(b)
+            """
+        ]
+        try:
+            with self.neo4j_driver.session() as session:
+                for query in queries:
+                    session.run(query)
+            print("Provisioned initial data to Neo4j.")
+        except Exception as e:
+            print("Error provisioning Neo4j data:", e)
 
     async def shutdown_event(self):
         # Gracefully disconnect the MQTT client on shutdown
