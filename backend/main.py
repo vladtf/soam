@@ -1,14 +1,19 @@
+import datetime
+import io
 import json
 import threading
 from collections import deque
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from minio import S3Error
 import paho.mqtt.client as mqtt
 import os
 from dataclasses import dataclass
 import asyncio
 from neo4j import GraphDatabase
 import logging
+
+from src.storage.minio_client import MinioClient
 
 
 @dataclass
@@ -34,7 +39,7 @@ class SmartCityBackend:
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
         self.neo4j_password = os.getenv("NEO4J_PASSWORD", "verystrongpassword")
         self.neo4j_driver = GraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password))  # new driver initialization
-
+        self.minio_client: MinioClient = MinioClient()  # Initialize MinIO client
         # Enable CORS
         self.app.add_middleware(
             CORSMiddleware,
@@ -92,14 +97,32 @@ class SmartCityBackend:
             self.connection_status = "Disconnected"
             self.data_buffer.append({"error": "Connection error"})
             self.active_connection = None
-
+            
     def on_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
             self.data_buffer.append(payload)
             print("Received message:", payload)
+
+            # --- build object path ------------------------------------------------
+            ts_raw = payload["timestamp"]                   # may be str or number
+            if isinstance(ts_raw, (int, float)):
+                ts = datetime.datetime.fromtimestamp(ts_raw, tz=datetime.timezone.utc)
+            else:                                           # assume ISO-8601 string
+                ts = datetime.datetime.fromisoformat(ts_raw)
+
+            ts_key = ts.isoformat(timespec="seconds").replace(":", "-")
+            object_name = f"sensors/{payload['sensorId']}/{ts_key}.json"
+
+            # --- upload to MinIO --------------------------------------------------
+            data_bytes  = json.dumps(payload).encode("utf-8")
+
+            self.minio_client.upload_data(object_name, data_bytes)
+            print(f"Uploaded {object_name} to MinIO.")
+        except S3Error as s3e:
+            print(f"MinIO error: {s3e}")
         except Exception as e:
-            print("Error parsing message:", e)
+            print("Error processing message:", e)
 
     def mqtt_loop(self):
         # If an existing client is running, disconnect it before starting a new one
@@ -206,7 +229,7 @@ class SmartCityBackend:
             lng = data["lng"]
         except KeyError as e:
             return {"status": "error", "detail": f"Missing field: {str(e)}"}
-        
+
         query = """
         MERGE (b:Building { name: $name })
         SET b.description = $description

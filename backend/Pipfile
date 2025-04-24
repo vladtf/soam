@@ -8,6 +8,7 @@ fastapi = "*"
 uvicorn = "*"
 paho-mqtt = "*"
 neo4j = "*"
+minio = "*"
 
 [dev-packages]
 
