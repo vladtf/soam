@@ -4,6 +4,7 @@ import random
 import paho.mqtt.client as mqttClient
 import os
 import logging
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -22,7 +23,8 @@ client.connect(broker, port, 60)
 while True:
     payload = {
         "temperature": round(random.uniform(20.0, 25.0), 2),
-        "humidity": round(random.uniform(30, 50), 2)
+        "humidity": round(random.uniform(30, 50), 2),
+        "timestamp": datetime.now().isoformat()
     }
     client.publish(topic, json.dumps(payload))
     logging.info("Published: %s", payload)
