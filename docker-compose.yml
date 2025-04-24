@@ -42,6 +42,56 @@ services:
     depends_on:
       - mosquitto
 
+# --- Spark cluster -------------------------------------------------
+  spark-master:
+    image: bitnami/spark:3.5          # ✔ latest LTS, Java 17 inside
+    hostname: spark-master
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      # --- (optional) security flags – comment out if not needed ----
+      # - SPARK_RPC_AUTHENTICATION_ENABLED=yes
+      # - SPARK_RPC_AUTHENTICATION_SECRET=mysparksecret
+      # - SPARK_RPC_ENCRYPTION_ENABLED=yes
+      # - SPARK_SSL_ENABLED=yes
+    ports:
+      - "7077:7077"   # cluster RPC
+      - "8080:8080"   # master web-UI → http://localhost:8080
+    volumes:
+      - spark-events:/tmp/spark-events   # shared event-logs
+
+  spark-worker:
+    image: bitnami/spark:3.5
+    # `deploy` only works with Swarm/K8s; use `--scale` instead.
+    hostname: spark-worker-{{.Task.Slot}}   # nice names if you scale
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G             # adjust to your host
+      - SPARK_WORKER_CORES=2
+    depends_on:
+      - spark-master
+    volumes:
+      - spark-events:/tmp/spark-events
+
+  spark-history:
+    image: bitnami/spark:3.5        # same version as master/worker
+    container_name: spark-history
+    # no SPARK_MODE here ─ we launch the class by hand
+    command: >
+      /opt/bitnami/spark/bin/spark-class
+      org.apache.spark.deploy.history.HistoryServer
+    environment:
+      # Where the workers & master write their logs
+      - SPARK_HISTORY_OPTS=-Dspark.history.fs.logDirectory=/tmp/spark-events
+    volumes:
+      - spark-events:/tmp/spark-events   # same shared volume
+    ports:
+      - "18080:18080"    # UI → http://localhost:18080
+    depends_on:
+      - spark-master
+# -------------------------------------------------------------------
+
   neo4j:
     image: neo4j:5.17.0
     ports:
@@ -62,3 +112,6 @@ services:
   #   volumes:
   #     - ./neo4j/init_ontology.sh:/init_ontology.sh:ro
   #   entrypoint: ["bash", "/init_ontology.sh"]
+
+volumes:
+  spark-events: {}
