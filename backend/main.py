@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import asyncio
 from neo4j import GraphDatabase
 import logging
+from pyspark.sql import SparkSession, functions as F  # Import Spark libraries
 
 from src.storage.minio_client import MinioClient
 
@@ -40,6 +41,41 @@ class SmartCityBackend:
         self.neo4j_password = os.getenv("NEO4J_PASSWORD", "verystrongpassword")
         self.neo4j_driver = GraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password))  # new driver initialization
         self.minio_client: MinioClient = MinioClient()  # Initialize MinIO client
+        self.spark_host = os.getenv("SPARK_HOST", "localhost")
+        self.spark_port = os.getenv("SPARK_PORT", "7077")
+        self.minio_endpoint = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
+        self.minio_access_key = os.getenv("MINIO_ACCESS_KEY", "minio")
+        self.minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minio123")
+        self.minio_bucket = os.getenv("MINIO_BUCKET", "lake")
+        self.minio_path = f"s3a://{self.minio_bucket}/sensors/"
+
+        # Initialize Spark session
+        self.spark = (
+            SparkSession.builder
+            .appName("SmartCityBackend")
+            .master(f"spark://{self.spark_host}:{self.spark_port}")
+
+            # ---- MinIO (S3A) -------------------------------------------------
+            .config("spark.hadoop.fs.s3a.endpoint", self.minio_endpoint)
+            .config("spark.hadoop.fs.s3a.path.style.access", "true")
+            .config("spark.hadoop.fs.s3a.access.key", self.minio_access_key)
+            .config("spark.hadoop.fs.s3a.secret.key", self.minio_secret_key)
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+
+            # ---- Extra jars: Delta + S3A ------------------------------------
+            .config(
+                "spark.jars.packages",
+                ",".join([
+                    "io.delta:delta-spark_2.12:3.1.0",
+                    "org.apache.hadoop:hadoop-aws:3.3.4",
+                    "com.amazonaws:aws-java-sdk-bundle:1.12.620",
+                ])
+            )
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .getOrCreate()
+        )
+
         # Enable CORS
         self.app.add_middleware(
             CORSMiddleware,
@@ -72,6 +108,7 @@ class SmartCityBackend:
         self.app.get("/connections")(self.get_connections)
         self.app.get("/buildings")(self.get_buildings)  # new route to fetch buildings
         self.app.post("/addBuilding")(self.add_building)  # new endpoint to add a building
+        self.app.get("/averageTemperature")(self.get_average_temperature)  # Register new route
 
         # Provision Neo4j with initial data from utils.txt
         self.provision_data()
@@ -97,28 +134,19 @@ class SmartCityBackend:
             self.connection_status = "Disconnected"
             self.data_buffer.append({"error": "Connection error"})
             self.active_connection = None
-            
+
     def on_message(self, client, userdata, msg):
         try:
-            payload = json.loads(msg.payload.decode("utf-8"))
+            payload: dict = json.loads(msg.payload.decode("utf-8"))
             self.data_buffer.append(payload)
             print("Received message:", payload)
 
             # --- build object path ------------------------------------------------
-            ts_raw = payload["timestamp"]                   # may be str or number
-            if isinstance(ts_raw, (int, float)):
-                ts = datetime.datetime.fromtimestamp(ts_raw, tz=datetime.timezone.utc)
-            else:                                           # assume ISO-8601 string
-                ts = datetime.datetime.fromisoformat(ts_raw)
+            sensor_id = payload["sensorId"]
+            delta_path = f"sensors/{payload['sensorId']}"
 
-            ts_key = ts.isoformat(timespec="seconds").replace(":", "-")
-            object_name = f"sensors/{payload['sensorId']}/{ts_key}.json"
-
-            # --- upload to MinIO --------------------------------------------------
-            data_bytes  = json.dumps(payload).encode("utf-8")
-
-            self.minio_client.upload_data(object_name, data_bytes)
-            print(f"Uploaded {object_name} to MinIO.")
+            self.minio_client.add_row(payload)
+            print(f"Uploaded {delta_path} to MinIO.")
         except S3Error as s3e:
             print(f"MinIO error: {s3e}")
         except Exception as e:
@@ -330,6 +358,19 @@ class SmartCityBackend:
             if thread.is_alive():
                 thread.join(timeout=5)  # join with timeout for safety
         print("Shutdown event triggered")
+
+    def get_average_temperature(self):
+        return "not implemented yet"
+        """Calculate the average temperature from sensor data in MinIO."""
+        try:
+            # Read data from MinIO
+            df = self.spark.read.parquet(self.minio_path)
+            # Calculate the average temperature
+            mean_temp = df.agg(F.avg("temp").alias("mean_temp")).first()["mean_temp"]
+            return {"status": "success", "average_temperature": mean_temp}
+        except Exception as e:
+            print("Error calculating average temperature:", e)
+            return {"status": "error", "detail": str(e)}
 
 
 # Instantiate the backend and expose its app

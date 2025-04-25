@@ -9,6 +9,9 @@ uvicorn = "*"
 paho-mqtt = "*"
 neo4j = "*"
 minio = "*"
+pyspark = "*"
+pyarrow = "*"
+pandas = "*"
 
 [dev-packages]
 
