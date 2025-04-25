@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Card, ListGroup } from 'react-bootstrap';
 import {
   LineChart,
@@ -47,6 +47,57 @@ const events = [
 ];
 
 const DashboardPage: React.FC = () => {
+  const [averageTemperature, setAverageTemperature] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true); // Add loading state
+  const [runningJobs, setRunningJobs] = useState<any[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState<boolean>(true);
+
+  useEffect(() => {
+    // Fetch average temperature data from the backend
+    const fetchAverageTemperature = async () => {
+      setLoading(true); // Set loading to true before the API call
+      try {
+        const response = await fetch("http://localhost:8000/averageTemperature");
+        const data = await response.json();
+        if (data.status === "success") {
+          setAverageTemperature(data.data);
+        } else {
+          console.error("Error fetching average temperature:", data.detail);
+        }
+      } catch (error) {
+        console.error("Error fetching average temperature:", error);
+      } finally {
+        setLoading(false); // Set loading to false after the API call
+      }
+    };
+
+    fetchAverageTemperature();
+  }, []);
+
+  useEffect(() => {
+    // Fetch running Spark jobs from the backend every 15 seconds
+    const fetchRunningJobs = async () => {
+      setLoadingJobs(true);
+      try {
+        const response = await fetch("http://localhost:8000/runningSparkJobs");
+        const data = await response.json();
+        if (data.status === "success") {
+          setRunningJobs(data.data);
+        } else {
+          console.error("Error fetching running Spark jobs:", data.detail);
+        }
+      } catch (error) {
+        console.error("Error fetching running Spark jobs:", error);
+      } finally {
+        setLoadingJobs(false);
+      }
+    };
+
+    fetchRunningJobs();
+    const interval = setInterval(fetchRunningJobs, 5000); // Fetch every 15 seconds
+    return () => clearInterval(interval); // Cleanup interval on component unmount
+  }, []);
+
   return (
     <Container className="mt-3">
       <h1>Dashboard</h1>
@@ -119,6 +170,48 @@ const DashboardPage: React.FC = () => {
                   </ListGroup.Item>
                 ))}
               </ListGroup>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+      <Row className="mt-4">
+        <Col md={12}>
+          <Card className="mb-3">
+            <Card.Body>
+              <Card.Title>Hourly Average Temperature</Card.Title>
+              {loading ? ( // Show loading effect while data is being fetched
+                <div>Loading...</div>
+              ) : (
+                <ListGroup variant="flush">
+                  {averageTemperature.map((entry, index) => (
+                    <ListGroup.Item key={index}>
+                      <strong>Date:</strong> {entry.date}, <strong>Hour:</strong> {entry.hour}, <strong>Avg Temp:</strong> {entry.avg_temp.toFixed(2)} °C
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+      <Row className="mt-4">
+        <Col md={12}>
+          <Card className="mb-3">
+            <Card.Body>
+              <Card.Title>Running Spark Jobs</Card.Title>
+              {loadingJobs ? (
+                <div>Loading...</div>
+              ) : runningJobs.length > 0 ? (
+                <ListGroup variant="flush">
+                  {runningJobs.map((job, index) => (
+                    <ListGroup.Item key={index}>
+                      <strong>App Name:</strong> {job.app_name}, <strong>Job ID:</strong> {job.job_id}, <strong>Status:</strong> {job.status}, <strong>Submission Time:</strong> {job.submission_time}
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              ) : (
+                <div>No running jobs found.</div>
+              )}
             </Card.Body>
           </Card>
         </Col>

@@ -46,10 +46,15 @@ services:
       - SPARK_PORT=7077
     depends_on:
       - mosquitto
+    volumes:
+      - spark-events:/tmp/spark-events
+
 
 # --- Spark cluster -------------------------------------------------
   spark-master:
-    image: bitnami/spark:3.5
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
     hostname: spark-master
     container_name: spark-master
     environment:
@@ -67,21 +72,27 @@ services:
       - spark-events:/tmp/spark-events   # shared event-logs
 
   spark-worker:
-    image: bitnami/spark:3.5
-    # `deploy` only works with Swarm/K8s; use `--scale` instead.
+    build:
+      context: ./spark
+      dockerfile: Dockerfile    # `deploy` only works with Swarm/K8s; use `--scale` instead.
     hostname: spark-worker-{{.Task.Slot}}   # nice names if you scale
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_WORKER_MEMORY=1G             # adjust to your host
       - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_WEBUI_PORT=8081
+    ports:
+      - "8081:8081"   # worker web-UI → http://localhost:8081
     depends_on:
       - spark-master
     volumes:
       - spark-events:/tmp/spark-events
 
   spark-history:
-    image: bitnami/spark:3.5        # same version as master/worker
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
     container_name: spark-history
     # no SPARK_MODE here ─ we launch the class by hand
     command: >
@@ -113,15 +124,15 @@ services:
       - minio-data:/data            # keeps objects between restarts
 
   # one-shot job that creates the bucket “lake” if it’s missing
-  minio-init:
-    image: minio/mc
-    depends_on: [minio]
-    entrypoint: >
-      /bin/sh -c "
-        until mc alias set local http://minio:9000 minio minio123; do sleep 1; done &&
-        mc mb -p local/lake || true &&
-        mc policy set public local/lake;
-        exit 0"
+  # minio-init:
+  #   image: minio/mc
+  #   depends_on: [minio]
+  #   entrypoint: >
+  #     /bin/sh -c "
+  #       until mc alias set local http://minio:9000 minio minio123; do sleep 1; done &&
+  #       mc mb -p local/lake || true &&
+  #       mc policy set public local/lake;
+  #       exit 0"
 # -------------------------------------------------------------------
 
 

@@ -12,17 +12,20 @@ class MinioClient:
     every FLUSH_INTERVAL seconds.
     """
     FLUSH_INTERVAL = 10            # seconds ─ tune to get 5-20 MB files
-    BUCKET         = os.getenv("MINIO_BUCKET_NAME", "mybucket")
 
-    def __init__(self):
+    def __init__(self, bucket: str):
         self.client = Minio(
-            os.getenv("MINIO_ENDPOINT", "minio:9000"),
+            os.getenv("MINIO_ENDPOINT", "minio:900"),
             os.getenv("MINIO_ACCESS_KEY", "minio"),
             os.getenv("MINIO_SECRET_KEY", "minio123"),
             secure=False,
         )
-        if not self.client.bucket_exists(self.BUCKET):
-            self.client.make_bucket(self.BUCKET)
+        
+        self.bucket = bucket
+        
+        if not self.client.bucket_exists(bucket):
+            self.client.make_bucket(bucket)
+
 
         self._batch: list[dict] = []
         self._lock  = threading.Lock()
@@ -73,7 +76,7 @@ class MinioClient:
 
         try:
             self.client.put_object(
-                self.BUCKET,
+                self.bucket,
                 object_key,
                 data=buf,
                 length=buf.getbuffer().nbytes,

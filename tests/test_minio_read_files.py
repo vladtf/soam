@@ -36,11 +36,13 @@ spark = (
 )
 
 # ----------- COUNT total entities in the bucket -----------
-df = spark.read.parquet("s3a://mybucket/sensors/date=2025-04-25/")
+df = (
+    spark.read.option("basePath", "s3a://mybucket/sensors/")
+         .parquet("s3a://mybucket/sensors/date=*/hour=*")
+)
 entity_count = df.count()
 
 print(f"Total number of entities in the dataset: {entity_count}")
-
 
 hourly_avg = (
     df.withColumn("date", F.to_date("timestamp"))
@@ -51,6 +53,5 @@ hourly_avg = (
 )
 
 hourly_avg.show(truncate=False)
-
 
 spark.stop()

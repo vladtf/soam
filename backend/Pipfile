@@ -12,6 +12,7 @@ minio = "*"
 pyspark = "*"
 pyarrow = "*"
 pandas = "*"
+requests = "*"
 
 [dev-packages]
 

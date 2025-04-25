@@ -13,6 +13,7 @@ import asyncio
 from neo4j import GraphDatabase
 import logging
 from pyspark.sql import SparkSession, functions as F  # Import Spark libraries
+import requests  # Add this import for making HTTP requests
 
 from src.storage.minio_client import MinioClient
 
@@ -40,41 +41,16 @@ class SmartCityBackend:
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
         self.neo4j_password = os.getenv("NEO4J_PASSWORD", "verystrongpassword")
         self.neo4j_driver = GraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password))  # new driver initialization
-        self.minio_client: MinioClient = MinioClient()  # Initialize MinIO client
         self.spark_host = os.getenv("SPARK_HOST", "localhost")
         self.spark_port = os.getenv("SPARK_PORT", "7077")
         self.minio_endpoint = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
         self.minio_access_key = os.getenv("MINIO_ACCESS_KEY", "minio")
         self.minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minio123")
         self.minio_bucket = os.getenv("MINIO_BUCKET", "lake")
-        self.minio_path = f"s3a://{self.minio_bucket}/sensors/"
+        self.minio_client: MinioClient = MinioClient(self.minio_bucket)  # Initialize MinIO client
+        
 
-        # Initialize Spark session
-        self.spark = (
-            SparkSession.builder
-            .appName("SmartCityBackend")
-            .master(f"spark://{self.spark_host}:{self.spark_port}")
-
-            # ---- MinIO (S3A) -------------------------------------------------
-            .config("spark.hadoop.fs.s3a.endpoint", self.minio_endpoint)
-            .config("spark.hadoop.fs.s3a.path.style.access", "true")
-            .config("spark.hadoop.fs.s3a.access.key", self.minio_access_key)
-            .config("spark.hadoop.fs.s3a.secret.key", self.minio_secret_key)
-            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-
-            # ---- Extra jars: Delta + S3A ------------------------------------
-            .config(
-                "spark.jars.packages",
-                ",".join([
-                    "io.delta:delta-spark_2.12:3.1.0",
-                    "org.apache.hadoop:hadoop-aws:3.3.4",
-                    "com.amazonaws:aws-java-sdk-bundle:1.12.620",
-                ])
-            )
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-            .getOrCreate()
-        )
+       
 
         # Enable CORS
         self.app.add_middleware(
@@ -109,6 +85,7 @@ class SmartCityBackend:
         self.app.get("/buildings")(self.get_buildings)  # new route to fetch buildings
         self.app.post("/addBuilding")(self.add_building)  # new endpoint to add a building
         self.app.get("/averageTemperature")(self.get_average_temperature)  # Register new route
+        self.app.get("/runningSparkJobs")(self.get_running_spark_jobs)  # Register the new route
 
         # Provision Neo4j with initial data from utils.txt
         self.provision_data()
@@ -360,17 +337,99 @@ class SmartCityBackend:
         print("Shutdown event triggered")
 
     def get_average_temperature(self):
-        return "not implemented yet"
         """Calculate the average temperature from sensor data in MinIO."""
         try:
+             # Initialize Spark session
+            spark = (
+                SparkSession.builder
+                .appName("SmartCityBackend")
+                .master(f"spark://{self.spark_host}:{self.spark_port}")
+
+                # ---- MinIO (S3A) -------------------------------------------------
+                .config("spark.eventLog.enabled", "true")
+                .config("spark.hadoop.fs.s3a.endpoint", f"http://{self.minio_endpoint}")
+                .config("spark.hadoop.fs.s3a.path.style.access", "true")
+                .config("spark.hadoop.fs.s3a.access.key", self.minio_access_key)
+                .config("spark.hadoop.fs.s3a.secret.key", self.minio_secret_key)
+                .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+
+                # ---- Extra jars: Delta + S3A ------------------------------------
+                .config(
+                    "spark.jars.packages",
+                    ",".join([
+                        "io.delta:delta-spark_2.12:3.1.0",
+                        "org.apache.hadoop:hadoop-aws:3.3.4",
+                        "com.amazonaws:aws-java-sdk-bundle:1.12.620",
+                    ]) # TODO: to move this to dockerfile
+                )
+                .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+                .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+                .getOrCreate()
+            )
+            
+            spark.sparkContext.setLogLevel("INFO")  # Set log level to ERROR
+
             # Read data from MinIO
-            df = self.spark.read.parquet(self.minio_path)
-            # Calculate the average temperature
-            mean_temp = df.agg(F.avg("temp").alias("mean_temp")).first()["mean_temp"]
-            return {"status": "success", "average_temperature": mean_temp}
+            df = (
+                spark.read.option("basePath", f"s3a://{self.minio_bucket}/sensors/")
+                    .parquet(f"s3a://{self.minio_bucket}/sensors/date=*/hour=*")
+            )      
+            hourly_avg = (
+                df.withColumn("date", F.to_date("timestamp"))
+                .withColumn("hour", F.hour("timestamp"))
+                .groupBy("date", "hour")
+                .agg(F.avg("temperature").alias("avg_temp"))
+                .orderBy("date", "hour")
+            )
+            
+            response = hourly_avg.collect()  # Collect the results to a list
+            
+            # Convert to a list of dictionaries for easier JSON serialization
+            response = [
+                {"date": row["date"], "hour": row["hour"], "avg_temp": row["avg_temp"]}
+                for row in response
+            ]
+            
+
+            spark.stop()  # Stop Spark session after use
+
+            return {"status": "success", "data": response}
         except Exception as e:
             print("Error calculating average temperature:", e)
             return {"status": "error", "detail": str(e)}
+            
+    def get_running_spark_jobs(self):
+        """
+        Return jobs whose latest stage is RUNNING as reported by the History-Server.
+        History UI is mapped to http://localhost:18080 in docker-compose.yml
+        """
+        try:
+            base = "http://spark-history:18080/api/v1/applications"
+            apps = requests.get(base, timeout=5).json()
+
+            running = []
+            for app in apps:
+                app_id   = app["id"]
+                app_name = app["name"]
+
+                jobs = requests.get(f"{base}/{app_id}/jobs", timeout=5).json()
+                for j in jobs:
+                    if j["status"] == "RUNNING":
+                        running.append({
+                            "app_id": app_id,
+                            "app_name": app_name,
+                            "job_id": j["jobId"],
+                            "job_name": j["name"],
+                            "status": j["status"],
+                            "submission_time": j["submissionTime"],
+                        })
+
+            return {"status": "success", "data": running}
+
+        except requests.exceptions.RequestException as e:
+            return {"status": "error", "detail": f"HTTP error: {e}"}
+        except ValueError as e:          # .json() failed → not JSON
+            return {"status": "error", "detail": f"Bad JSON: {e}"}
 
 
 # Instantiate the backend and expose its app
