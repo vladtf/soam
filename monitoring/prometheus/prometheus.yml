@@ -9,15 +9,18 @@ scrape_configs:
 
   # spark master & workers (built-in)
   - job_name: spark
-    metrics_path: /metrics/prometheus
+    metrics_path: /metrics/
     static_configs:
-      - targets: ['spark-master:8080', 'spark-worker-1:8081']  # add more workers if scaled
+      - targets: ['spark-master:8080', 'spark-worker:8081']
+
 
   # MinIO (optional)
   # docker run -d --name minio-exporter --net soam_default minio/prometheus-exporter
   - job_name: minio
+    scheme: http
+    metrics_path: /minio/v2/metrics/cluster
     static_configs:
-      - targets: ['minio-exporter:9300']
+      - targets: [ 'minio:9000' ]
 
   # Mosquitto (optional) – needs exporter sidecar
   # - job_name: mosquitto

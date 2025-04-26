@@ -6,15 +6,15 @@ providers:
     disableDeletion: true
     options:
       path: /etc/grafana/provisioning/cadvisor-dashboards
-    inputs: 
-      - name: DS_PROMETHEUS
-        datasourceUid: prometheus
   - name: Spark Dashboards
     type: file
     folder: ''
     disableDeletion: true
     options:
       path: /etc/grafana/provisioning/spark-dashboards
-    inputs: 
-      - name: DS_PROMETHEUS
-        datasourceUid: prometheus
+  - name: MinIO Dashboards
+    type: file
+    folder: ''
+    disableDeletion: true
+    options:
+      path: /etc/grafana/provisioning/minio-dashboards

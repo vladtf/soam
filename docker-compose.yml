@@ -76,7 +76,7 @@ services:
       # - SPARK_RPC_AUTHENTICATION_SECRET=mysparksecret
       # - SPARK_RPC_ENCRYPTION_ENABLED=yes
       # - SPARK_SSL_ENABLED=yes
-      - SPARK_METRICS_PROMETHEUS_ENABLED=true
+      - SPARK_METRICS_ENABLED=true
     ports:
       - "7077:7077"   # cluster RPC
       - "8080:8080"   # master web-UI → http://localhost:8080
@@ -87,14 +87,14 @@ services:
     build:
       context: ./spark
       dockerfile: Dockerfile    # `deploy` only works with Swarm/K8s; use `--scale` instead.
-    hostname: spark-worker-{{.Task.Slot}}   # nice names if you scale
+    hostname: spark-worker   # nice names if you scale
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_WORKER_MEMORY=1G             # adjust to your host
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_WEBUI_PORT=8081
-      - SPARK_METRICS_PROMETHEUS_ENABLED=true
+      - SPARK_METRICS_ENABLED=true
     ports:
       - "8081:8081"   # worker web-UI → http://localhost:8081
     depends_on:
@@ -131,6 +131,7 @@ services:
     environment:
       - MINIO_ROOT_USER=minio
       - MINIO_ROOT_PASSWORD=minio123
+      - MINIO_PROMETHEUS_AUTH_TYPE=public
     ports:
       - "9000:9000"   # S3 API  → http://localhost:9000
       - "9090:9090"   # Web UI → http://localhost:9090

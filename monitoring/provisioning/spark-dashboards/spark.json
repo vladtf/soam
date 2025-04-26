@@ -3409,8 +3409,8 @@
     ]
   },
   "time": {
-    "from": "2018-09-25T14:51:46.062Z",
-    "to": "2018-09-26T08:40:07.334Z"
+    "from": "now-6h",
+    "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
