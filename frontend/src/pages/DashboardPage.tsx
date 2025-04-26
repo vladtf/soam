@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, ListGroup } from 'react-bootstrap';
+import { Container, Row, Col, Card, ListGroup, Table } from 'react-bootstrap';
 import {
   LineChart,
   Line,
@@ -170,13 +170,14 @@ const DashboardPage: React.FC = () => {
               {loading ? (
                 <div>Loading...</div>
               ) : (
-                <ListGroup variant="flush">
-                  {averageTemperature.map((entry, index) => (
-                    <ListGroup.Item key={index}>
-                      <strong>Date:</strong> {entry.date}, <strong>Hour:</strong> {entry.hour}, <strong>Avg Temp:</strong> {entry.avg_temp.toFixed(2)} °C
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
+                <LineChart width={800} height={400} data={averageTemperature}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="hour" label={{ value: 'Hour', position: 'insideBottomRight', offset: -5 }} />
+                  <YAxis label={{ value: 'Avg Temp (°C)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="avg_temp" stroke="#8884d8" />
+                </LineChart>
               )}
             </Card.Body>
           </Card>
@@ -190,13 +191,26 @@ const DashboardPage: React.FC = () => {
               {loadingJobs ? (
                 <div>Loading...</div>
               ) : runningJobs.length > 0 ? (
-                <ListGroup variant="flush">
-                  {runningJobs.map((job, index) => (
-                    <ListGroup.Item key={index}>
-                      <strong>App Name:</strong> {job.app_name}, <strong>Job ID:</strong> {job.job_id}, <strong>Status:</strong> {job.status}, <strong>Submission Time:</strong> {job.submission_time}
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
+                <Table striped bordered hover>
+                  <thead>
+                    <tr>
+                      <th>App Name</th>
+                      <th>Job ID</th>
+                      <th>Status</th>
+                      <th>Submission Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runningJobs.map((job, index) => (
+                      <tr key={index}>
+                        <td>{job.app_name}</td>
+                        <td>{job.job_id}</td>
+                        <td>{job.status}</td>
+                        <td>{job.submission_time}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
               ) : (
                 <div>No running jobs found.</div>
               )}
