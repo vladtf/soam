@@ -13,11 +13,33 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
         });
     });
     return schema;
-}
+};
 
 export const fetchSensorData = async (): Promise<SensorData[]> => {
     const { backendUrl } = getConfig();
     const response = await fetch(`${backendUrl}/data`);
     const json = await response.json();
     return json;
-}
+};
+
+export const fetchAverageTemperature = async (): Promise<any[]> => {
+    const { backendUrl } = getConfig();
+    const response = await fetch(`${backendUrl}/averageTemperature`);
+    const json = await response.json();
+    if (json.status === "success") {
+        return json.data;
+    } else {
+        throw new Error(json.detail || "Error fetching average temperature");
+    }
+};
+
+export const fetchRunningSparkJobs = async (): Promise<any[]> => {
+    const { backendUrl } = getConfig();
+    const response = await fetch(`${backendUrl}/runningSparkJobs`);
+    const json = await response.json();
+    if (json.status === "success") {
+        return json.data;
+    } else {
+        throw new Error(json.detail || "Error fetching running Spark jobs");
+    }
+};

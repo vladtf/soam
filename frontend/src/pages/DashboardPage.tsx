@@ -14,6 +14,7 @@ import {
   Pie,
   Cell
 } from 'recharts';
+import { fetchAverageTemperature, fetchRunningSparkJobs } from '../api/backendQuery';
 
 const lineData = [
   { name: 'Jan', sensors: 20 },
@@ -48,44 +49,32 @@ const events = [
 
 const DashboardPage: React.FC = () => {
   const [averageTemperature, setAverageTemperature] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true); // Add loading state
+  const [loading, setLoading] = useState<boolean>(true);
   const [runningJobs, setRunningJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState<boolean>(true);
 
   useEffect(() => {
-    // Fetch average temperature data from the backend
-    const fetchAverageTemperature = async () => {
-      setLoading(true); // Set loading to true before the API call
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const response = await fetch("http://localhost:8000/averageTemperature");
-        const data = await response.json();
-        if (data.status === "success") {
-          setAverageTemperature(data.data);
-        } else {
-          console.error("Error fetching average temperature:", data.detail);
-        }
+        const data = await fetchAverageTemperature();
+        setAverageTemperature(data);
       } catch (error) {
         console.error("Error fetching average temperature:", error);
       } finally {
-        setLoading(false); // Set loading to false after the API call
+        setLoading(false);
       }
     };
 
-    fetchAverageTemperature();
+    fetchData();
   }, []);
 
   useEffect(() => {
-    // Fetch running Spark jobs from the backend every 15 seconds
-    const fetchRunningJobs = async () => {
+    const fetchJobs = async () => {
       setLoadingJobs(true);
       try {
-        const response = await fetch("http://localhost:8000/runningSparkJobs");
-        const data = await response.json();
-        if (data.status === "success") {
-          setRunningJobs(data.data);
-        } else {
-          console.error("Error fetching running Spark jobs:", data.detail);
-        }
+        const data = await fetchRunningSparkJobs();
+        setRunningJobs(data);
       } catch (error) {
         console.error("Error fetching running Spark jobs:", error);
       } finally {
@@ -93,8 +82,8 @@ const DashboardPage: React.FC = () => {
       }
     };
 
-    fetchRunningJobs();
-    const interval = setInterval(fetchRunningJobs, 5000); // Fetch every 15 seconds
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 15000); // Fetch every 15 seconds
     return () => clearInterval(interval); // Cleanup interval on component unmount
   }, []);
 
@@ -159,7 +148,6 @@ const DashboardPage: React.FC = () => {
           </Card>
         </Col>
         <Col md={6}>
-          {/* New Event Feed Board */}
           <Card className="mb-3">
             <Card.Body>
               <Card.Title>Event Feed</Card.Title>
@@ -179,7 +167,7 @@ const DashboardPage: React.FC = () => {
           <Card className="mb-3">
             <Card.Body>
               <Card.Title>Hourly Average Temperature</Card.Title>
-              {loading ? ( // Show loading effect while data is being fetched
+              {loading ? (
                 <div>Loading...</div>
               ) : (
                 <ListGroup variant="flush">
