@@ -208,7 +208,9 @@ services:
       - "3001:3000"          # http://localhost:3001
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./monitoring/provisioning:/etc/grafana/provisioning # datasources & dashboards
+      - ./monitoring/provisioning:/etc/grafana/provisioning
+      # - ./monitoring/grafana/dashboards/cadvisor:/etc/grafana/provisioning/cadvisor-dashboards:ro
+      # - ./monitoring/grafana/dashboards/spark:/etc/grafana/provisioning/spark-dashboards:ro
 
 # -------------------------------------------------------------------
 

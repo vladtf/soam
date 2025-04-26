@@ -3,7 +3,6 @@ providers:
   - name: CAdvisor Dashboards
     type: file
     folder: ''
-    folderUid: ''
     disableDeletion: true
     options:
       path: /etc/grafana/provisioning/cadvisor-dashboards
@@ -13,7 +12,6 @@ providers:
   - name: Spark Dashboards
     type: file
     folder: ''
-    folderUid: ''
     disableDeletion: true
     options:
       path: /etc/grafana/provisioning/spark-dashboards
