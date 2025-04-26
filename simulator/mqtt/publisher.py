@@ -23,11 +23,12 @@ client.connect(broker, port, 60)
 
 while True:
     payload = {
-        "temperature": round(random.uniform(20.0, 25.0), 2),
-        "humidity": round(random.uniform(30, 50), 2),
-        "timestamp": datetime.now().isoformat(),
+        "temperature": round(random.uniform(15.0, 35.0), 2),  # Expanded range for temperature
+        "humidity": round(random.uniform(20, 70), 2),         # Expanded range for humidity
+        "timestamp": (datetime.now() + 
+                      random.timedelta(seconds=random.randint(-10, 10))).isoformat(),  # Slight timestamp variation
         "sensorId": sensor_id,
     }
     client.publish(topic, json.dumps(payload))
     logging.info("Published: %s", payload)
-    time.sleep(5)
+    time.sleep(random.randint(3, 7))  # Randomized sleep interval
