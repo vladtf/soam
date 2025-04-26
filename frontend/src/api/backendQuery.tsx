@@ -16,8 +16,8 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
 };
 
 export const fetchSensorData = async (): Promise<SensorData[]> => {
-    const { backendUrl } = getConfig();
-    const response = await fetch(`${backendUrl}/data`);
+    const { ingestorUrl } = getConfig();
+    const response = await fetch(`${ingestorUrl}/data`);
     const json = await response.json();
     return json;
 };

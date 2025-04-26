@@ -1,6 +1,7 @@
 // src/config.ts
 export interface AppConfig {
     backendUrl: string;
+    ingestorUrl: string;
   }
   
   let config: AppConfig;

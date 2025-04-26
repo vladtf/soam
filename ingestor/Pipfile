@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+fastapi = "*"
+uvicorn = "*"
+paho-mqtt = "*"
+neo4j = "*"
+minio = "*"
+pyspark = "*"
+pyarrow = "*"
+pandas = "*"
+requests = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"
