@@ -1,0 +1,12 @@
+apiVersion: 1
+providers:
+  - name: CAdvisor Dashboards
+    type: file
+    foldr: ''
+    folderUid: ''
+    disableDeletion: true
+    options:
+      path: /etc/grafana/provisioning/cadvisor-dashboards
+    inputs: 
+      - name: DS_PROMETHEUS
+        datasourceUid: prometheus

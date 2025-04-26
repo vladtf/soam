@@ -4,7 +4,7 @@ import random
 import paho.mqtt.client as mqttClient
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta  # Import timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -26,7 +26,7 @@ while True:
         "temperature": round(random.uniform(15.0, 35.0), 2),  # Expanded range for temperature
         "humidity": round(random.uniform(20, 70), 2),         # Expanded range for humidity
         "timestamp": (datetime.now() + 
-                      random.timedelta(seconds=random.randint(-10, 10))).isoformat(),  # Slight timestamp variation
+                      timedelta(seconds=random.randint(-10, 10))).isoformat(),  # Slight timestamp variation
         "sensorId": sensor_id,
     }
     client.publish(topic, json.dumps(payload))

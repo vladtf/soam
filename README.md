@@ -21,6 +21,9 @@
 - **[MinIO S3 API](http://localhost:9000):** Accessible at `http://localhost:9000`
 - **[MinIO Web Console](http://localhost:9090):** Accessible at `http://localhost:9090`
 - **[Neo4j Web UI](http://localhost:7474):** Accessible at `http://localhost:7474`
+- **[Cadvisor Web UI](http://localhost:8089/metrics):** Accessible at `http://localhost:8089/metrics`
+- **[Prometheus Web UI](http://localhost:9091):** Accessible at `http://localhost:9091`
+- **[Grafana Web UI](http://localhost:3001):** Accessible at `http://localhost:3001`
 
 
 ### Local Development
