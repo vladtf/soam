@@ -15,6 +15,7 @@ import {
   Cell
 } from 'recharts';
 import { fetchAverageTemperature, fetchRunningSparkJobs } from '../api/backendQuery';
+import { FaChartLine, FaThermometerHalf, FaTasks, FaMapMarkerAlt, FaBell } from 'react-icons/fa'; // Import icons
 
 const lineData = [
   { name: 'Jan', sensors: 20 },
@@ -94,7 +95,9 @@ const DashboardPage: React.FC = () => {
         <Col md={6}>
           <Card className="mb-3">
             <Card.Body>
-              <Card.Title>Monthly Sensors Trend</Card.Title>
+              <Card.Title>
+                <FaChartLine className="me-2" /> Monthly Sensors Trend
+              </Card.Title>
               <LineChart width={400} height={300} data={lineData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
@@ -109,7 +112,9 @@ const DashboardPage: React.FC = () => {
         <Col md={6}>
           <Card className="mb-3">
             <Card.Body>
-              <Card.Title>Sensor Distribution</Card.Title>
+              <Card.Title>
+                <FaMapMarkerAlt className="me-2" /> Sensor Distribution
+              </Card.Title>
               <BarChart width={400} height={300} data={barData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
@@ -126,7 +131,9 @@ const DashboardPage: React.FC = () => {
         <Col md={6}>
           <Card className="mb-3">
             <Card.Body>
-              <Card.Title>Status Distribution</Card.Title>
+              <Card.Title>
+                <FaThermometerHalf className="me-2" /> Status Distribution
+              </Card.Title>
               <PieChart width={400} height={300}>
                 <Pie 
                   data={pieData} 
@@ -150,7 +157,9 @@ const DashboardPage: React.FC = () => {
         <Col md={6}>
           <Card className="mb-3">
             <Card.Body>
-              <Card.Title>Event Feed</Card.Title>
+              <Card.Title>
+                <FaBell className="me-2" /> Event Feed
+              </Card.Title>
               <ListGroup variant="flush">
                 {events.map(event => (
                   <ListGroup.Item key={event.id}>
@@ -166,7 +175,9 @@ const DashboardPage: React.FC = () => {
         <Col md={12}>
           <Card className="mb-3">
             <Card.Body>
-              <Card.Title>Hourly Average Temperature</Card.Title>
+              <Card.Title>
+                <FaThermometerHalf className="me-2" /> Hourly Average Temperature
+              </Card.Title>
               {loading ? (
                 <div>Loading...</div>
               ) : (
@@ -187,7 +198,9 @@ const DashboardPage: React.FC = () => {
         <Col md={12}>
           <Card className="mb-3">
             <Card.Body>
-              <Card.Title>Running Spark Jobs</Card.Title>
+              <Card.Title>
+                <FaTasks className="me-2" /> Running Spark Jobs
+              </Card.Title>
               {loadingJobs ? (
                 <div>Loading...</div>
               ) : runningJobs.length > 0 ? (
