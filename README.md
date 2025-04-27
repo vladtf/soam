@@ -7,6 +7,7 @@
   - [Table of Contents](#table-of-contents)
     - [Overview](#overview)
     - [Summary of Local Pages:](#summary-of-local-pages)
+    - [Architecture Diagram](#architecture-diagram)
     - [Local Development](#local-development)
     - [Cloud Deployment](#cloud-deployment)
 
@@ -25,6 +26,11 @@
 - **[Prometheus Web UI](http://localhost:9091):** Accessible at `http://localhost:9091`
 - **[Grafana Web UI](http://localhost:3001):** Accessible at `http://localhost:3001`
 
+### Architecture Diagram
+
+<div style="border: 2px solid black; padding: 10px; display: inline-block;">
+    <img src="assets/architecture.png" alt="Architecture" width="100%"/>
+</div>
 
 ### Local Development
 
