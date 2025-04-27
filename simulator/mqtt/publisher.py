@@ -21,9 +21,23 @@ client = mqttClient.Client(mqttClient.CallbackAPIVersion.VERSION2)
 
 client.connect(broker, port, 60)
 
+# Define temperature ranges for different time periods
+temperature_ranges = {
+    (0, 6): (10.0, 20.0),   # Midnight to 6 AM
+    (6, 12): (15.0, 25.0),  # 6 AM to Noon
+    (12, 18): (20.0, 35.0), # Noon to 6 PM
+    (18, 24): (15.0, 25.0)  # 6 PM to Midnight
+}
+
 while True:
+    current_hour = datetime.now().hour
+    for (start, end), (min_temp, max_temp) in temperature_ranges.items():
+        if start <= current_hour < end:
+            base_temperature = random.uniform(min_temp, max_temp)
+            break
+
     payload = {
-        "temperature": round(random.uniform(15.0, 35.0), 2),  # Expanded range for temperature
+        "temperature": round(base_temperature, 2),
         "humidity": round(random.uniform(20, 70), 2),         # Expanded range for humidity
         "timestamp": (datetime.now() + 
                       timedelta(seconds=random.randint(-10, 10))).isoformat(),  # Slight timestamp variation
