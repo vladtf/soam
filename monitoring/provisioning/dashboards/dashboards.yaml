@@ -17,4 +17,10 @@ providers:
     folder: ''
     disableDeletion: true
     options:
-      path: /etc/grafana/provisioning/minio-dashboards
+      path: /etc/grafana/provisioning/minio-dashboards  
+  - name: Ingestor Dashboards
+    type: file
+    folder: ''
+    disableDeletion: true
+    options:
+      path: /etc/grafana/provisioning/ingestor-dashboards
