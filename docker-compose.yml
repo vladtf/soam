@@ -15,6 +15,7 @@ services:
     build:
       context: ./simulator
       dockerfile: Dockerfile
+    container_name: soam-simulator
     environment:
       - MQTT_BROKER=mosquitto
     depends_on:
