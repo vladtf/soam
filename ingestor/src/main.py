@@ -12,6 +12,8 @@ from dataclasses import dataclass
 import asyncio
 import logging
 import requests  # Add this import for making HTTP requests
+from prometheus_client import Counter, Histogram, generate_latest
+from fastapi.responses import Response
 
 from src.storage.minio_client import MinioClient
 from src.app import create_app
@@ -39,11 +41,33 @@ class SmartCityIngestor:
         self.connection_configs.append(default_config)
         self.active_connection = default_config
 
+        self._initialize_metrics()
         # Register routes
         register_routes(self.app, self)
-
+        self._register_metrics_route()
         # Start MQTT client
         self.start_mqtt_client()
+
+    def _initialize_metrics(self):
+        """Initialize Prometheus metrics."""
+        self.messages_received = Counter(
+            "mqtt_messages_received_total",
+            "Total number of MQTT messages received"
+        )
+        self.messages_processed = Counter(
+            "mqtt_messages_processed_total",
+            "Total number of MQTT messages successfully processed"
+        )
+        self.processing_latency = Histogram(
+            "mqtt_message_processing_latency_seconds",
+            "Latency for processing MQTT messages"
+        )
+
+    def _register_metrics_route(self):
+        """Register the /metrics endpoint for Prometheus scraping."""
+        @self.app.get("/metrics")
+        def metrics():
+            return Response(generate_latest(), media_type="text/plain")
 
     def start_mqtt_client(self):
         """Start the MQTT client."""
@@ -52,7 +76,10 @@ class SmartCityIngestor:
             port=self.active_connection.port,
             topic=self.active_connection.topic,
             data_buffer=self.data_buffer,
-            minio_client=self.minio_client
+            minio_client=self.minio_client,
+            messages_received=self.messages_received,
+            messages_processed=self.messages_processed,
+            processing_latency=self.processing_latency
         )
         threading.Thread(target=self.mqtt_handler.start, daemon=True).start()
 

@@ -13,7 +13,6 @@ scrape_configs:
     static_configs:
       - targets: ['spark-master:8080', 'spark-worker:8081']
 
-
   # MinIO (optional)
   # docker run -d --name minio-exporter --net soam_default minio/prometheus-exporter
   - job_name: minio
@@ -26,3 +25,9 @@ scrape_configs:
   # - job_name: mosquitto
   #   static_configs:
   #     - targets: ['mosquitto-exporter:9234']
+
+  # Ingestor metrics
+  - job_name: ingestor
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['ingestor:8001']  # Replace 'ingestor:8000' with the actual hostname and port of the ingestor service

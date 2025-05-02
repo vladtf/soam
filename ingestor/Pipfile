@@ -13,6 +13,7 @@ pyspark = "*"
 pyarrow = "*"
 pandas = "*"
 requests = "*"
+prometheus-client = "*"
 
 [dev-packages]
 
