@@ -1,20 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
 
 interface NewBuildingModalProps {
   show: boolean;
   lat: number;
   lng: number;
+  selectedBuilding: string;
+  selectedAddress: string;
+  selectedCity: string;
+  selectedCountry: string;
   handleClose: () => void;
   onSubmit: (building: { name: string; description: string; street: string; city: string; country: string; lat: number; lng: number; }) => void;
 }
 
-const NewBuildingModal: React.FC<NewBuildingModalProps> = ({ show, lat, lng, handleClose, onSubmit }) => {
-  const [name, setName] = useState('');
+const NewBuildingModal: React.FC<NewBuildingModalProps> = ({ show, lat, lng, selectedBuilding, selectedAddress, selectedCity, selectedCountry,
+  handleClose, onSubmit }) => {
+  const [name, setName] = useState(selectedBuilding);
   const [description, setDescription] = useState('Description of the building');
-  const [street, setStreet] = useState('Street Name');
-  const [city, setCity] = useState('Bucharest');
-  const [country, setCountry] = useState('Romania');
+  const [street, setStreet] = useState(selectedAddress);
+  const [city, setCity] = useState(selectedCity);
+  const [country, setCountry] = useState(selectedCountry);
+
+  // Update state when props change
+  useEffect(() => {
+    setName(selectedBuilding);
+    setStreet(selectedAddress);
+    setCity(selectedCity);
+    setCountry(selectedCountry);
+  }, [selectedAddress, selectedCity, selectedCountry]);
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();

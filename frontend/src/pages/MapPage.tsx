@@ -13,6 +13,10 @@ const MapPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedLat, setSelectedLat] = useState(0);
   const [selectedLng, setSelectedLng] = useState(0);
+  const [selectedBuilding, setSelectedBuilding] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
 
   useEffect(() => {
     fetchBuildings();
@@ -45,9 +49,24 @@ const MapPage: React.FC = () => {
     return null;
   };
 
-  const handleMapClick = (lat: number, lng: number) => {
+  const fetchAddress = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+      const data = await res.json();
+      // Update state with the available address info (adjust properties as needed)
+      setSelectedBuilding(data.name || '');
+      setAddress(data.address.road || '');
+      setCity(data.address.city || data.address.town || data.address.village || '');
+      setCountry(data.address.country || '');
+    } catch (error) {
+      console.error("Error fetching address:", error);
+    }
+  };
+
+  const handleMapClick = async (lat: number, lng: number) => {
     setSelectedLat(lat);
     setSelectedLng(lng);
+    await fetchAddress(lat, lng);
     setShowModal(true);
   };
 
@@ -71,6 +90,10 @@ const MapPage: React.FC = () => {
         show={showModal}
         lat={selectedLat}
         lng={selectedLng}
+        selectedBuilding={selectedBuilding}
+        selectedAddress={address}
+        selectedCity={city}
+        selectedCountry={country}
         handleClose={() => setShowModal(false)}
         onSubmit={handleAddBuilding}
       />
