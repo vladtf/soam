@@ -12,7 +12,8 @@ import {
   Bar,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  ResponsiveContainer
 } from 'recharts';
 import { fetchAverageTemperature, fetchRunningSparkJobs } from '../api/backendQuery';
 import { FaChartLine, FaThermometerHalf, FaTasks, FaMapMarkerAlt, FaBell } from 'react-icons/fa'; // Import icons
@@ -53,6 +54,7 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [runningJobs, setRunningJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState<boolean>(true);
+  const [timeRange, setTimeRange] = useState<number>(24); // new state for time range
 
   useEffect(() => {
     const fetchData = async () => {
@@ -178,17 +180,40 @@ const DashboardPage: React.FC = () => {
               <Card.Title>
                 <FaThermometerHalf className="me-2" /> Hourly Average Temperature
               </Card.Title>
+              {/* New select for time range with improved styling */}
+              <div className="mb-3">
+                <label htmlFor="tempRangeSelect" className="form-label">Select Time Range:</label>
+                <select
+                  id="tempRangeSelect"
+                  value={timeRange}
+                  onChange={e => setTimeRange(Number(e.target.value))}
+                  className="form-select"
+                >
+                  <option value={6}>Last 6 hours</option>
+                  <option value={12}>Last 12 hours</option>
+                  <option value={24}>Last 24 hours</option>
+                  <option value={0}>All</option>
+                </select>
+              </div>
               {loading ? (
                 <div>Loading...</div>
               ) : (
-                <LineChart width={800} height={400} data={averageTemperature}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="hour" label={{ value: 'Hour', position: 'insideBottomRight', offset: -5 }} />
-                  <YAxis label={{ value: 'Avg Temp (°C)', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="avg_temp" stroke="#8884d8" />
-                </LineChart>
+                // Use ResponsiveContainer to fill the entire card
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart
+                    data={timeRange === 0 ? averageTemperature : averageTemperature.slice(-timeRange)}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="hour"
+                      label={{ value: 'Hour', position: 'insideBottomRight', offset: -5 }}
+                    />
+                    <YAxis label={{ value: 'Avg Temp (°C)', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="avg_temp" stroke="#8884d8" />
+                  </LineChart>
+                </ResponsiveContainer>
               )}
             </Card.Body>
           </Card>

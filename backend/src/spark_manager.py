@@ -11,10 +11,7 @@ class SparkManager:
         self.minio_secret_key = minio_secret_key
         self.minio_bucket = minio_bucket
         self.spark_history = spark_history
-
-    def get_average_temperature(self):
-        try:
-            spark = (
+        self.spark = (
                 SparkSession.builder
                 .appName("SmartCityBackend")
                 .master(f"spark://{self.spark_host}:{self.spark_port}")
@@ -36,11 +33,15 @@ class SparkManager:
                 .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
                 .getOrCreate()
             )
+            
+        self.spark.sparkContext.setLogLevel("INFO")
+    
 
-            spark.sparkContext.setLogLevel("DEBUG")
+    def get_average_temperature(self):
+        try:
             # Read sensor data from MinIO
             df = (
-                spark.read.option("basePath", f"s3a://{self.minio_bucket}/sensors/")
+                self.spark.read.option("basePath", f"s3a://{self.minio_bucket}/sensors/")
                 .parquet(f"s3a://{self.minio_bucket}/sensors/date=*/hour=*")
             )
             hourly_avg = (
@@ -55,7 +56,6 @@ class SparkManager:
                 {"date": row["date"], "hour": row["hour"], "avg_temp": row["avg_temp"]}
                 for row in response_data
             ]
-            spark.stop()
             return {"status": "success", "data": response_list}
         except Exception as e:
             return {"status": "error", "detail": str(e)}
@@ -84,3 +84,7 @@ class SparkManager:
             return {"status": "error", "detail": f"HTTP error: {e}"}
         except ValueError as e:
             return {"status": "error", "detail": f"Bad JSON: {e}"}
+
+    def close(self):
+        """Close the Spark session."""
+        self.spark.stop()

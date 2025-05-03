@@ -40,7 +40,7 @@ class SmartCityBackend:
         self.minio_access_key = os.getenv("MINIO_ACCESS_KEY", "minio")
         self.minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minio123")
         self.minio_bucket = os.getenv("MINIO_BUCKET", "lake")
-        self.spark_history = os.getenv("SPARK_HISTORY", "http://spark-history-server:18080")
+        self.spark_history = os.getenv("SPARK_HISTORY", "http://spark-history:18080")
         
         # Initialize SparkManager in the constructor
         self.spark_manager = SparkManager(
