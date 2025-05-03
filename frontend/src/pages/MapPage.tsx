@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import 'leaflet/dist/leaflet.css';
 import { Container } from 'react-bootstrap';
 import NewBuildingModal from '../components/NewBuildingModal';
-import { postNewBuilding } from '../api/backendQuery';
+import { postNewBuilding } from '../api/backendRequests';
 import { Building } from '../models/Building';
 
 

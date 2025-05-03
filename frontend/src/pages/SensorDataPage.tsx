@@ -3,7 +3,7 @@ import { Container, Row, Col, Spinner } from 'react-bootstrap';
 import ReactJson from 'react-json-view';
 import SensorForm from '../components/SensorForm';
 import ConnectionStatus from '../components/ConnectionStatus';
-import { fetchSensorData, extractDataSchema, SensorData } from '../api/backendQuery';
+import { fetchSensorData, extractDataSchema, SensorData } from '../api/backendRequests';
 
 const SensorDataPage: React.FC = () => {
     const [data, setData] = useState<SensorData[]>([]);

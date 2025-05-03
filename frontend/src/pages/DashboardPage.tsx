@@ -15,7 +15,7 @@ import {
   Cell,
   ResponsiveContainer
 } from 'recharts';
-import { fetchAverageTemperature, fetchRunningSparkJobs } from '../api/backendQuery';
+import { fetchAverageTemperature, fetchRunningSparkJobs } from '../api/backendRequests';
 import { FaChartLine, FaThermometerHalf, FaTasks, FaMapMarkerAlt, FaBell } from 'react-icons/fa'; // Import icons
 
 const lineData = [
