@@ -15,7 +15,8 @@ from pyspark.sql import SparkSession, functions as F  # Import Spark libraries
 from src.spark_manager import SparkManager
 from src.neo4j_manager import Neo4jManager
 
-
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class SmartCityBackend:
@@ -91,7 +92,7 @@ class SmartCityBackend:
             if thread.is_alive():
                 thread.join(timeout=5)  # join with timeout for safety
         self.neo4j_manager.close()
-        print("Shutdown event triggered")
+        logger.info("Shutdown event completed.")
 
     def get_average_temperature(self):
         try:
