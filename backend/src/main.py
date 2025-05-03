@@ -65,7 +65,7 @@ class SmartCityBackend:
 
         # Register routes
         self.app.get("/buildings")(self.get_buildings)  # new route to fetch buildings
-        self.app.post("/addBuilding")(self.add_building)  # new endpoint to add a building
+        self.app.post("/buildings")(self.add_building)  # new endpoint to add a building
         self.app.get("/averageTemperature")(self.get_average_temperature)  # Register new route
         self.app.get("/runningSparkJobs")(self.get_running_spark_jobs)  # Register the new route
 

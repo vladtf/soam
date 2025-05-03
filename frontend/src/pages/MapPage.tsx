@@ -1,23 +1,56 @@
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Container } from 'react-bootstrap';
+import NewBuildingModal from '../components/NewBuildingModal';
+import { postNewBuilding } from '../api/backendQuery';
+import { Building } from '../models/Building';
 
-interface Building {
-  name: string;
-  lat: number;
-  lng: number;
-}
+
 
 const MapPage: React.FC = () => {
   const [buildings, setBuildings] = useState<Building[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedLat, setSelectedLat] = useState(0);
+  const [selectedLng, setSelectedLng] = useState(0);
 
   useEffect(() => {
-    fetch('http://localhost:8000/buildings')
-      .then(res => res.json())
-      .then(data => setBuildings(data))
-      .catch(err => console.error("Error fetching buildings:", err));
+    fetchBuildings();
   }, []);
+
+  const fetchBuildings = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/buildings');
+      const data = await res.json();
+      setBuildings(data);
+    } catch (err) {
+      console.error("Error fetching buildings:", err);
+    }
+  };
+
+  const handleAddBuilding = async (newBuilding: Building) => {
+    await postNewBuilding(newBuilding);
+    await fetchBuildings(); // Refetch buildings after adding new building
+    setShowModal(false);
+  };
+
+
+  // Inner component to handle map click events.
+  const MapClickHandler: React.FC<{ onClick: (lat: number, lng: number) => void }> = ({ onClick }) => {
+    useMapEvents({
+      click(e) {
+        onClick(e.latlng.lat, e.latlng.lng);
+      }
+    });
+    return null;
+  };
+
+  const handleMapClick = (lat: number, lng: number) => {
+    setSelectedLat(lat);
+    setSelectedLng(lng);
+    setShowModal(true);
+  };
+
 
   return (
     <Container className="mt-3">
@@ -32,7 +65,15 @@ const MapPage: React.FC = () => {
             <Popup>{b.name}</Popup>
           </Marker>
         ))}
+        <MapClickHandler onClick={handleMapClick} />
       </MapContainer>
+      <NewBuildingModal
+        show={showModal}
+        lat={selectedLat}
+        lng={selectedLng}
+        handleClose={() => setShowModal(false)}
+        onSubmit={handleAddBuilding}
+      />
     </Container>
   );
 };

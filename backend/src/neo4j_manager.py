@@ -1,6 +1,8 @@
 from neo4j import GraphDatabase
 import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class Neo4jManager:
     def __init__(self, uri, user, password):
@@ -29,6 +31,9 @@ class Neo4jManager:
         MERGE (b)-[:hasAddress]->(a)
         RETURN b, a
         """
+        logger.info("Adding building with data: %s", data)
+        if not all(key in data for key in ["name", "description", "street", "city", "country", "lat", "lng"]):
+            return {"status": "error", "detail": "Missing required fields"}
         try:
             with self.driver.session() as session:
                 result = session.run(query, **data)
@@ -102,9 +107,10 @@ class Neo4jManager:
             with self.driver.session() as session:
                 for query in queries:
                     session.run(query)
-            print("Provisioned initial data to Neo4j.")
+            logger.info("Neo4j data provisioned successfully.")
         except Exception as e:
-            print("Error provisioning Neo4j data:", e)
+            logger.error("Error provisioning Neo4j data: %s", e)
+            raise
 
     def close(self):
         """Close the Neo4j driver."""

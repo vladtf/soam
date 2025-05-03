@@ -1,4 +1,5 @@
 import { getConfig } from '../config';
+import { Building } from '../models/Building';
 
 export interface SensorData {
     temperature?: number;
@@ -43,3 +44,18 @@ export const fetchRunningSparkJobs = async (): Promise<any[]> => {
         throw new Error(json.detail || "Error fetching running Spark jobs");
     }
 };
+
+export const postNewBuilding = async (newBuilding: Building) => {
+    const { backendUrl } = getConfig();
+    const response = await fetch(`${backendUrl}/buildings`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newBuilding),
+    });
+    if (!response.ok) {
+        throw new Error('Failed to add new building');
+    }
+    return response.json();
+  };
