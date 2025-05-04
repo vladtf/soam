@@ -68,6 +68,7 @@ class SmartCityBackend:
         self.app.post("/buildings")(self.add_building)  # new endpoint to add a building
         self.app.get("/averageTemperature")(self.get_average_temperature)  # Register new route
         self.app.get("/runningSparkJobs")(self.get_running_spark_jobs)  # Register the new route
+        self.app.get("/temperatureAlerts")(self.get_temperature_alerts)
 
         # Provision Neo4j with initial data from utils.txt
         self.neo4j_manager.provision_data()
@@ -103,6 +104,13 @@ class SmartCityBackend:
     def get_running_spark_jobs(self):
         try:
             return self.spark_manager.get_running_spark_jobs()
+        except Exception as e:
+            return {"status": "error", "detail": str(e)}
+
+    def get_temperature_alerts(self, since_minutes=60):
+        since_minutes = int(since_minutes)
+        try:
+            return self.spark_manager.get_temperature_alerts(since_minutes)
         except Exception as e:
             return {"status": "error", "detail": str(e)}
 

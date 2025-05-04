@@ -15,7 +15,7 @@ import {
   Cell,
   ResponsiveContainer
 } from 'recharts';
-import { fetchAverageTemperature, fetchRunningSparkJobs } from '../api/backendRequests';
+import { fetchAverageTemperature, fetchRunningSparkJobs, fetchTemperatureAlerts } from '../api/backendRequests';
 import { FaChartLine, FaThermometerHalf, FaTasks, FaMapMarkerAlt, FaBell } from 'react-icons/fa'; // Import icons
 
 const lineData = [
@@ -55,14 +55,21 @@ const DashboardPage: React.FC = () => {
   const [runningJobs, setRunningJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState<boolean>(true);
   const [timeRange, setTimeRange] = useState<number>(24); // new state for time range
+  const [temperatureAlerts, setTemperatureAlerts] = useState<any[]>([]);
+  const [loadingAlerts, setLoadingAlerts] = useState<boolean>(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const data = await fetchAverageTemperature();
+        // Format the time_start field for proper display on the X-axis
+        const formattedData = data.map((item: any) => ({
+          ...item,
+          time_start: new Date(item.time_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }));
         // Compare new data with the existing state to avoid unnecessary updates
-        if (JSON.stringify(data) !== JSON.stringify(averageTemperature)) {
-          setAverageTemperature(data);
+        if (JSON.stringify(formattedData) !== JSON.stringify(averageTemperature)) {
+          setAverageTemperature(formattedData);
         }
       } catch (error) {
         console.error("Error fetching average temperature:", error);
@@ -91,6 +98,23 @@ const DashboardPage: React.FC = () => {
 
     fetchJobs();
     const interval = setInterval(fetchJobs, 15000); // Fetch every 15 seconds
+    return () => clearInterval(interval); // Cleanup interval on component unmount
+  }, []);
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const data = await fetchTemperatureAlerts();
+        setTemperatureAlerts(data);
+      } catch (error) {
+        console.error("Error fetching temperature alerts:", error);
+      } finally {
+        setLoadingAlerts(false);
+      }
+    };
+
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 15000); // Poll every 15 seconds
     return () => clearInterval(interval); // Cleanup interval on component unmount
   }, []);
 
@@ -184,7 +208,7 @@ const DashboardPage: React.FC = () => {
               <Card.Title>
                 <FaThermometerHalf className="me-2" /> Hourly Average Temperature
               </Card.Title>
-              {/* New select for time range with improved styling */}
+              {/* Updated select for time range with more options */}
               <div className="mb-3">
                 <label htmlFor="tempRangeSelect" className="form-label">Select Time Range:</label>
                 <select
@@ -193,9 +217,11 @@ const DashboardPage: React.FC = () => {
                   onChange={e => setTimeRange(Number(e.target.value))}
                   className="form-select"
                 >
-                  <option value={6}>Last 6 hours</option>
-                  <option value={12}>Last 12 hours</option>
-                  <option value={24}>Last 24 hours</option>
+                  <option value={5}>Last 5 minutes</option>
+                  <option value={15}>Last 15 minutes</option>
+                  <option value={30}>Last 30 minutes</option>
+                  <option value={60}>Last 1 hour</option>
+                  <option value={120}>Last 2 hours</option>
                   <option value={0}>All</option>
                 </select>
               </div>
@@ -209,8 +235,8 @@ const DashboardPage: React.FC = () => {
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
-                      dataKey="hour"
-                      label={{ value: 'Hour', position: 'insideBottomRight', offset: -5 }}
+                      dataKey="time_start" // Updated to use time_start
+                      label={{ value: 'Time', position: 'insideBottomRight', offset: -5 }}
                     />
                     <YAxis label={{ value: 'Avg Temp (°C)', angle: -90, position: 'insideLeft' }} />
                     <Tooltip />
@@ -255,6 +281,32 @@ const DashboardPage: React.FC = () => {
                 </Table>
               ) : (
                 <div>No running jobs found.</div>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+      <Row className="mt-4">
+        <Col md={12}>
+          <Card className="mb-3">
+            <Card.Body>
+              <Card.Title>
+                <FaBell className="me-2" /> Temperature Alerts
+              </Card.Title>
+              {loadingAlerts ? (
+                <div>Loading...</div>
+              ) : temperatureAlerts.length > 0 ? (
+                <ListGroup variant="flush">
+                  {temperatureAlerts.map((alert, index) => (
+                    <ListGroup.Item key={index}>
+                      <strong>Sensor:</strong> {alert.sensorId} | 
+                      <strong> Temp:</strong> {alert.temperature}°C | 
+                      <strong> Time:</strong> {alert.event_time}
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              ) : (
+                <div>No alerts found.</div>
               )}
             </Card.Body>
           </Card>

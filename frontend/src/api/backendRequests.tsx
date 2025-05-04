@@ -59,3 +59,16 @@ export const postNewBuilding = async (newBuilding: Building) => {
     }
     return response.json();
   };
+
+  export const fetchTemperatureAlerts = async (sinceMinutes: number = 60) => {
+    const response = await fetch(`${getConfig().backendUrl}/temperatureAlerts?sinceMinutes=${sinceMinutes}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch temperature alerts');
+    }
+    const json = await response.json();
+    if (json.status === "success") {
+        return json.data;
+    } else {
+        throw new Error(json.detail || "Error fetching temperature alerts");
+    }
+  };
