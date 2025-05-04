@@ -11,7 +11,7 @@ scrape_configs:
   - job_name: spark
     metrics_path: /metrics/
     static_configs:
-      - targets: ['spark-master:8080', 'spark-worker:8081']
+      - targets: ['spark-master:8080', 'spark-worker:8081', 'spark-worker-2:8082']
 
   # MinIO (optional)
   # docker run -d --name minio-exporter --net soam_default minio/prometheus-exporter

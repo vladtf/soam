@@ -87,7 +87,7 @@ services:
     volumes:
       - spark-events:/tmp/spark-events   # shared event-logs
 
-  spark-worker:
+  spark-worker: &spark-worker
     build:
       context: ./spark
       dockerfile: Dockerfile    # `deploy` only works with Swarm/K8s; use `--scale` instead.
@@ -105,6 +105,20 @@ services:
       - spark-master
     volumes:
       - spark-events:/tmp/spark-events
+
+  spark-worker-2:
+    <<: *spark-worker
+    container_name: spark-worker-2
+    hostname: spark-worker-2  # unique hostname
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=2
+      - SPARK_METRICS_ENABLED=true
+      - SPARK_WORKER_WEBUI_PORT=8082
+    ports:
+      - "8082:8082"  # map the unique port
 
   spark-history:
     build:
