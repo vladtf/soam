@@ -96,7 +96,7 @@ class SmartCityBackend:
 
     def get_average_temperature(self):
         try:
-            return self.spark_manager.get_average_temperature()
+            return self.spark_manager.get_streaming_average_temperature()
         except Exception as e:
             return {"status": "error", "detail": str(e)}
 

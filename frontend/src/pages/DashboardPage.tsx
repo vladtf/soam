@@ -58,19 +58,23 @@ const DashboardPage: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
       try {
         const data = await fetchAverageTemperature();
-        setAverageTemperature(data);
+        // Compare new data with the existing state to avoid unnecessary updates
+        if (JSON.stringify(data) !== JSON.stringify(averageTemperature)) {
+          setAverageTemperature(data);
+        }
       } catch (error) {
         console.error("Error fetching average temperature:", error);
       } finally {
-        setLoading(false);
+        if (loading) setLoading(false); // Only stop loading indicator after the first load
       }
     };
 
     fetchData();
-  }, []);
+    const interval = setInterval(fetchData, 15000); // Refresh every 15 seconds
+    return () => clearInterval(interval); // Cleanup interval on component unmount
+  }, [averageTemperature, loading]);
 
   useEffect(() => {
     const fetchJobs = async () => {

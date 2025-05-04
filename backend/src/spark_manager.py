@@ -1,5 +1,7 @@
 import requests
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import SparkSession, functions as F, types as T
+import os
+import shutil
 
 
 class SparkManager:
@@ -34,7 +36,8 @@ class SparkManager:
                 .getOrCreate()
             )
             
-        self.spark.sparkContext.setLogLevel("INFO")
+        self.spark.sparkContext.setLogLevel("WARN")
+        self.start_temperature_stream()
     
 
     def get_average_temperature(self):
@@ -59,6 +62,69 @@ class SparkManager:
             return {"status": "success", "data": response_list}
         except Exception as e:
             return {"status": "error", "detail": str(e)}
+
+    def start_temperature_stream(self):
+        """Start a streaming query to calculate and store average temperature."""
+        try:
+            # Define schema for the sensor data
+            schema = T.StructType([  # Corrected to use T.StructType and T.StructField
+                T.StructField("sensorId", T.StringType()),
+                T.StructField("temperature", T.DoubleType()),
+                T.StructField("timestamp", T.StringType())
+            ])
+
+            # Read the directory as a stream
+            raw_stream = (
+                self.spark.readStream
+                    .schema(schema)
+                    .option("basePath", f"s3a://{self.minio_bucket}/sensors/")
+                    .option("maxFilesPerTrigger", 20)
+                    .parquet(f"s3a://{self.minio_bucket}/sensors/date=*/hour=*")
+            )
+
+            # Convert the string field to a proper timestamp
+            raw_stream = raw_stream.withColumn("timestamp", F.to_timestamp("timestamp"))
+
+            # Perform hourly aggregation
+            hourly_avg = (
+                raw_stream
+                    .withWatermark("timestamp", "1 minute")
+                    .groupBy(
+                        F.window("timestamp", "1 hour").alias("hour_window"),
+                        "sensorId"
+                    )
+                    .agg(F.round(F.avg("temperature"), 2).alias("avg_temp"))
+                    .selectExpr("sensorId", "hour_window.start as hour_start", "avg_temp")
+            )
+
+            # Write the stream to an in-memory table for querying
+            self.query = (
+                hourly_avg
+                .writeStream
+                .outputMode("update")
+                .format("memory")  # Store results in memory for querying
+                .queryName("average_temperature")
+                .trigger(processingTime="1 minute")
+                .start()
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to start temperature stream: {e}")
+
+    def get_streaming_average_temperature(self):
+        """Query the in-memory table for the latest average temperature."""
+        try:
+            result = self.spark.sql("SELECT * FROM average_temperature").collect()
+            return {
+                "status": "success",
+                "data": [{"sensorId": row["sensorId"], "hour_start": row["hour_start"], "avg_temp": row["avg_temp"]} for row in result]
+            }
+        except Exception as e:
+            return {"status": "error", "detail": str(e)}
+
+    def stop_temperature_stream(self):
+        """Stop the streaming query."""
+        if hasattr(self, 'query') and self.query.isActive:
+            self.query.stop()
 
     def get_running_spark_jobs(self):
         try:
@@ -86,5 +152,6 @@ class SparkManager:
             return {"status": "error", "detail": f"Bad JSON: {e}"}
 
     def close(self):
-        """Close the Spark session."""
+        """Close the Spark session and stop any active streams."""
+        self.stop_temperature_stream()
         self.spark.stop()
