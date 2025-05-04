@@ -25,6 +25,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: soam-frontend
     ports:
       - "3000:3000"
 
@@ -32,6 +33,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: soam-backend
     ports:
       - "8000:8000"
     environment:

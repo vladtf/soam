@@ -4,10 +4,8 @@ Writes three sensor rows to MinIO as Parquet, reads them back,
 and prints the mean temperature.
 
 # 1. Copy the test script into the Spark master container and Submit the job
-docker cp test_minio_read_files.py spark-master:/tmp/ && \
-docker exec -it spark-master \
-  /opt/bitnami/spark/bin/spark-submit \
-  --master spark://spark-master:7077 /tmp/test_minio_read_files.py
+docker cp test_minio_read_files.py soam-backend:/tmp/test_minio_read_files.py && \
+docker exec -it soam-backend python /tmp/test_minio_read_files.py
 """
 
 from pyspark.sql import SparkSession, functions as F
