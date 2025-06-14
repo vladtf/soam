@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-master
+  template:
+    metadata:
+      labels:
+        app: spark-master
+    spec:
+      containers:
+        - name: spark-master
+          image: spark:latest
+          ports:
+            - containerPort: 7077
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          env:
+            - name: SPARK_MODE
+              value: master
+            - name: SPARK_HOST
+              value: spark-master
+            - name: SPARK_PORT
+              value: "7077"   
+            - name: SPARK_MASTER_PORT
+              value: "7077"
+            # - name: SPARK_DAEMON_JAVA_OPTS
+            #   value: "-Dspark.network.maxRemoteBlockSizeFetchToMem=512m -Dspark.rpc.message.maxSize=128"
+            - name: SPARK_METRICS_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: spark-events
+              mountPath: /tmp/spark-events
+      volumes:
+        - name: spark-events
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-master
+spec:
+  selector:
+    app: spark-master
+  ports:
+    - name: rpc
+      port: 7077
+      targetPort: 7077
+    - name: webui
+      port: 8080
+      targetPort: 8080
+  type: NodePort

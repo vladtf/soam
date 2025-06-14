@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simulator
+  template:
+    metadata:
+      labels:
+        app: simulator
+    spec:
+      initContainers:
+        - name: wait-for-mosquitto
+          image: busybox
+          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
+      containers:
+        - name: simulator
+          image: simulator:latest
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          env:
+            - name: MQTT_BROKER
+              value: mosquitto
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simulator
+spec:
+  selector:
+    app: simulator
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

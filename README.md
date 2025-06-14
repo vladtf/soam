@@ -10,6 +10,7 @@
     - [Architecture Diagram](#architecture-diagram)
     - [Local Development](#local-development)
     - [Cloud Deployment](#cloud-deployment)
+    - [Skaffold](#skaffold)
 
 ### Overview
 
@@ -54,3 +55,16 @@ npm run dev
 
 ### Cloud Deployment
 
+### Skaffold
+
+1. Create local registry:
+
+```bash
+docker run -d -p 5000:5000 --restart=always --name registry registry:2
+```
+
+2. Start Skaffold:
+
+```bash
+skaffold dev --default-repo localhost:5000
+```

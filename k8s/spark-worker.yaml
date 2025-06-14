@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-worker
+spec:
+  replicas: 2 # Adjust the number of replicas as needed
+  selector:
+    matchLabels:
+      app: spark-worker
+  template:
+    metadata:
+      labels:
+        app: spark-worker
+    spec:
+      initContainers:
+        - name: wait-for-spark-master
+          image: busybox
+          command: ['sh', '-c', 'until nc -z spark-master 7077; do echo waiting for spark-master; sleep 2; done;']
+      containers:
+        - name: spark-worker
+          image: spark:latest
+          ports:
+            - containerPort: 8081
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          env:
+            - name: SPARK_MODE
+              value: worker
+            - name: SPARK_MASTER
+              value: spark://spark-master:7077
+            - name: SPARK_WORKER_MEMORY
+              value: 1G
+            - name: SPARK_WORKER_CORES
+              value: "2"
+            - name: SPARK_METRICS_ENABLED
+              value: "true"
+            - name: SPARK_WORKER_WEBUI_PORT
+              value: "8081"
+            - name: SPARK_WORKER_PORT
+              value: "8081"
+          volumeMounts:
+            - name: spark-events
+              mountPath: /tmp/spark-events
+      volumes:
+        - name: spark-events
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-worker
+spec:
+  selector:
+    app: spark-worker
+  ports:
+    - port: 8081
+      targetPort: 8081
+  type: ClusterIP

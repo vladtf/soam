@@ -1,0 +1,70 @@
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: soam
+build:
+  artifacts:
+    - image: mosquitto
+      context: mosquitto
+    - image: simulator
+      context: simulator
+    - image: frontend
+      context: frontend
+    - image: backend
+      context: backend
+    - image: ingestor
+      context: ingestor
+    - image: spark
+      context: spark
+    - image: grafana
+      context: grafana
+    - image: prometheus
+      context: prometheus
+manifests:
+  rawYaml:
+    - k8s/*.yaml
+deploy:
+  kubectl: {}
+portForward:
+  - resourceType: service
+    resourceName: spark-master
+    namespace: default
+    port: 7077
+    localPort: 7077
+  - resourceType: service
+    resourceName: spark-master
+    namespace: default
+    port: 8080
+    localPort: 8080
+  - resourceType: service
+    resourceName: spark-worker
+    namespace: default
+    port: 8081
+    localPort: 8081
+  - resourceType: service
+    resourceName: spark-history
+    namespace: default
+    port: 18080
+    localPort: 18080
+  - resourceType: service
+    resourceName: frontend
+    namespace: default
+    port: 3000
+    localPort: 3000
+  - resourceType: service
+    resourceName: backend
+    namespace: default
+    port: 8000
+    localPort: 8000
+  - resourceType: service
+    resourceName: grafana
+    namespace: default
+    port: 3000
+    localPort: 3001
+  - resourceType: service
+    resourceName: prometheus
+    namespace: default
+    port: 9090
+    localPort: 9091
+
+

@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-history
+spec:
+  replicas: 0 # Set to 0 for manual scaling; adjust as needed
+  selector:
+    matchLabels:
+      app: spark-history
+  template:
+    metadata:
+      labels:
+        app: spark-history
+    spec:
+      containers:
+        - name: spark-history
+          image: spark:latest
+          command:
+            - /opt/bitnami/spark/bin/spark-class
+            - org.apache.spark.deploy.history.HistoryServer
+          ports:
+            - containerPort: 18080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          env:
+            - name: HADOOP_USER_NAME
+              value: spark
+            - name: USER
+              value: spark
+            - name: SPARK_HISTORY_OPTS
+              value: >
+                -Dspark.history.fs.logDirectory=file:/tmp/spark-events
+                -Dspark.history.kerberos.enabled=false
+            - name: SPARK_METRICS_PROMETHEUS_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: spark-events
+              mountPath: /tmp/spark-events
+      volumes:
+        - name: spark-events
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-history
+spec:
+  selector:
+    app: spark-history
+  ports:
+    - port: 18080
+      targetPort: 18080
+  type: NodePort
