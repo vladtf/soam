@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import * as rdflib from 'rdflib';
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
 import DynamicFields, { FormField } from './DynamicFields';
-import { useNavigate } from 'react-router-dom'; // replaced useHistory with useNavigate
+import { useNavigate } from 'react-router-dom';
+import { fetchBuildings } from '../api/backendRequests';
 
 const SENSOR_CLASS = 'http://example.org/smartcity#Sensor';
 const RDFS_DOMAIN = 'http://www.w3.org/2000/01/rdf-schema#domain';
@@ -55,8 +56,7 @@ const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 
 	useEffect(() => {
 		// Fetch buildings from backend
-		fetch('http://localhost:8000/buildings')
-			.then(res => res.json())
+		fetchBuildings()
 			.then((data: { name: string }[]) => setBuildings(data))
 			.catch(err => console.error("Error fetching buildings:", err));
 	}, []);

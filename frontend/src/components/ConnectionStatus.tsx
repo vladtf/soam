@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, ListGroup, Button } from 'react-bootstrap';
 import ConnectionConfigModal from './ConnectionConfigModal';
+import { fetchConnections, switchBroker } from '../api/backendRequests';
 
 interface ConnectionInfo {
     id?: number;
@@ -16,10 +17,9 @@ const ConnectionStatus: React.FC = () => {
     const [showConfig, setShowConfig] = useState(false);
 
     useEffect(() => {
-        const fetchConnections = async () => {
+        const loadConnections = async () => {
             try {
-                const response = await fetch('http://localhost:8000/connections');
-                const data = await response.json();
+                const data = await fetchConnections();
                 setConnections(data.connections || []);
                 setActive(data.active || null);
             } catch (error) {
@@ -27,18 +27,14 @@ const ConnectionStatus: React.FC = () => {
             }
         };
 
-        fetchConnections();
-        const interval = setInterval(fetchConnections, 5000);
+        loadConnections();
+        const interval = setInterval(loadConnections, 5000);
         return () => clearInterval(interval);
     }, []);
 
     const handleSwitch = async (id: number) => {
         try {
-            await fetch('http://localhost:8000/switchBroker', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id })
-            });
+            await switchBroker(id);
         } catch (error) {
             console.error(`Error switching to connection ${id}:`, error);
         }

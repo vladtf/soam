@@ -72,3 +72,39 @@ export const postNewBuilding = async (newBuilding: Building) => {
         throw new Error(json.detail || "Error fetching temperature alerts");
     }
   };
+
+  export const fetchConnections = async () => {
+    const { ingestorUrl } = getConfig();
+    const response = await fetch(`${ingestorUrl}/connections`);
+    if (!response.ok) throw new Error('Failed to fetch connections');
+    return response.json();
+};
+
+export const switchBroker = async (id: number) => {
+  const { backendUrl } = getConfig();
+  const response = await fetch(`${backendUrl}/switchBroker`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  });
+  if (!response.ok) throw new Error('Failed to switch broker');
+  return response.json();
+};
+
+export const fetchBuildings = async (): Promise<Building[]> => {
+  const { backendUrl } = getConfig();
+  const response = await fetch(`${backendUrl}/buildings`);
+  if (!response.ok) throw new Error('Failed to fetch buildings');
+  return response.json();
+};
+
+export const addConnection = async (config: any) => {
+  const { backendUrl } = getConfig();
+  const response = await fetch(`${backendUrl}/addConnection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config)
+  });
+  if (!response.ok) throw new Error('Failed to add connection');
+  return response.json();
+};

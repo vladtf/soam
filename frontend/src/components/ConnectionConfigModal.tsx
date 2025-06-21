@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
+import { addConnection } from '../api/backendRequests';
 
 interface ConnectionConfigModalProps {
     show: boolean;
@@ -17,11 +18,7 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ show, han
         e.preventDefault();
         const broker = (connectionType === 'mqtt' && brokerOption !== 'custom') ? brokerOption : customBroker;
         const config = { connectionType, broker, port, topic };
-        await fetch('http://localhost:8000/addConnection', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
-        });
+        await addConnection(config);
         handleClose();
     };
 

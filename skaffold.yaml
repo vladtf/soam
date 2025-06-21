@@ -57,6 +57,11 @@ portForward:
     port: 8000
     localPort: 8000
   - resourceType: service
+    resourceName: ingestor
+    namespace: default
+    port: 8001
+    localPort: 8001
+  - resourceType: service
     resourceName: grafana
     namespace: default
     port: 3000

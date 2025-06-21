@@ -9,7 +9,7 @@ const Home: React.FC = () => {
       {/* Hero Section */}
       <div
         style={{
-          background: "url('https://source.unsplash.com/1600x400/?city') no-repeat center center",
+          background: "url('/assets/city-skyline.png') no-repeat center center",
           backgroundSize: "cover",
           height: "400px",
           display: "flex",

@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import 'leaflet/dist/leaflet.css';
 import { Container } from 'react-bootstrap';
 import NewBuildingModal from '../components/NewBuildingModal';
-import { postNewBuilding } from '../api/backendRequests';
+import { postNewBuilding, fetchBuildings } from '../api/backendRequests';
 import { Building } from '../models/Building';
 
 
@@ -19,13 +19,12 @@ const MapPage: React.FC = () => {
   const [country, setCountry] = useState('');
 
   useEffect(() => {
-    fetchBuildings();
+    loadBuildings();
   }, []);
 
-  const fetchBuildings = async () => {
+  const loadBuildings = async () => {
     try {
-      const res = await fetch('http://localhost:8000/buildings');
-      const data = await res.json();
+      const data = await fetchBuildings();
       setBuildings(data);
     } catch (err) {
       console.error("Error fetching buildings:", err);
@@ -34,7 +33,7 @@ const MapPage: React.FC = () => {
 
   const handleAddBuilding = async (newBuilding: Building) => {
     await postNewBuilding(newBuilding);
-    await fetchBuildings(); // Refetch buildings after adding new building
+    await loadBuildings(); // Refetch buildings after adding new building
     setShowModal(false);
   };
 
