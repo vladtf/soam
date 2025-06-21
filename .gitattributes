@@ -1,0 +1,2 @@
+# Normalize YAML files to LF on checkout
+*.yaml text eol=lf

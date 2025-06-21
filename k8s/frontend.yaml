@@ -24,14 +24,14 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-      #     volumeMounts:
-      #       - name: config-volume
-      #         mountPath: /usr/share/nginx/html/config/config.json
-      #         subPath: config.json
-      # volumes:
-      #   - name: config-volume
-      #     configMap:
-      #       name: frontend-config
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
 ---
 apiVersion: v1
 kind: Service
@@ -44,3 +44,25 @@ spec:
     - port: 3000
       targetPort: 80
   type: NodePort
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: default
+  labels:
+    app: frontend
+    type: nginx-config
+data:
+  nginx.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+
+        root /usr/share/nginx/html;
+        index index.html;
+
+        location / {
+            try_files $uri /index.html;
+        }
+    }
