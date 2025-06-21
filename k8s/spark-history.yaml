@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: spark-history
 spec:
-  replicas: 0 # Set to 0 for manual scaling; adjust as needed
+  replicas: 1 # Set to 0 for manual scaling; adjust as needed
   selector:
     matchLabels:
       app: spark-history
@@ -29,9 +29,11 @@ spec:
               memory: 1Gi
           env:
             - name: HADOOP_USER_NAME
-              value: spark
+              value: root
+            - name: SPARK_HISTORY_PORT
+              value: "18080"
             - name: USER
-              value: spark
+              value: root
             - name: SPARK_HISTORY_OPTS
               value: >
                 -Dspark.history.fs.logDirectory=file:/tmp/spark-events

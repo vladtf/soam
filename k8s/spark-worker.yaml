@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: spark-worker
 spec:
-  replicas: 2 # Adjust the number of replicas as needed
+  replicas: 2
   selector:
     matchLabels:
       app: spark-worker

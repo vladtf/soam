@@ -1,6 +1,11 @@
 # spark-with-s3a.Dockerfile
 FROM bitnami/spark:3.5
 
+USER root
+RUN adduser --uid 1001 --disabled-password --gecos "" spark
+USER 1001
+
+
 # ARG HADOOP_VER=3.3.4
 # ARG AWS_VER=1.12.620
 # ARG DELTA_VER=3.1.0
