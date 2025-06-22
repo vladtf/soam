@@ -139,13 +139,10 @@ class SparkManager:
 
     def get_temperature_alerts(self, since_minutes=60):
         """Return recent alerts from the Delta table (default last 60 min)."""
-        try:
-            df = (self.spark.read.format("delta").load(self.alerts_fs_path)
-                  .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes")))
-            return {"status": "success",
-                    "data": [row.asDict() for row in df.collect()]}
-        except Exception as e:
-            return {"status": "error", "detail": str(e)}
+        df = (self.spark.read.format("delta").load(self.alerts_fs_path)
+                .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes")))
+        return {"status": "success",
+                "data": [row.asDict() for row in df.collect()]}
 
 
     def get_running_spark_jobs(self):

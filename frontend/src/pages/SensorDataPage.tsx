@@ -4,8 +4,10 @@ import ReactJson from 'react-json-view';
 import SensorForm from '../components/SensorForm';
 import ConnectionStatus from '../components/ConnectionStatus';
 import { fetchSensorData, extractDataSchema, SensorData } from '../api/backendRequests';
+import { useError } from '../context/ErrorContext';
 
 const SensorDataPage: React.FC = () => {
+    const { setError } = useError();
     const [data, setData] = useState<SensorData[]>([]);
     const [dataSchema, setDataSchema] = useState<Record<string, string[]>>({});
 
@@ -15,8 +17,10 @@ const SensorDataPage: React.FC = () => {
                 const sensorData = await fetchSensorData();
                 setData(sensorData);
                 setDataSchema(extractDataSchema(sensorData));
-            } catch (error) {
-                console.error('Error fetching sensor data:', error);
+            } catch (err: unknown) {
+                console.error('Error fetching sensor data:', err);
+                const msg = err instanceof Error ? err.message : String(err);
+                setError(msg);
             }
         };
 
@@ -24,14 +28,14 @@ const SensorDataPage: React.FC = () => {
         fetchData();
         const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
-    }, []);
+    }, [setError]);
 
     return (
         <Container className="mt-3">
             <ConnectionStatus />
             <Row>
                 <Col md={6}>
-                    <SensorForm dataSchema={dataSchema}  />
+                    <SensorForm dataSchema={dataSchema} />
                 </Col>
                 <Col md={6}>
                     <h1>Sensor Data</h1>

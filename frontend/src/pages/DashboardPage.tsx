@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { fetchAverageTemperature, fetchRunningSparkJobs, fetchTemperatureAlerts } from '../api/backendRequests';
 import { FaChartLine, FaThermometerHalf, FaTasks, FaMapMarkerAlt, FaBell } from 'react-icons/fa'; // Import icons
+import { useError } from '../context/ErrorContext';
 
 const lineData = [
   { name: 'Jan', sensors: 20 },
@@ -50,6 +51,7 @@ const events = [
 ];
 
 const DashboardPage: React.FC = () => {
+  const { setError } = useError();
   const [averageTemperature, setAverageTemperature] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [runningJobs, setRunningJobs] = useState<any[]>([]);
@@ -58,6 +60,8 @@ const DashboardPage: React.FC = () => {
   const [temperatureAlerts, setTemperatureAlerts] = useState<any[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState<boolean>(true);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -71,8 +75,10 @@ const DashboardPage: React.FC = () => {
         if (JSON.stringify(formattedData) !== JSON.stringify(averageTemperature)) {
           setAverageTemperature(formattedData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Error fetching average temperature:", error);
+        const msg = error instanceof Error ? error.message : String(error);
+        setError(msg);
       } finally {
         if (loading) setLoading(false); // Only stop loading indicator after the first load
       }
@@ -81,7 +87,7 @@ const DashboardPage: React.FC = () => {
     fetchData();
     const interval = setInterval(fetchData, 15000); // Refresh every 15 seconds
     return () => clearInterval(interval); // Cleanup interval on component unmount
-  }, [averageTemperature, loading]);
+  }, []);
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -89,8 +95,10 @@ const DashboardPage: React.FC = () => {
       try {
         const data = await fetchRunningSparkJobs();
         setRunningJobs(data);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Error fetching running Spark jobs:", error);
+        const msg = error instanceof Error ? error.message : String(error);
+        setError(msg);
       } finally {
         setLoadingJobs(false);
       }
@@ -106,8 +114,10 @@ const DashboardPage: React.FC = () => {
       try {
         const data = await fetchTemperatureAlerts();
         setTemperatureAlerts(data);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Error fetching temperature alerts:", error);
+        const msg = error instanceof Error ? error.message : String(error);
+        setError(msg);
       } finally {
         setLoadingAlerts(false);
       }
