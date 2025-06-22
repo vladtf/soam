@@ -6,6 +6,13 @@ export interface SensorData {
     humidity?: number;
 }
 
+// Standard API response wrapper
+type ApiResponse<T> = {
+  status?: string;
+  detail?: string;
+  data?: T;
+};
+
 export const extractDataSchema = (data: SensorData[]): Record<string, string[]> => {
     const schema: Record<string, string[]> = {};
     data.forEach((sensorData) => {
@@ -16,95 +23,99 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
     return schema;
 };
 
-export const fetchSensorData = async (): Promise<SensorData[]> => {
-    const { ingestorUrl } = getConfig();
-    const response = await fetch(`${ingestorUrl}/data`);
-    const json = await response.json();
-    return json;
-};
+// General fetch handler
+async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, options);
+  let resultRaw: unknown;
+  try {
+    resultRaw = await response.json();
+  } catch {
+    resultRaw = undefined;
+  }
 
-export const fetchAverageTemperature = async (): Promise<any[]> => {
-    const { backendUrl } = getConfig();
-    const response = await fetch(`${backendUrl}/averageTemperature`);
-    const json = await response.json();
-    if (json.status === "success") {
-        return json.data;
+  // Normalize to ApiResponse
+  const result = resultRaw as ApiResponse<T>;
+
+  if (!response.ok) {
+    let detailMsg: string;
+    if (typeof result.detail === 'object' && result.detail !== null) {
+      detailMsg = JSON.stringify(result.detail);
     } else {
-        throw new Error(json.detail || "Error fetching average temperature");
+      detailMsg = result.detail ?? response.statusText;
     }
+    throw new Error(detailMsg);
+  }
+
+  if (result.status && result.status !== 'success') {
+    const errMsg = result.detail ?? `Error on ${url}`;
+    throw new Error(errMsg);
+  }
+
+  if (result.data !== undefined) {
+    return result.data;
+  }
+
+  // Fallback to raw
+  return resultRaw as T;
+}
+
+export const fetchSensorData = (): Promise<SensorData[]> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<SensorData[]>(`${ingestorUrl}/data`);
 };
 
-export const fetchRunningSparkJobs = async (): Promise<any[]> => {
-    const { backendUrl } = getConfig();
-    const response = await fetch(`${backendUrl}/runningSparkJobs`);
-    const json = await response.json();
-    if (json.status === "success") {
-        return json.data;
-    } else {
-        throw new Error(json.detail || "Error fetching running Spark jobs");
-    }
-};
-
-export const postNewBuilding = async (newBuilding: Building) => {
-    const { backendUrl } = getConfig();
-    const response = await fetch(`${backendUrl}/buildings`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newBuilding),
-    });
-    if (!response.ok) {
-        throw new Error('Failed to add new building');
-    }
-    return response.json();
-  };
-
-  export const fetchTemperatureAlerts = async (sinceMinutes: number = 60) => {
-    const response = await fetch(`${getConfig().backendUrl}/temperatureAlerts?sinceMinutes=${sinceMinutes}`);
-    if (!response.ok) {
-        throw new Error('Failed to fetch temperature alerts');
-    }
-    const json = await response.json();
-    if (json.status === "success") {
-        return json.data;
-    } else {
-        throw new Error(json.detail || "Error fetching temperature alerts");
-    }
-  };
-
-  export const fetchConnections = async () => {
-    const { ingestorUrl } = getConfig();
-    const response = await fetch(`${ingestorUrl}/connections`);
-    if (!response.ok) throw new Error('Failed to fetch connections');
-    return response.json();
-};
-
-export const switchBroker = async (id: number) => {
+export const fetchAverageTemperature = (): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
-  const response = await fetch(`${backendUrl}/switchBroker`, {
+  return doFetch<unknown[]>(`${backendUrl}/averageTemperature`);
+};
+
+export const fetchRunningSparkJobs = (): Promise<unknown[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<unknown[]>(`${backendUrl}/runningSparkJobs`);
+};
+
+export const postNewBuilding = (newBuilding: Building): Promise<unknown> => {
+  const { backendUrl } = getConfig();
+  return doFetch<unknown>(`${backendUrl}/buildings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id })
+    body: JSON.stringify(newBuilding),
   });
-  if (!response.ok) throw new Error('Failed to switch broker');
-  return response.json();
 };
 
-export const fetchBuildings = async (): Promise<Building[]> => {
+export const fetchTemperatureAlerts = (
+  sinceMinutes = 60
+): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
-  const response = await fetch(`${backendUrl}/buildings`);
-  if (!response.ok) throw new Error('Failed to fetch buildings');
-  return response.json();
+  return doFetch<unknown[]>(
+    `${backendUrl}/temperatureAlerts?sinceMinutes=${sinceMinutes}`
+  );
 };
 
-export const addConnection = async (config: any) => {
+export const fetchConnections = (): Promise<unknown> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<unknown>(`${ingestorUrl}/connections`);
+};
+
+export const switchBroker = (id: number): Promise<unknown> => {
   const { backendUrl } = getConfig();
-  const response = await fetch(`${backendUrl}/addConnection`, {
+  return doFetch<unknown>(`${backendUrl}/switchBroker`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config)
+    body: JSON.stringify({ id }),
   });
-  if (!response.ok) throw new Error('Failed to add connection');
-  return response.json();
+};
+
+export const fetchBuildings = (): Promise<Building[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Building[]>(`${backendUrl}/buildings`);
+};
+
+export const addConnection = (config: unknown): Promise<unknown> => {
+  const { backendUrl } = getConfig();
+  return doFetch<unknown>(`${backendUrl}/addConnection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
 };

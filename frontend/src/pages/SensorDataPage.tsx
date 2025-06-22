@@ -19,8 +19,7 @@ const SensorDataPage: React.FC = () => {
                 setDataSchema(extractDataSchema(sensorData));
             } catch (err: unknown) {
                 console.error('Error fetching sensor data:', err);
-                const msg = err instanceof Error ? err.message : String(err);
-                setError(msg);
+                setError(err instanceof Error ? err.message : err);
             }
         };
 

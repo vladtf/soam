@@ -1,20 +1,10 @@
-import datetime
-import io
-import json
-import threading
 from collections import deque
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from minio import S3Error
 import os
-from dataclasses import dataclass
-import asyncio
-from neo4j import GraphDatabase
 import logging
-from pyspark.sql import SparkSession, functions as F  # Import Spark libraries
 from src.spark_manager import SparkManager
 from src.neo4j_manager import Neo4jManager
-from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 import sys
 
@@ -92,7 +82,7 @@ class SmartCityBackend:
             return self.neo4j_manager.get_buildings()
         except Exception as e:
             logger.error(f"Error fetching buildings: {str(e)}")
-            raise HTTPException(status_code=500, detail={"status": "error", "detail": str(e)})
+            raise HTTPException(status_code=500, detail=str(e))
 
     async def add_building(self, request: Request):
         data = await request.json()
@@ -100,10 +90,10 @@ class SmartCityBackend:
             return self.neo4j_manager.add_building(data)
         except KeyError as e:
             logger.error(f"Missing field in add_building: {str(e)}")
-            raise HTTPException(status_code=400, detail={"status": "error", "detail": f"Missing field: {str(e)}"})
+            raise HTTPException(status_code=400, detail=f"Missing field: {str(e)}")
         except Exception as e:
             logger.error(f"Error adding building: {str(e)}")
-            raise HTTPException(status_code=500, detail={"status": "error", "detail": str(e)})
+            raise HTTPException(status_code=500, detail=str(e))
 
     async def shutdown_event(self):
         # Stop and join all threads stored in the map
@@ -118,14 +108,14 @@ class SmartCityBackend:
             return self.spark_manager.get_streaming_average_temperature()
         except Exception as e:
             logger.error(f"Error fetching average temperature: {str(e)}")
-            raise HTTPException(status_code=500, detail={"status": "error", "detail": str(e)})
+            raise HTTPException(status_code=500, detail=str(e))
 
     def get_running_spark_jobs(self):
         try:
             return self.spark_manager.get_running_spark_jobs()
         except Exception as e:
             logger.error(f"Error fetching running Spark jobs: {str(e)}")
-            raise HTTPException(status_code=500, detail={"status": "error", "detail": str(e)})
+            raise HTTPException(status_code=500, detail=str(e))
 
     def get_temperature_alerts(self, since_minutes=60):
         since_minutes = int(since_minutes)
@@ -133,7 +123,7 @@ class SmartCityBackend:
             return self.spark_manager.get_temperature_alerts(since_minutes)
         except Exception as e:
             logger.error(f"Error fetching temperature alerts: {str(e)}")
-            raise HTTPException(status_code=500, detail={"status": "error", "detail": str(e)})
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 # Instantiate the backend and expose its app

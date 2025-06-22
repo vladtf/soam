@@ -77,8 +77,7 @@ const DashboardPage: React.FC = () => {
         }
       } catch (error: unknown) {
         console.error("Error fetching average temperature:", error);
-        const msg = error instanceof Error ? error.message : String(error);
-        setError(msg);
+        setError(error instanceof Error ? error.message : error);
       } finally {
         if (loading) setLoading(false); // Only stop loading indicator after the first load
       }
@@ -97,8 +96,7 @@ const DashboardPage: React.FC = () => {
         setRunningJobs(data);
       } catch (error: unknown) {
         console.error("Error fetching running Spark jobs:", error);
-        const msg = error instanceof Error ? error.message : String(error);
-        setError(msg);
+        setError(error instanceof Error ? error.message : error);
       } finally {
         setLoadingJobs(false);
       }
@@ -116,8 +114,7 @@ const DashboardPage: React.FC = () => {
         setTemperatureAlerts(data);
       } catch (error: unknown) {
         console.error("Error fetching temperature alerts:", error);
-        const msg = error instanceof Error ? error.message : String(error);
-        setError(msg);
+        setError(error instanceof Error ? error.message : error);
       } finally {
         setLoadingAlerts(false);
       }

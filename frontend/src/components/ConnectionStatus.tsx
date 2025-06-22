@@ -19,7 +19,7 @@ const ConnectionStatus: React.FC = () => {
     useEffect(() => {
         const loadConnections = async () => {
             try {
-                const data = await fetchConnections();
+                const data = await fetchConnections() as { connections?: ConnectionInfo[]; active?: ConnectionInfo | null };
                 setConnections(data.connections || []);
                 setActive(data.active || null);
             } catch (error) {
