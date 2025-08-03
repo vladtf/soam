@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: cadvisor
 spec:
-  replicas: 1
+  replicas: 0 # Set to 0 to disable cAdvisor by default
   selector:
     matchLabels:
       app: cadvisor

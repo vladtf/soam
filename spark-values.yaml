@@ -1,0 +1,37 @@
+# values.yaml
+master:
+  extraEnvVars:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Duser.home=/tmp"
+    - name: HOME
+      value: "/tmp"
+    - name: SPARK_MASTER_HOST
+      value: "0.0.0.0"
+    - name: PYSPARK_PYTHON
+      value: "/usr/bin/python3"
+    - name: PYSPARK_DRIVER_PYTHON
+      value: "/usr/bin/python3"
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+worker:
+  extraEnvVars:
+    - name: PYSPARK_PYTHON
+      value: "/usr/bin/python3"
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+image:
+  repository: spark
+  tag: latest
+global:
+  security:
+    allowInsecureImages: true

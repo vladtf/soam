@@ -3,6 +3,11 @@ kind: Config
 metadata:
   name: soam
 build:
+  local:
+    push: false
+  tagPolicy:
+    envTemplate:
+      template: "{{.IMAGE_NAME}}:latest"
   artifacts:
     - image: mosquitto
       context: mosquitto
@@ -25,34 +30,26 @@ manifests:
     - k8s/*.yaml
 deploy:
   kubectl: {}
+  helm:
+    releases:
+      - name: soam
+        remoteChart: oci://registry-1.docker.io/bitnamicharts/spark
+        version: 6.3.16
+        valuesFiles:
+          - spark-values.yaml
 portForward:
   - resourceType: service
-    resourceName: spark-master
+    resourceName: soam-spark-master-svc
     namespace: default
-    port: 7077
-    localPort: 7077
-  - resourceType: service
-    resourceName: spark-master
-    namespace: default
-    port: 8080
+    port: 80
     localPort: 8080
-  - resourceType: service
-    resourceName: spark-worker
-    namespace: default
-    port: 8081
-    localPort: 8081
-  - resourceType: service
-    resourceName: spark-history
-    namespace: default
-    port: 18080
-    localPort: 18080
   - resourceType: service
     resourceName: frontend
     namespace: default
     port: 3000
     localPort: 3000
   - resourceType: service
-    resourceName: backend
+    resourceName: backend-external
     namespace: default
     port: 8000
     localPort: 8000
@@ -71,5 +68,10 @@ portForward:
     namespace: default
     port: 9090
     localPort: 9091
+  - resourceType: service
+    resourceName: neo4j
+    namespace: default
+    port: 7474
+    localPort: 7474
 
 

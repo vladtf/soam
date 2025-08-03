@@ -1,8 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: backend
 spec:
+  serviceName: backend
   replicas: 1
   selector:
     matchLabels:
@@ -17,13 +18,15 @@ spec:
           image: backend:latest
           ports:
             - containerPort: 8000
+            - containerPort: 41397
+            - containerPort: 41398
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
               cpu: 500m
               memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi   
           env:
             - name: NEO4J_URI
               value: bolt://neo4j:7687
@@ -32,9 +35,11 @@ spec:
             - name: NEO4J_PASSWORD
               value: verystrongpassword
             - name: SPARK_HOST
-              value: spark-master
+              value: soam-spark-master-svc
             - name: SPARK_PORT
               value: "7077"
+            - name: SPARK_DRIVER_HOST
+              value: backend-0.backend
             - name: SPARK_HISTORY
               value: http://spark-history:18080
             - name: MINIO_ENDPOINT
@@ -57,9 +62,29 @@ kind: Service
 metadata:
   name: backend
 spec:
+  clusterIP: None  # Headless service for StatefulSet
   selector:
     app: backend
   ports:
-    - port: 8000
+    - name: http
+      port: 8000
       targetPort: 8000
+    - name: spark-driver
+      port: 41397
+      targetPort: 41397
+    - name: spark-blockmanager
+      port: 41398
+      targetPort: 41398
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-external
+spec:
   type: NodePort
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
