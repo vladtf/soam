@@ -1,12 +1,10 @@
 import os
 import requests
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 from pyspark.sql import SparkSession, functions as F, types as T
-from pyspark import SparkContext
-from py4j.protocol import Py4JNetworkError
 
-from .models import SparkWorker, SparkApplication, SparkMasterStatus
+from src.spark.spark_models import SparkMasterStatus
 
 logging.getLogger('py4j').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)

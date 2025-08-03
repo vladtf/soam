@@ -3,8 +3,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
-from src.spark_manager import SparkManager
-from src.neo4j_manager import Neo4jManager
+from src.spark.spark_manager import SparkManager
+from src.neo4j.neo4j_manager import Neo4jManager
 from fastapi.exceptions import HTTPException
 import sys
 
