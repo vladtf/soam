@@ -15,7 +15,7 @@ import {
   Cell,
   ResponsiveContainer
 } from 'recharts';
-import { fetchAverageTemperature, fetchRunningSparkJobs, fetchTemperatureAlerts } from '../api/backendRequests';
+import { fetchAverageTemperature, fetchSparkMasterStatus, fetchTemperatureAlerts, SparkMasterStatus, SparkApplication } from '../api/backendRequests';
 import { FaChartLine, FaThermometerHalf, FaTasks, FaMapMarkerAlt, FaBell } from 'react-icons/fa'; // Import icons
 import { useError } from '../context/ErrorContext';
 
@@ -54,14 +54,13 @@ const DashboardPage: React.FC = () => {
   const { setError } = useError();
   const [averageTemperature, setAverageTemperature] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [runningJobs, setRunningJobs] = useState<any[]>([]);
-  const [loadingJobs, setLoadingJobs] = useState<boolean>(true);
+  const [sparkMasterStatus, setSparkMasterStatus] = useState<SparkMasterStatus | null>(null);
+  const [loadingSparkStatus, setLoadingSparkStatus] = useState<boolean>(true);
   const [timeRange, setTimeRange] = useState<number>(24); // new state for time range
   const [temperatureAlerts, setTemperatureAlerts] = useState<any[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState<boolean>(true);
 
   /* eslint-disable react-hooks/exhaustive-deps */
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -89,21 +88,21 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchJobs = async () => {
-      setLoadingJobs(true);
+    const fetchSparkStatus = async () => {
+      setLoadingSparkStatus(true);
       try {
-        const data = await fetchRunningSparkJobs();
-        setRunningJobs(data);
+        const data = await fetchSparkMasterStatus();
+        setSparkMasterStatus(data);
       } catch (error: unknown) {
-        console.error("Error fetching running Spark jobs:", error);
+        console.error("Error fetching Spark master status:", error);
         setError(error instanceof Error ? error.message : error);
       } finally {
-        setLoadingJobs(false);
+        setLoadingSparkStatus(false);
       }
     };
 
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 15000); // Fetch every 15 seconds
+    fetchSparkStatus();
+    const interval = setInterval(fetchSparkStatus, 15000); // Fetch every 15 seconds
     return () => clearInterval(interval); // Cleanup interval on component unmount
   }, []);
 
@@ -261,33 +260,49 @@ const DashboardPage: React.FC = () => {
           <Card className="mb-3">
             <Card.Body>
               <Card.Title>
-                <FaTasks className="me-2" /> Running Spark Jobs
+                <FaTasks className="me-2" /> Spark Applications
               </Card.Title>
-              {loadingJobs ? (
+              {loadingSparkStatus ? (
                 <div>Loading...</div>
-              ) : runningJobs.length > 0 ? (
+              ) : sparkMasterStatus?.activeapps && sparkMasterStatus.activeapps.length > 0 ? (
                 <Table striped bordered hover>
                   <thead>
                     <tr>
                       <th>App Name</th>
-                      <th>Job ID</th>
-                      <th>Status</th>
-                      <th>Submission Time</th>
+                      <th>App ID</th>
+                      <th>User</th>
+                      <th>State</th>
+                      <th>Cores</th>
+                      <th>Submit Date</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {runningJobs.map((job, index) => (
+                    {sparkMasterStatus.activeapps.map((app: SparkApplication, index: number) => (
                       <tr key={index}>
-                        <td>{job.app_name}</td>
-                        <td>{job.job_id}</td>
-                        <td>{job.status}</td>
-                        <td>{job.submission_time}</td>
+                        <td>{app.name}</td>
+                        <td>{app.id}</td>
+                        <td>{app.user}</td>
+                        <td>{app.state}</td>
+                        <td>{app.cores}</td>
+                        <td>{app.submitdate}</td>
                       </tr>
                     ))}
                   </tbody>
                 </Table>
               ) : (
-                <div>No running jobs found.</div>
+                <div>No active applications found.</div>
+              )}
+              
+              {/* Show Spark Master Information */}
+              {sparkMasterStatus && (
+                <div className="mt-3">
+                  <h6>Cluster Status:</h6>
+                  <p><strong>Master URL:</strong> {sparkMasterStatus.url}</p>
+                  <p><strong>Workers:</strong> {sparkMasterStatus.aliveworkers} alive</p>
+                  <p><strong>Cores:</strong> {sparkMasterStatus.coresused}/{sparkMasterStatus.cores} used</p>
+                  <p><strong>Memory:</strong> {Math.round(sparkMasterStatus.memoryused / 1024)}MB/{Math.round(sparkMasterStatus.memory / 1024)}MB used</p>
+                  <p><strong>Status:</strong> {sparkMasterStatus.status}</p>
+                </div>
               )}
             </Card.Body>
           </Card>

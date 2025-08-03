@@ -69,9 +69,49 @@ export const fetchAverageTemperature = (): Promise<unknown[]> => {
   return doFetch<unknown[]>(`${backendUrl}/averageTemperature`);
 };
 
-export const fetchRunningSparkJobs = (): Promise<unknown[]> => {
+// Spark Master Status interfaces
+export interface SparkWorker {
+  id: string;
+  host: string;
+  port: number;
+  webuiaddress: string;
+  cores: number;
+  coresused: number;
+  coresfree: number;
+  memory: number;
+  memoryused: number;
+  memoryfree: number;
+  state: string;
+  lastheartbeat: number;
+}
+
+export interface SparkApplication {
+  id: string;
+  starttime: number;
+  name: string;
+  cores: number;
+  user: string;
+  submitdate: string;
+  state: string;
+  duration: number;
+}
+
+export interface SparkMasterStatus {
+  url: string;
+  workers: SparkWorker[];
+  aliveworkers: number;
+  cores: number;
+  coresused: number;
+  memory: number;
+  memoryused: number;
+  activeapps: SparkApplication[];
+  completedapps: SparkApplication[];
+  status: string;
+}
+
+export const fetchSparkMasterStatus = (): Promise<SparkMasterStatus> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown[]>(`${backendUrl}/runningSparkJobs`);
+  return doFetch<SparkMasterStatus>(`${backendUrl}/sparkMasterStatus`);
 };
 
 export const postNewBuilding = (newBuilding: Building): Promise<unknown> => {
