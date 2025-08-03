@@ -25,6 +25,13 @@ class Building(BaseModel):
     description: Optional[str] = None
 
 
+class BuildingLocation(BaseModel):
+    """Schema for building location data from Neo4j."""
+    name: str
+    lat: float
+    lng: float
+
+
 class HealthStatus(BaseModel):
     """Schema for health check response."""
     status: str = Field(..., description="Overall system status")

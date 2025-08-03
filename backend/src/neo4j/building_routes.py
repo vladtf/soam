@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from typing import List
 
-from src.api.models import Building, BuildingCreate
+from src.api.models import Building, BuildingCreate, BuildingLocation
 from src.api.dependencies import Neo4jManagerDep
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/buildings", tags=["buildings"])
 
 
-@router.get("/", response_model=List[Building])
+@router.get("/", response_model=List[BuildingLocation])
 async def get_buildings(neo4j_manager: Neo4jManagerDep):
     """Get all buildings from the database."""
     try:
