@@ -27,13 +27,14 @@ services:
       dockerfile: Dockerfile
     container_name: soam-frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: soam-backend
+    restart: always
     ports:
       - "8000:8000"
     environment:
@@ -120,26 +121,6 @@ services:
     ports:
       - "8082:8082"  # map the unique port
 
-  spark-history:
-    build:
-      context: ./spark
-      dockerfile: Dockerfile
-    container_name: spark-history
-    hostname: spark-history
-    # no SPARK_MODE here ─ we launch the class by hand
-    command: >
-      /opt/bitnami/spark/bin/spark-class
-      org.apache.spark.deploy.history.HistoryServer
-    environment:
-      # Where the workers & master write their logs
-      - SPARK_HISTORY_OPTS=-Dspark.history.fs.logDirectory=/tmp/spark-events
-      - SPARK_METRICS_PROMETHEUS_ENABLED=true
-    volumes:
-      - spark-events:/tmp/spark-events   # same shared volume
-    ports:
-      - "18080:18080"    # UI → http://localhost:18080
-    depends_on:
-      - spark-master
 # -------------------------------------------------------------------
 
 # ------------------------------------------------ MinIO object store
@@ -194,49 +175,49 @@ services:
 # -------------------------------------------------------------------
 # 🍋  Monitoring stack – add after your existing services
 # -------------------------------------------------------------------
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
-    container_name: cadvisor
-    command:
-      - --docker_only
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-    ports:
-      - "8089:8080"          # http://localhost:8089/metrics
+  # cadvisor:
+  #   image: gcr.io/cadvisor/cadvisor:v0.49.1
+  #   container_name: cadvisor
+  #   command:
+  #     - --docker_only
+  #   volumes:
+  #     - /:/rootfs:ro
+  #     - /var/run:/var/run:ro
+  #     - /sys:/sys:ro
+  #     - /var/lib/docker/:/var/lib/docker:ro
+  #   ports:
+  #     - "8089:8080"          # http://localhost:8089/metrics
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-    ports:
-      - "9091:9090"          # http://localhost:9091
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: prometheus
+  #   volumes:
+  #     - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   command:
+  #     - --config.file=/etc/prometheus/prometheus.yml
+  #   ports:
+  #     - "9091:9090"          # http://localhost:9091
 
-  grafana:
-    image: grafana/grafana:10.3.1
-    container_name: grafana
-    depends_on: [prometheus]
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    ports:
-      - "3001:3000"          # http://localhost:3001
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./monitoring/provisioning:/etc/grafana/provisioning
-      # - ./monitoring/grafana/dashboards/cadvisor:/etc/grafana/provisioning/cadvisor-dashboards:ro
-      # - ./monitoring/grafana/dashboards/spark:/etc/grafana/provisioning/spark-dashboards:ro
+  # grafana:
+  #   image: grafana/grafana:10.3.1
+  #   container_name: grafana
+  #   depends_on: [prometheus]
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   ports:
+  #     - "3001:3000"          # http://localhost:3001
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #     - ./monitoring/provisioning:/etc/grafana/provisioning
+  #     # - ./monitoring/grafana/dashboards/cadvisor:/etc/grafana/provisioning/cadvisor-dashboards:ro
+  #     # - ./monitoring/grafana/dashboards/spark:/etc/grafana/provisioning/spark-dashboards:ro
 
 # -------------------------------------------------------------------
 
 volumes:
   spark-events: {}
   minio-data:   {}
-  grafana-data: {}
+  # grafana-data: {}
 
 
