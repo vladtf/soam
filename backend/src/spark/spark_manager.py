@@ -1,8 +1,9 @@
 import os
 import requests
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pyspark.sql import SparkSession, functions as F, types as T
+from pyspark.sql.streaming import StreamingQuery
 
 from src.spark.spark_models import SparkMasterStatus
 
@@ -11,71 +12,102 @@ logger = logging.getLogger(__name__)
 
 
 class SparkManager:
-    # ------------------------------------------------------------------ #
-    # tune this once – or load per-sensor thresholds from S3/DB instead
-    TEMP_THRESHOLD = 30.0        # °C
-    ALERT_PATH = "silver/temperature_alerts"   # relative to the bucket
-    # -------------------------------2----------------------------------- #
-
-    def __init__(self, spark_host, spark_port,
-                 minio_endpoint, minio_access_key, minio_secret_key,
-                 minio_bucket, spark_history):
-        # Store Spark master web UI URL for API calls
-        self.spark_master_url = f"http://{spark_host}:8080"
+    """
+    Manages Spark session, streaming jobs, and data access for the SOAM smart city platform.
+    
+    Handles:
+    - Spark session lifecycle and reconnection
+    - Real-time streaming for temperature averages and alerts
+    - Data access with graceful error handling
+    - Integration with MinIO for data storage
+    """
+    
+    # Configuration constants
+    TEMP_THRESHOLD = 30.0  # °C - Temperature threshold for alerts
+    ALERT_PATH = "silver/temperature_alerts"  # Path relative to bucket
+    SILVER_PATH = "silver/five_min_avg"  # Path for aggregated temperature data
+    
+    def __init__(self, spark_host: str, spark_port: str, minio_endpoint: str, 
+                 minio_access_key: str, minio_secret_key: str, minio_bucket: str, 
+                 spark_history: str):
+        """Initialize SparkManager with connection parameters."""
+        # Store connection parameters
+        self.spark_host = spark_host
+        self.spark_port = spark_port
+        self.minio_endpoint = minio_endpoint
+        self.minio_access_key = minio_access_key
+        self.minio_secret_key = minio_secret_key
         self.minio_bucket = minio_bucket
         self.spark_history = spark_history
+        
+        # Build paths
+        self.spark_master_url = f"http://{spark_host}:8080"
         self.alerts_fs_path = f"s3a://{minio_bucket}/{self.ALERT_PATH}"
-        self.silver = f"s3a://{self.minio_bucket}/silver/five_min_avg"
+        self.silver_path = f"s3a://{minio_bucket}/{self.SILVER_PATH}"
+        self.sensors_path = f"s3a://{minio_bucket}/sensors/"
+        
+        # Initialize streaming queries
+        self.avg_query: Optional[StreamingQuery] = None
+        self.alert_query: Optional[StreamingQuery] = None
+        
+        # Initialize Spark session
+        self.spark = self._create_spark_session()
+        
+        # Start streaming if data is available
+        self._initialize_streaming()
 
-        # ---------- SparkSession boot ------------------ #
-        # Get the hostname that executors can use to reach this driver
+    def _create_spark_session(self) -> SparkSession:
+        """Create and configure Spark session."""
+        # Get driver configuration from environment
         driver_host = os.getenv("SPARK_DRIVER_HOST", "backend")
         driver_bind_address = os.getenv("SPARK_DRIVER_BIND_ADDRESS", "0.0.0.0")
         driver_port = os.getenv("SPARK_DRIVER_PORT", "41397")
         block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "41398")
-
-        self.spark = (
+        
+        spark = (
             SparkSession.builder
             .appName("SmartCityBackend")
-            .master(f"spark://{spark_host}:{spark_port}")
+            .master(f"spark://{self.spark_host}:{self.spark_port}")
             .config("spark.eventLog.enabled", "true")
             .config("spark.driver.host", driver_host)
             .config("spark.driver.bindAddress", driver_bind_address)
             .config("spark.driver.port", driver_port)
             .config("spark.blockManager.port", block_manager_port)
-            .config("spark.hadoop.fs.s3a.endpoint", f"http://{minio_endpoint}")
+            .config("spark.hadoop.fs.s3a.endpoint", f"http://{self.minio_endpoint}")
             .config("spark.hadoop.fs.s3a.path.style.access", "true")
-            .config("spark.hadoop.fs.s3a.access.key",  minio_access_key)
-            .config("spark.hadoop.fs.s3a.secret.key",  minio_secret_key)
-            .config("spark.hadoop.fs.s3a.impl",        "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config("spark.hadoop.fs.s3a.access.key", self.minio_access_key)
+            .config("spark.hadoop.fs.s3a.secret.key", self.minio_secret_key)
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
             .config("spark.jars", os.getenv("SPARK_JARS", ""))
-            # Use pre-downloaded jars instead of runtime package resolution
-            # .config("spark.jars.packages",
-            #         ",".join([
-            #             "io.delta:delta-spark_2.12:3.1.0",
-            #             "org.apache.hadoop:hadoop-aws:3.3.4",
-            #             "com.amazonaws:aws-java-sdk-bundle:1.12.620",
-            #         ]))
-            .config("spark.sql.extensions",
-                    "io.delta.sql.DeltaSparkSessionExtension")
-            .config("spark.sql.catalog.spark_catalog",
-                    "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
             .getOrCreate()
         )
-        self.spark.sparkContext.setLogLevel("WARN")
+        
+        spark.sparkContext.setLogLevel("WARN")
+        return spark
 
-        # Initialize streaming queries as None
-        self.avg_query = None
-        self.alert_query = None
-
-        # Check if the sensors data directory exists
-        if not self._check_data_directory():
-            logger.warning("Sensors data directory not ready. Streaming will be started when data becomes available.")
-        else:
-            # Try to launch both streams, but don't fail if they can't start
-            # pass
+    def _initialize_streaming(self) -> None:
+        """Initialize streaming jobs if data directory is available."""
+        if self._is_data_directory_ready():
             self._start_streams_safely()
+        else:
+            logger.warning("Sensors data directory not ready. Streaming will be started when data becomes available.")
 
+    def _is_data_directory_ready(self) -> bool:
+        """Check if the sensors data directory exists and is accessible."""
+        try:
+            # Try to access the sensors directory
+            self.spark.read.option("basePath", self.sensors_path).parquet(self.sensors_path)
+            return True
+        except Exception as e:
+            logger.debug(f"Data directory not ready: {e}")
+            return False
+
+    # ================================================================
+    # Spark Master Status API
+    # ================================================================
+    
     def get_spark_master_status(self) -> Dict[str, Any]:
         """Fetch Spark master status from the web UI API."""
         try:
@@ -83,7 +115,7 @@ class SparkManager:
             response.raise_for_status()
             data = response.json()
             
-            # Use the model's deserialization method
+            # Parse using the SparkMasterStatus model
             master_status = SparkMasterStatus.from_dict(data)
             
             return {
@@ -104,8 +136,12 @@ class SparkManager:
                 "message": f"Error processing Spark master response: {str(e)}"
             }
 
-    def _start_streams_safely(self):
-        """Start streaming jobs with error handling"""
+    # ================================================================
+    # Streaming Management
+    # ================================================================
+
+    def _start_streams_safely(self) -> None:
+        """Start streaming jobs with error handling."""
         try:
             self._start_temperature_stream()
             logger.info("Temperature streaming started successfully")
@@ -118,26 +154,15 @@ class SparkManager:
         except Exception as e:
             logger.error(f"Failed to start alert stream: {e}")
 
-    def _check_data_directory(self):
-        """Check if the sensors data directory exists"""
+    def _ensure_streams_running(self) -> None:
+        """Ensure streaming jobs are running, start them if not."""
         try:
-            # Try to list the base sensors directory
-            df = self.spark.read.option("basePath", f"s3a://{self.minio_bucket}/sensors/").parquet(f"s3a://{self.minio_bucket}/sensors/")
-            # If we can create the DataFrame, directory exists
-            return True
-        except Exception as e:
-            logger.error(f"Data directory not ready: {e}")
-            return False
-
-    def _ensure_streams_running(self):
-        """Ensure streaming jobs are running, start them if not"""
-        pass
-        try:
-            # Check if streams are running
+            # Check temperature stream
             if self.avg_query is None or not self.avg_query.isActive:
                 logger.info("Temperature stream not active, attempting to start...")
                 self._start_temperature_stream()
 
+            # Check alert stream
             if self.alert_query is None or not self.alert_query.isActive:
                 logger.info("Alert stream not active, attempting to start...")
                 self._start_alert_stream()
@@ -145,251 +170,286 @@ class SparkManager:
         except Exception as e:
             logger.error(f"Error ensuring streams are running: {e}")
 
-    # ------------------------------------------------------------------ #
-    # 1) hourly average (unchanged – still kept in memory)
-    # ------------------------------------------------------------------ #
-    def _start_temperature_stream(self):
-        schema = T.StructType([
-            T.StructField("sensorId",    T.StringType()),
+    def _get_sensor_schema(self) -> T.StructType:
+        """Get the schema for sensor data."""
+        return T.StructType([
+            T.StructField("sensorId", T.StringType()),
             T.StructField("temperature", T.DoubleType()),
-            T.StructField("timestamp",   T.StringType())
+            T.StructField("timestamp", T.StringType())
         ])
 
-        raw = (self.spark.readStream
-                   .schema(schema)
-                   .option("basePath", f"s3a://{self.minio_bucket}/sensors/")
-                   .option("maxFilesPerTrigger", 20)
-                   .parquet(f"s3a://{self.minio_bucket}/sensors/date=*/hour=*")
-                   .withColumn("timestamp", F.to_timestamp("timestamp")))
+    def _start_temperature_stream(self) -> None:
+        """Start the temperature averaging stream (5-minute windows)."""
+        schema = self._get_sensor_schema()
 
-        # Calculate average temperature in 5-minute buckets
-        five_min_avg = (raw
-                        .withWatermark("timestamp", "1 minute")
-                        .groupBy(F.window("timestamp", "5 minutes").alias("time_window"),
-                                 "sensorId")
-                        .agg(F.round(F.avg("temperature"), 2).alias("avg_temp"))
-                        .selectExpr("sensorId",
-                                    "time_window.start as time_start",
-                                    "avg_temp"))
+        # Read streaming data
+        raw_stream = (
+            self.spark.readStream
+            .schema(schema)
+            .option("basePath", self.sensors_path)
+            .option("maxFilesPerTrigger", 20)
+            .parquet(f"{self.sensors_path}date=*/hour=*")
+            .withColumn("timestamp", F.to_timestamp("timestamp"))
+        )
 
-        self.avg_query = (five_min_avg.writeStream
-                          .format("delta")                       # or parquet
-                          .option("path", self.silver)
-                          .option("checkpointLocation",
-                                  f"s3a://{self.minio_bucket}/_ckpt/five_min_avg")
-                          .outputMode("complete")                # rewrites the file
-                          .trigger(processingTime="1 minute")
-                          .start())
+        # Calculate 5-minute averages
+        five_min_avg = (
+            raw_stream
+            .withWatermark("timestamp", "1 minute")
+            .groupBy(
+                F.window("timestamp", "5 minutes").alias("time_window"),
+                "sensorId"
+            )
+            .agg(F.round(F.avg("temperature"), 2).alias("avg_temp"))
+            .selectExpr(
+                "sensorId",
+                "time_window.start as time_start",
+                "avg_temp"
+            )
+        )
 
-    # ------------------------------------------------------------------ #
-    # 2) alert stream – NEW
-    # ------------------------------------------------------------------ #
-    def _start_alert_stream(self):
-        schema = T.StructType([
-            T.StructField("sensorId",    T.StringType()),
-            T.StructField("temperature", T.DoubleType()),
-            T.StructField("timestamp",   T.StringType())
-        ])
+        # Write to Delta table
+        self.avg_query = (
+            five_min_avg.writeStream
+            .format("delta")
+            .option("path", self.silver_path)
+            .option("checkpointLocation", f"s3a://{self.minio_bucket}/_ckpt/five_min_avg")
+            .outputMode("complete")
+            .trigger(processingTime="1 minute")
+            .start()
+        )
 
-        raw = (self.spark.readStream
-                   .schema(schema)
-                   .option("basePath", f"s3a://{self.minio_bucket}/sensors/")
-                   .option("maxFilesPerTrigger", 20)
-                   .parquet(f"s3a://{self.minio_bucket}/sensors/date=*/hour=*")
-                   .withColumn("event_time", F.to_timestamp("timestamp")))
+    def _start_alert_stream(self) -> None:
+        """Start the temperature alert stream."""
+        schema = self._get_sensor_schema()
 
-        alerts = (raw
-                  .filter(F.col("temperature") > self.TEMP_THRESHOLD)
-                  .withColumn("alert_type", F.lit("TEMP_OVER_LIMIT")))
+        # Read streaming data
+        raw_stream = (
+            self.spark.readStream
+            .schema(schema)
+            .option("basePath", self.sensors_path)
+            .option("maxFilesPerTrigger", 20)
+            .parquet(f"{self.sensors_path}date=*/hour=*")
+            .withColumn("event_time", F.to_timestamp("timestamp"))
+        )
 
-        # Deduplicate alerts using a Delta table
-        deduplicated_alerts = (alerts
-                               .withColumn("alert_id", F.concat(F.col("sensorId"), F.lit("_"), F.col("event_time")))
-                               .withColumn("alert_time", F.current_timestamp())
-                               .dropDuplicates(["sensorId"])
-                               .select("sensorId", "temperature", "event_time", "alert_type"))  # Select only required columns
+        # Filter for temperature alerts and deduplicate
+        alerts = (
+            raw_stream
+            .filter(F.col("temperature") > self.TEMP_THRESHOLD)
+            .withColumn("alert_type", F.lit("TEMP_OVER_LIMIT"))
+            .withColumn("alert_id", F.concat(F.col("sensorId"), F.lit("_"), F.col("event_time")))
+            .withColumn("alert_time", F.current_timestamp())
+            .dropDuplicates(["sensorId"])
+            .select("sensorId", "temperature", "event_time", "alert_type")
+        )
 
-        self.alert_query = (deduplicated_alerts.writeStream
-                            .format("delta")                          # durable, replayable
-                            .option("path",     self.alerts_fs_path)
-                            .option("checkpointLocation",
-                                    f"s3a://{self.minio_bucket}/_ckpt/alert_stream")
-                            .option("mergeSchema", "true")            # Enable schema merging
-                            .outputMode("append")
-                            .trigger(processingTime="30 seconds")
-                            .start())
+        # Write to Delta table
+        self.alert_query = (
+            alerts.writeStream
+            .format("delta")
+            .option("path", self.alerts_fs_path)
+            .option("checkpointLocation", f"s3a://{self.minio_bucket}/_ckpt/alert_stream")
+            .option("mergeSchema", "true")
+            .outputMode("append")
+            .trigger(processingTime="30 seconds")
+            .start()
+        )
 
-    def stop_streams(self):
-        """Stop all streaming queries"""
-        try:
-            if self.avg_query and self.avg_query.isActive:
-                self.avg_query.stop()
-                logger.info("Temperature stream stopped")
-        except Exception as e:
-            logger.error(f"Error stopping temperature stream: {e}")
+    def stop_streams(self) -> None:
+        """Stop all streaming queries gracefully."""
+        streams = [
+            ("Temperature stream", self.avg_query),
+            ("Alert stream", self.alert_query)
+        ]
+        
+        for stream_name, query in streams:
+            try:
+                if query and query.isActive:
+                    query.stop()
+                    logger.info(f"{stream_name} stopped successfully")
+            except Exception as e:
+                logger.error(f"Error stopping {stream_name.lower()}: {e}")
 
-        try:
-            if self.alert_query and self.alert_query.isActive:
-                self.alert_query.stop()
-                logger.info("Alert stream stopped")
-        except Exception as e:
-            logger.error(f"Error stopping alert stream: {e}")
+    # ================================================================
+    # Spark Session Management
+    # ================================================================
 
-    def _check_spark_connection(self):
+    def _is_spark_connected(self) -> bool:
         """Check if Spark session is available and working."""
         try:
-            # Simple test to verify Spark session is working
             self.spark.sql("SELECT 1").collect()
             return True
         except Exception as e:
             logger.error(f"Spark connection check failed: {e}")
             return False
 
-    def _reconnect_spark_session(self):
+    def _reconnect_spark_session(self) -> bool:
         """Attempt to reconnect the Spark session."""
         try:
+            # Stop existing session
             if hasattr(self, 'spark') and self.spark:
                 self.spark.stop()
         except Exception as e:
             logger.warning(f"Error stopping existing Spark session: {e}")
 
         try:
-            # Recreate the Spark session with the same configuration
-            driver_host = os.getenv("SPARK_DRIVER_HOST", "backend")
-            driver_bind_address = os.getenv("SPARK_DRIVER_BIND_ADDRESS", "0.0.0.0")
-            driver_port = os.getenv("SPARK_DRIVER_PORT", "41397")
-            block_manager_port = os.getenv("SPARK_BLOCK_MANAGER_PORT", "41398")
-
-            self.spark = (
-                SparkSession.builder
-                .appName("SmartCityBackend")
-                .master(f"spark://{os.getenv('SPARK_HOST', 'spark-master')}:{os.getenv('SPARK_PORT', '7077')}")
-                .config("spark.eventLog.enabled", "true")
-                .config("spark.driver.host", driver_host)
-                .config("spark.driver.bindAddress", driver_bind_address)
-                .config("spark.driver.port", driver_port)
-                .config("spark.blockManager.port", block_manager_port)
-                .config("spark.hadoop.fs.s3a.endpoint", f"http://{os.getenv('MINIO_ENDPOINT', 'minio:9000')}")
-                .config("spark.hadoop.fs.s3a.path.style.access", "true")
-                .config("spark.hadoop.fs.s3a.access.key", os.getenv('MINIO_ACCESS_KEY', 'minio'))
-                .config("spark.hadoop.fs.s3a.secret.key", os.getenv('MINIO_SECRET_KEY', 'minio123'))
-                .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-                .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-                .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-                .getOrCreate()
-            )
+            # Create new session
+            self.spark = self._create_spark_session()
             logger.info("Spark session reconnected successfully")
             return True
         except Exception as e:
             logger.error(f"Failed to reconnect Spark session: {e}")
             return False
 
-    # ------------------------------------------------------------------ #
-    # REST helpers
-    # ------------------------------------------------------------------ #
-    def get_streaming_average_temperature(self, minutes=30):
-        # Ensure streams are running
+    def _handle_table_not_found_error(self, error: Exception) -> bool:
+        """Check if the error indicates a table/path not found."""
+        error_str = str(error).lower()
+        error_type = str(type(error))
+        
+        return (
+            "path does not exist" in error_str or 
+            "not found" in error_str or 
+            "analysisexception" in error_type.lower()
+        )
+
+    def _create_table_not_ready_response(self, data_type: str) -> Dict[str, Any]:
+        """Create a standard response for when tables are not ready."""
+        return {
+            "status": "success",
+            "data": [],
+            "message": f"{data_type} data not available yet. Please wait for data processing to begin."
+        }
+
+    # ================================================================
+    # Data Access Methods
+    # ================================================================
+    def get_streaming_average_temperature(self, minutes: int = 30) -> Dict[str, Any]:
+        """
+        Get streaming average temperature data for the specified time window.
+        
+        Args:
+            minutes: Time window in minutes (default: 30)
+            
+        Returns:
+            Dict containing status and temperature data
+        """
         self._ensure_streams_running()
 
-        if not self._check_spark_connection():
+        if not self._is_spark_connected():
             logger.info("Spark connection lost, attempting to reconnect...")
             if not self._reconnect_spark_session():
                 raise ConnectionError("Spark session is not available and reconnection failed")
 
         try:
-            df = (self.spark.read.format("delta").load(self.silver)
-                  .filter(F.col("time_start") >=
-                          F.current_timestamp() - F.expr(f"INTERVAL {minutes} MINUTES")))
+            df = (
+                self.spark.read.format("delta")
+                .load(self.silver_path)
+                .filter(F.col("time_start") >= F.current_timestamp() - F.expr(f"INTERVAL {minutes} MINUTES"))
+            )
             rows = df.collect()
-            return {"status": "success",
-                    "data": [row.asDict() for row in rows]}
+            return {
+                "status": "success",
+                "data": [row.asDict() for row in rows]
+            }
+            
         except Exception as e:
             logger.error(f"Failed to get streaming average temperature: {e}")
-            # Check if it's a table not found error
-            if "Path does not exist" in str(e) or "not found" in str(e).lower() or "AnalysisException" in str(type(e)):
-                logger.info("Silver table not found, streaming likely hasn't started yet")
-                return {
-                    "status": "success",
-                    "data": [],
-                    "message": "Streaming data not available yet. Please wait for data processing to begin."
-                }
             
-            # Try reconnecting once more on other failures
+            if self._handle_table_not_found_error(e):
+                logger.info("Silver table not found, streaming likely hasn't started yet")
+                return self._create_table_not_ready_response("Streaming")
+            
+            # Try reconnecting and retry once
             if self._reconnect_spark_session():
                 try:
-                    df = (self.spark.read.format("delta").load(self.silver)
-                          .filter(F.col("time_start") >=
-                                  F.current_timestamp() - F.expr(f"INTERVAL {minutes} MINUTES")))
+                    df = (
+                        self.spark.read.format("delta")
+                        .load(self.silver_path)
+                        .filter(F.col("time_start") >= F.current_timestamp() - F.expr(f"INTERVAL {minutes} MINUTES"))
+                    )
                     rows = df.collect()
-                    return {"status": "success",
-                            "data": [row.asDict() for row in rows]}
+                    return {
+                        "status": "success", 
+                        "data": [row.asDict() for row in rows]
+                    }
                 except Exception as retry_e:
                     logger.error(f"Retry also failed: {retry_e}")
-                    if "Path does not exist" in str(retry_e) or "not found" in str(retry_e).lower() or "AnalysisException" in str(type(retry_e)):
-                        return {
-                            "status": "success",
-                            "data": [],
-                            "message": "Streaming data not available yet. Please wait for data processing to begin."
-                        }
+                    if self._handle_table_not_found_error(retry_e):
+                        return self._create_table_not_ready_response("Streaming")
                     raise
             else:
                 raise
 
-    def get_temperature_alerts(self, since_minutes=60):
-        """Return recent alerts from the Delta table (default last 60 min)."""
-        # Ensure streams are running
+    def get_temperature_alerts(self, since_minutes: int = 60) -> Dict[str, Any]:
+        """
+        Get recent temperature alerts.
+        
+        Args:
+            since_minutes: Time window in minutes (default: 60)
+            
+        Returns:
+            Dict containing status and alert data
+        """
         self._ensure_streams_running()
 
-        if not self._check_spark_connection():
+        if not self._is_spark_connected():
             logger.info("Spark connection lost, attempting to reconnect...")
             if not self._reconnect_spark_session():
                 raise ConnectionError("Spark session is not available and reconnection failed")
 
         try:
-            df = (self.spark.read.format("delta").load(self.alerts_fs_path)
-                  .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes")))
-            return {"status": "success",
-                    "data": [row.asDict() for row in df.collect()]}
+            df = (
+                self.spark.read.format("delta")
+                .load(self.alerts_fs_path)
+                .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes"))
+            )
+            return {
+                "status": "success",
+                "data": [row.asDict() for row in df.collect()]
+            }
+            
         except Exception as e:
             logger.error(f"Failed to get temperature alerts: {e}")
-            # Check if it's a table not found error
-            if "Path does not exist" in str(e) or "not found" in str(e).lower() or "AnalysisException" in str(type(e)):
-                logger.info("Alerts table not found, streaming likely hasn't started yet")
-                return {
-                    "status": "success",
-                    "data": [],
-                    "message": "Alert data not available yet. Please wait for alert processing to begin."
-                }
             
-            # Try reconnecting once more on other failures
+            if self._handle_table_not_found_error(e):
+                logger.info("Alerts table not found, streaming likely hasn't started yet")
+                return self._create_table_not_ready_response("Alert")
+            
+            # Try reconnecting and retry once
             if self._reconnect_spark_session():
                 try:
-                    df = (self.spark.read.format("delta").load(self.alerts_fs_path)
-                          .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes")))
-                    return {"status": "success",
-                            "data": [row.asDict() for row in df.collect()]}
+                    df = (
+                        self.spark.read.format("delta")
+                        .load(self.alerts_fs_path)
+                        .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes"))
+                    )
+                    return {
+                        "status": "success",
+                        "data": [row.asDict() for row in df.collect()]
+                    }
                 except Exception as retry_e:
                     logger.error(f"Retry also failed: {retry_e}")
-                    if "Path does not exist" in str(retry_e) or "not found" in str(retry_e).lower() or "AnalysisException" in str(type(retry_e)):
-                        return {
-                            "status": "success",
-                            "data": [],
-                            "message": "Alert data not available yet. Please wait for alert processing to begin."
-                        }
+                    if self._handle_table_not_found_error(retry_e):
+                        return self._create_table_not_ready_response("Alert")
                     raise
             else:
                 raise
 
-    def test_spark_basic_computation(self):
-        """Simple Spark computation test to verify Spark is working"""
+    # ================================================================
+    # Testing and Diagnostics
+    # ================================================================
+
+    def test_spark_basic_computation(self) -> Dict[str, Any]:
+        """Test basic Spark functionality."""
         try:
-            if not self._check_spark_connection():
+            if not self._is_spark_connected():
                 return {
                     "status": "error",
                     "message": "Spark connection not available"
                 }
             
-            # Simplest possible test - just verify Spark can execute SQL
+            # Execute simple SQL test
             result = self.spark.sql("SELECT 1 as test_value, 'hello' as test_string").collect()
             
             if result and len(result) > 0:
@@ -420,33 +480,31 @@ class SparkManager:
                 "message": f"Spark test failed: {str(e)}"
             }
 
-    def test_sensor_data_access(self):
-        """Test if Spark can access real sensor data from MinIO"""
+    def test_sensor_data_access(self) -> Dict[str, Any]:
+        """Test access to sensor data in MinIO."""
         try:
-            if not self._check_spark_connection():
+            if not self._is_spark_connected():
                 return {
                     "status": "error",
                     "message": "Spark connection not available"
                 }
             
-            # Try to read actual sensor data
-            sensor_path = f"s3a://{self.minio_bucket}/sensors/"
-            
             try:
                 # Attempt to read sensor data
-                df = self.spark.read.option("basePath", sensor_path).parquet(f"{sensor_path}date=*/hour=*")
+                df = self.spark.read.option("basePath", self.sensors_path).parquet(f"{self.sensors_path}date=*/hour=*")
                 count = df.count()
                 
                 if count > 0:
-                    # Get a sample of recent data
+                    # Get sample data
                     sample = df.limit(3).collect()
-                    sample_data = []
-                    for row in sample:
-                        sample_data.append({
-                            "sensorId": row.sensorId if hasattr(row, 'sensorId') else 'unknown',
-                            "temperature": row.temperature if hasattr(row, 'temperature') else 'unknown',
-                            "timestamp": str(row.timestamp) if hasattr(row, 'timestamp') else 'unknown'
-                        })
+                    sample_data = [
+                        {
+                            "sensorId": getattr(row, 'sensorId', 'unknown'),
+                            "temperature": getattr(row, 'temperature', 'unknown'),
+                            "timestamp": str(getattr(row, 'timestamp', 'unknown'))
+                        }
+                        for row in sample
+                    ]
                     
                     return {
                         "status": "success",
@@ -454,7 +512,7 @@ class SparkManager:
                         "results": {
                             "total_sensor_records": count,
                             "sample_data": sample_data,
-                            "data_path": sensor_path
+                            "data_path": self.sensors_path
                         }
                     }
                 else:
@@ -468,7 +526,7 @@ class SparkManager:
                 return {
                     "status": "warning", 
                     "message": f"Cannot access sensor data: {str(data_error)}",
-                    "results": {"data_path": sensor_path}
+                    "results": {"data_path": self.sensors_path}
                 }
                 
         except Exception as e:
@@ -478,15 +536,23 @@ class SparkManager:
                 "message": f"Test failed: {str(e)}"
             }
 
-    # ------------------------------------------------------------------ #
-    # misc utilities (unchanged)
-    # ------------------------------------------------------------------ #
-    def stop_streams(self):
-        for q in (getattr(self, "avg_query", None),
-                  getattr(self, "alert_query", None)):
-            if q and q.isActive:
-                q.stop()
+    # ================================================================
+    # Lifecycle Management
+    # ================================================================
 
-    def close(self):
+    def close(self) -> None:
+        """Clean shutdown of SparkManager."""
+        logger.info("Shutting down SparkManager...")
+        
+        # Stop streaming queries
         self.stop_streams()
-        self.spark.stop()
+        
+        # Stop Spark session
+        try:
+            if hasattr(self, 'spark') and self.spark:
+                self.spark.stop()
+                logger.info("Spark session stopped successfully")
+        except Exception as e:
+            logger.error(f"Error stopping Spark session: {e}")
+        
+        logger.info("SparkManager shutdown complete")
