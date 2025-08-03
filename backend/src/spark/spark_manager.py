@@ -305,7 +305,16 @@ class SparkManager:
                     "data": [row.asDict() for row in rows]}
         except Exception as e:
             logger.error(f"Failed to get streaming average temperature: {e}")
-            # Try reconnecting once more on failure
+            # Check if it's a table not found error
+            if "Path does not exist" in str(e) or "not found" in str(e).lower() or "AnalysisException" in str(type(e)):
+                logger.info("Silver table not found, streaming likely hasn't started yet")
+                return {
+                    "status": "success",
+                    "data": [],
+                    "message": "Streaming data not available yet. Please wait for data processing to begin."
+                }
+            
+            # Try reconnecting once more on other failures
             if self._reconnect_spark_session():
                 try:
                     df = (self.spark.read.format("delta").load(self.silver)
@@ -316,6 +325,12 @@ class SparkManager:
                             "data": [row.asDict() for row in rows]}
                 except Exception as retry_e:
                     logger.error(f"Retry also failed: {retry_e}")
+                    if "Path does not exist" in str(retry_e) or "not found" in str(retry_e).lower() or "AnalysisException" in str(type(retry_e)):
+                        return {
+                            "status": "success",
+                            "data": [],
+                            "message": "Streaming data not available yet. Please wait for data processing to begin."
+                        }
                     raise
             else:
                 raise
@@ -337,7 +352,16 @@ class SparkManager:
                     "data": [row.asDict() for row in df.collect()]}
         except Exception as e:
             logger.error(f"Failed to get temperature alerts: {e}")
-            # Try reconnecting once more on failure
+            # Check if it's a table not found error
+            if "Path does not exist" in str(e) or "not found" in str(e).lower() or "AnalysisException" in str(type(e)):
+                logger.info("Alerts table not found, streaming likely hasn't started yet")
+                return {
+                    "status": "success",
+                    "data": [],
+                    "message": "Alert data not available yet. Please wait for alert processing to begin."
+                }
+            
+            # Try reconnecting once more on other failures
             if self._reconnect_spark_session():
                 try:
                     df = (self.spark.read.format("delta").load(self.alerts_fs_path)
@@ -346,6 +370,12 @@ class SparkManager:
                             "data": [row.asDict() for row in df.collect()]}
                 except Exception as retry_e:
                     logger.error(f"Retry also failed: {retry_e}")
+                    if "Path does not exist" in str(retry_e) or "not found" in str(retry_e).lower() or "AnalysisException" in str(type(retry_e)):
+                        return {
+                            "status": "success",
+                            "data": [],
+                            "message": "Alert data not available yet. Please wait for alert processing to begin."
+                        }
                     raise
             else:
                 raise
