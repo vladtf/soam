@@ -1,7 +1,7 @@
 import React from 'react';
 import { Container, Row, Col, Card } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { FaChartLine, FaSitemap, FaTachometerAlt, FaMapMarkedAlt, FaChartBar, FaDatabase, FaCloud, FaServer, FaHistory, FaProjectDiagram, FaDocker } from 'react-icons/fa';
+import { FaChartLine, FaSitemap, FaTachometerAlt, FaMapMarkedAlt, FaChartBar, FaDatabase, FaCloud, FaServer, FaProjectDiagram, FaDocker } from 'react-icons/fa';
 
 const Home: React.FC = () => {
   return (
@@ -114,17 +114,6 @@ const Home: React.FC = () => {
                   Access the Spark Master Web UI for cluster management.
                 </Card.Text>
                 <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to Spark Master</a>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={4}>
-            <Card className="mb-4">
-              <Card.Body>
-                <Card.Title><FaHistory /> Spark History Server</Card.Title>
-                <Card.Text>
-                  Access the Spark History Server for job monitoring.
-                </Card.Text>
-                <a href="http://localhost:18080" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to Spark History</a>
               </Card.Body>
             </Card>
           </Col>

@@ -13,6 +13,25 @@ spec:
       labels:
         app: backend
     spec:
+      initContainers:
+        - name: wait-for-dependencies
+          image: busybox:1.35
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Waiting for Neo4j to be ready..."
+              until nc -z neo4j 7474; do
+                echo "Neo4j is not ready yet. Waiting 3 seconds..."
+                sleep 3
+              done
+              echo "Neo4j is ready!"
+
+              echo "Waiting for Spark Master to be ready..."
+              until nc -z soam-spark-master-svc 7077; do
+                echo "Spark Master is not ready yet. Waiting 5 seconds..."
+                sleep 5
+              done
+              echo "Spark Master is ready!"
       containers:
         - name: backend
           image: backend:latest
@@ -26,7 +45,7 @@ spec:
               memory: 512Mi
             limits:
               cpu: 2000m
-              memory: 2Gi   
+              memory: 2Gi
           env:
             - name: NEO4J_URI
               value: bolt://neo4j:7687
@@ -40,8 +59,8 @@ spec:
               value: "7077"
             - name: SPARK_DRIVER_HOST
               value: backend-0.backend
-            - name: SPARK_HISTORY
-              value: http://spark-history:18080
+            - name: SPARK_UI_PORT
+              value: "80"
             - name: MINIO_ENDPOINT
               value: minio:9000
             - name: MINIO_ACCESS_KEY
@@ -50,6 +69,18 @@ spec:
               value: minio123
             - name: MINIO_BUCKET
               value: lake
+            # Spark driver configuration for Kubernetes
+            - name: SPARK_DRIVER_BIND_ADDRESS
+              value: "0.0.0.0"
+            - name: SPARK_DRIVER_PORT
+              value: "41397"
+            - name: SPARK_BLOCK_MANAGER_PORT
+              value: "41398"
+            # Application configuration
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: LOG_LEVEL
+              value: "INFO"
           volumeMounts:
             - name: spark-events
               mountPath: /tmp/spark-events
@@ -62,7 +93,7 @@ kind: Service
 metadata:
   name: backend
 spec:
-  clusterIP: None  # Headless service for StatefulSet
+  clusterIP: None # Headless service for StatefulSet
   selector:
     app: backend
   ports:

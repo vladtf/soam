@@ -12,6 +12,27 @@ spec:
       labels:
         app: frontend
     spec:
+      initContainers:
+        # Wait for backend to be ready
+        - name: wait-for-backend
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for backend to be ready..."
+              until nc -z backend-external 8000; do
+                echo "Backend is not ready yet. Waiting 5 seconds..."
+                sleep 5
+              done
+              echo "Backend is ready!"
+              
+              # Also check if the backend health endpoint is responsive
+              echo "Checking backend health endpoint..."
+              until wget -q --spider http://backend-external:8000/health 2>/dev/null; do
+                echo "Backend health endpoint is not ready yet. Waiting 3 seconds..."
+                sleep 3
+              done
+              echo "Backend health endpoint is ready!"
       containers:
         - name: frontend
           image: frontend:latest

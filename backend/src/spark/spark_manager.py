@@ -27,11 +27,10 @@ class SparkManager:
     
     def __init__(self, spark_host: str, spark_port: str, minio_endpoint: str, 
                  minio_access_key: str, minio_secret_key: str, minio_bucket: str, 
-                 spark_history: str):
+                 spark_ui_port: str):
         """Initialize SparkManager with all components."""
         # Store configuration
         self.minio_bucket = minio_bucket
-        self.spark_history = spark_history
         
         # Initialize core components
         self.session_manager = SparkSessionManager(
@@ -42,7 +41,7 @@ class SparkManager:
         self.streaming_manager = StreamingManager(self.session_manager, minio_bucket)
         self.data_access = DataAccessManager(self.session_manager, minio_bucket)
         self.diagnostics = SparkDiagnostics(self.session_manager, minio_bucket)
-        self.master_client = SparkMasterClient(spark_host)
+        self.master_client = SparkMasterClient(spark_host, spark_ui_port)
         
         # Initialize streaming if data is available
         self._initialize_streaming()

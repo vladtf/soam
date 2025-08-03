@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class SparkMasterClient:
     """Client for interacting with Spark Master web UI API."""
     
-    def __init__(self, spark_host: str):
+    def __init__(self, spark_host: str, spark_ui_port: str):
         """Initialize SparkMasterClient."""
-        self.spark_master_url = f"http://{spark_host}:8080"
+        self.spark_master_url = f"http://{spark_host}:{spark_ui_port}"
     
     def get_spark_master_status(self) -> Dict[str, Any]:
         """Fetch Spark master status from the web UI API."""

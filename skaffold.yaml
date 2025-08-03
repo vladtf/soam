@@ -59,19 +59,19 @@ portForward:
     port: 8001
     localPort: 8001
   - resourceType: service
-    resourceName: grafana
-    namespace: default
-    port: 3000
-    localPort: 3001
-  - resourceType: service
-    resourceName: prometheus
-    namespace: default
-    port: 9090
-    localPort: 9091
-  - resourceType: service
     resourceName: neo4j
     namespace: default
     port: 7474
     localPort: 7474
 
-
+# Uncomment the following lines to enable port forwarding for Grafana and Prometheus
+  # - resourceType: service
+  #   resourceName: grafana
+  #   namespace: default
+  #   port: 3000
+  #   localPort: 3001
+  # - resourceType: service
+  #   resourceName: prometheus
+  #   namespace: default
+  #   port: 9090
+  #   localPort: 9091

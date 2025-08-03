@@ -5,11 +5,13 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 from collections import deque
+from src.api import health_routes
+from src.neo4j import building_routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_config
-from src.api.routers import buildings, spark, health
+from src.spark import spark_routes
 
 # Configure logging
 logging.basicConfig(
@@ -107,9 +109,9 @@ def create_app() -> FastAPI:
     )
     
     # Include routers
-    app.include_router(buildings.router)
-    app.include_router(spark.router)
-    app.include_router(health.router)
+    app.include_router(building_routes.router)
+    app.include_router(spark_routes.router)
+    app.include_router(health_routes.router)
     
     return app
 

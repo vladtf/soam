@@ -43,7 +43,6 @@ services:
       - NEO4J_PASSWORD=verystrongpassword
       - SPARK_HOST=spark-master
       - SPARK_PORT=7077
-      - SPARK_HISTORY=http://spark-history:18080
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minio
       - MINIO_SECRET_KEY=minio123

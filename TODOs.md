@@ -114,4 +114,3 @@ Below is a list of tasks that need to be completed for the project. This list wi
 
 - To handle the connection to the mqttt server before adding the new sensor (a device is a topic?)
 - To make the data integration store raw data in the minio and spark to stream the cleaned data to the silver layer and then to the gold layer after the aggregation.
-- Migrate to FastAPI in the backend

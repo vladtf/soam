@@ -15,21 +15,21 @@ logger = logging.getLogger(__name__)
 
 class AppConfig:
     """Application configuration."""
-    
+
     def __init__(self):
         # Neo4j configuration
         self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
         self.neo4j_password = os.getenv("NEO4J_PASSWORD", "verystrongpassword")
-        
+
         # Spark configuration
         self.spark_host = os.getenv("SPARK_HOST", "localhost")
         self.spark_port = os.getenv("SPARK_PORT", "7077")
+        self.spark_ui_port = os.getenv("SPARK_UI_PORT", "8080")
         self.minio_endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
         self.minio_access_key = os.getenv("MINIO_ACCESS_KEY", "minio")
         self.minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minio123")
         self.minio_bucket = os.getenv("MINIO_BUCKET", "lake")
-        self.spark_history = os.getenv("SPARK_HISTORY", "http://spark-history:18080")
 
 
 @lru_cache()
@@ -48,7 +48,7 @@ def get_spark_manager(config: Annotated[AppConfig, Depends(get_config)]) -> Spar
         config.minio_access_key,
         config.minio_secret_key,
         config.minio_bucket,
-        config.spark_history,
+        config.spark_ui_port,
     )
 
 
