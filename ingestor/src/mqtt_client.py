@@ -34,9 +34,9 @@ class MQTTClientHandler:
                 self.data_buffer.append(payload)
                 print("Received message:", payload)
 
-                # Upload to MinIO
+                # Add to MinIO buffer (may not upload immediately)
                 self.minio_client.add_row(payload)
-                print(f"Uploaded data to MinIO.")
+                print(f"Added data to MinIO buffer.")
                 self.messages_processed.inc()  # Increment processed messages counter
             except S3Error as s3e:
                 print(f"MinIO error: {s3e}")

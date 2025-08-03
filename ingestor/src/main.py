@@ -1,94 +1,147 @@
-import datetime
-import io
-import json
-import threading
-from collections import deque
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from minio import S3Error
-import paho.mqtt.client as mqtt
-import os
-from dataclasses import dataclass
-import asyncio
+"""
+FastAPI application with proper dependency injection for the SOAM ingestor.
+"""
 import logging
-import requests  # Add this import for making HTTP requests
-from prometheus_client import Counter, Histogram, generate_latest
-from fastapi.responses import Response
+import sys
+import threading
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from src.storage.minio_client import MinioClient
-from src.app import create_app
-from src.config import DEFAULT_MQTT_BROKER, DEFAULT_MQTT_PORT, DEFAULT_MQTT_TOPIC, MINIO_BUCKET, ConnectionConfig
+from src.api.dependencies import get_config, get_minio_client, get_ingestor_state
+from src.api.routers import data, health
 from src.mqtt_client import MQTTClientHandler
-from src.routes import register_routes
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("ingestor.log")
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 
-class SmartCityIngestor:
-    def __init__(self):
-        self.app = create_app()
-        self.data_buffer = deque(maxlen=100)
-        self.connection_configs = []
-        self.active_connection = None
-        self.minio_client = MinioClient(MINIO_BUCKET)
-        self.mqtt_handler = None
-
-        # Default connection
-        default_config = ConnectionConfig(
-            id=1,
-            broker=DEFAULT_MQTT_BROKER,
-            port=DEFAULT_MQTT_PORT,
-            topic=DEFAULT_MQTT_TOPIC
-        )
-        self.connection_configs.append(default_config)
-        self.active_connection = default_config
-
-        self._initialize_metrics()
-        # Register routes
-        register_routes(self.app, self)
-        self._register_metrics_route()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager for startup and shutdown events.
+    """
+    # Startup
+    logger.info("Starting SOAM Ingestor...")
+    
+    # Initialize dependencies manually (not through FastAPI DI in lifespan)
+    try:
+        config = get_config()
+        minio_client = get_minio_client(config)
+        state = get_ingestor_state(config)
+        
+        # Store in app state for shutdown access
+        app.state.config = config
+        app.state.minio_client = minio_client
+        app.state.ingestor_state = state
+        
+        logger.info("All dependencies initialized successfully")
+        
         # Start MQTT client
-        self.start_mqtt_client()
+        start_mqtt_client(state, minio_client)
+        logger.info("MQTT client started successfully")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize dependencies: {e}")
+        raise
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down SOAM Ingestor...")
+    
+    try:
+        # Stop MQTT client
+        state = app.state.ingestor_state
+        
+        if state.mqtt_handler:
+            state.mqtt_handler.stop()
+            logger.info("MQTT client stopped successfully")
+            
+        # Flush any remaining MinIO data
+        minio_client = app.state.minio_client
+        if minio_client:
+            minio_client.close()
+            logger.info("MinIO client closed successfully")
+            
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+    
+    logger.info("Shutdown completed.")
 
-    def _initialize_metrics(self):
-        """Initialize Prometheus metrics."""
-        self.messages_received = Counter(
-            "mqtt_messages_received_total",
-            "Total number of MQTT messages received"
+
+def start_mqtt_client(state, minio_client):
+    """Start the MQTT client in a separate thread."""
+    if state.active_connection:
+        state.mqtt_handler = MQTTClientHandler(
+            broker=state.active_connection.broker,
+            port=state.active_connection.port,
+            topic=state.active_connection.topic,
+            data_buffer=state.data_buffer,
+            minio_client=minio_client,
+            messages_received=state.messages_received,
+            messages_processed=state.messages_processed,
+            processing_latency=state.processing_latency
         )
-        self.messages_processed = Counter(
-            "mqtt_messages_processed_total",
-            "Total number of MQTT messages successfully processed"
-        )
-        self.processing_latency = Histogram(
-            "mqtt_message_processing_latency_seconds",
-            "Latency for processing MQTT messages"
-        )
+        # Start MQTT client in daemon thread
+        mqtt_thread = threading.Thread(target=state.mqtt_handler.start, daemon=True)
+        mqtt_thread.start()
+        logger.info(f"MQTT client started for broker: {state.active_connection.broker}")
 
-    def _register_metrics_route(self):
-        """Register the /metrics endpoint for Prometheus scraping."""
-        @self.app.get("/metrics")
-        def metrics():
-            return Response(generate_latest(), media_type="text/plain")
 
-    def start_mqtt_client(self):
-        """Start the MQTT client."""
-        self.mqtt_handler = MQTTClientHandler(
-            broker=self.active_connection.broker,
-            port=self.active_connection.port,
-            topic=self.active_connection.topic,
-            data_buffer=self.data_buffer,
-            minio_client=self.minio_client,
-            messages_received=self.messages_received,
-            messages_processed=self.messages_processed,
-            processing_latency=self.processing_latency
-        )
-        threading.Thread(target=self.mqtt_handler.start, daemon=True).start()
+def create_app() -> FastAPI:
+    """
+    Create and configure the FastAPI application.
+    """
+    app = FastAPI(
+        title="SOAM Ingestor",
+        description="Data ingestion service for the Smart City Ontology and Analytics Management platform",
+        version="1.0.0",
+        lifespan=lifespan
+    )
+    
+    # Enable CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # In production, replace with specific origins
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Include routers
+    app.include_router(data.router)
+    app.include_router(health.router)
+    
+    return app
 
-    async def shutdown_event(self):
-        """Shutdown event to stop MQTT client."""
-        if self.mqtt_handler:
-            self.mqtt_handler.stop()
 
-# Instantiate the backend and expose its app
-backend = SmartCityIngestor()
-app = backend.app
-app.on_event("shutdown")(backend.shutdown_event)
+# Create the FastAPI app
+app = create_app()
+
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with basic API information."""
+    return {
+        "message": "SOAM Ingestor API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+        "metrics": "/metrics"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)

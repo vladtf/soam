@@ -66,6 +66,11 @@ portForward:
   - resourceType: service
     resourceName: minio
     namespace: default
+    port: 9090
+    localPort: 9090  
+  - resourceType: service
+    resourceName: minio
+    namespace: default
     port: 9000
     localPort: 9000
 
