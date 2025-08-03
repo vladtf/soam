@@ -1,28 +1,91 @@
 from neo4j import GraphDatabase
 import logging
+import time
+from neo4j.exceptions import ServiceUnavailable, AuthError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Neo4jManager:
     def __init__(self, uri, user, password):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.uri = uri
+        self.user = user
+        self.password = password
+        self.driver = None
+        self._connect_with_retry()
+
+    def _connect_with_retry(self, max_retries=30, retry_delay=2):
+        """Connect to Neo4j with retry logic for startup scenarios."""
+        logger.info(f"Attempting to connect to Neo4j at {self.uri}")
+        
+        for attempt in range(max_retries):
+            try:
+                self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+                # Test the connection
+                with self.driver.session() as session:
+                    session.run("RETURN 1")
+                logger.info("Successfully connected to Neo4j")
+                return
+            except (ServiceUnavailable, AuthError) as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Neo4j connection attempt {attempt + 1}/{max_retries} failed: {e}")
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Failed to connect to Neo4j after {max_retries} attempts")
+                    raise
+            except Exception as e:
+                logger.error(f"Unexpected error connecting to Neo4j: {e}")
+                raise
+
+    def _wait_for_database_ready(self, max_retries=30, retry_delay=2):
+        """Wait for the database to be ready for operations."""
+        logger.info("Waiting for Neo4j database to be ready...")
+        
+        for attempt in range(max_retries):
+            try:
+                with self.driver.session() as session:
+                    # Try a simple query to ensure the database is operational
+                    session.run("MATCH (n) RETURN count(n) as count LIMIT 1")
+                logger.info("Neo4j database is ready for operations")
+                return True
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Database readiness check {attempt + 1}/{max_retries} failed: {e}")
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Database not ready after {max_retries} attempts")
+                    return False
+        
+        return False
 
     def get_buildings(self):
         """Query Neo4j for all buildings with their address coordinates."""
+        if not self.driver:
+            logger.error("No database connection available")
+            return []
+            
         query = """
         MATCH (b:Building)-[:hasAddress]->(a:Address)
         RETURN b.name AS name, a.location.latitude AS lat, a.location.longitude AS lng
         """
-        with self.driver.session() as session:
-            result = session.run(query)
-            buildings = [{"name": record["name"], "lat": record["lat"], "lng": record["lng"]} for record in result]
+        try:
+            with self.driver.session() as session:
+                result = session.run(query)
+                buildings = [{"name": record["name"], "lat": record["lat"], "lng": record["lng"]} for record in result]
 
-        logging.info("Fetched buildings from Neo4j. Count: %s", len(buildings))
-        return buildings
+            logging.info("Fetched buildings from Neo4j. Count: %s", len(buildings))
+            return buildings
+        except Exception as e:
+            logger.error(f"Error fetching buildings: {e}")
+            return []
 
     def add_building(self, data):
         """Add a building and its address to Neo4j."""
+        if not self.driver:
+            return {"status": "error", "detail": "No database connection available"}
+            
         query = """
         MERGE (b:Building { name: $name })
         SET b.description = $description
@@ -46,8 +109,33 @@ class Neo4jManager:
         except Exception as e:
             return {"status": "error", "detail": str(e)}
 
+    def _clear_existing_data(self):
+        """Clear existing test data to avoid conflicts."""
+        if not self.driver:
+            logger.warning("No database connection, skipping data clearing")
+            return
+            
+        clear_queries = [
+            "MATCH (n) WHERE n.name IN ['Metropolis', 'Corp EC', 'Corp ED', 'Centrul PRECIS'] OR n.sensorId = 'Sensor123' OR n.street = 'Splaiul Independenței, 313' DETACH DELETE n"
+        ]
+        try:
+            with self.driver.session() as session:
+                for query in clear_queries:
+                    session.run(query)
+            logger.info("Existing test data cleared successfully.")
+        except Exception as e:
+            logger.warning(f"Error clearing existing data (this is normal on first run): {e}")
+
     def provision_data(self):
         """Provision Neo4j with initial data."""
+        # Wait for database to be ready before provisioning
+        if not self._wait_for_database_ready():
+            logger.error("Database not ready, skipping data provisioning")
+            return
+        
+        # First clear existing data to ensure clean state
+        self._clear_existing_data()
+        
         queries = [
             """
             MERGE (sc:SmartCity { name: "Metropolis", description: "A smart city leveraging technology to improve quality of life." })
@@ -78,28 +166,38 @@ class Neo4jManager:
                                temperature: 22.5, humidity: 45.0 })
             """,
             """
-            MATCH (b:Building), (a:Address)
-            WHERE b.name = "Corp EC" AND a.street = "Splaiul Independenței, 313"
+            MATCH (b:Building)
+            WHERE b.name = "Corp EC"
+            MATCH (a:Address)
+            WHERE a.street = "Splaiul Independenței, 313"
             MERGE (b)-[:hasAddress]->(a)
             """,
             """
-            MATCH (b:Building), (a:Address)
-            WHERE b.name = "Corp ED" AND a.street = "Splaiul Independenței, 313"
+            MATCH (b:Building)
+            WHERE b.name = "Corp ED"
+            MATCH (a:Address)
+            WHERE a.street = "Splaiul Independenței, 313"
             MERGE (b)-[:hasAddress]->(a)
             """,
             """
-            MATCH (b:Building), (a:Address)
-            WHERE b.name = "Centrul PRECIS" AND a.street = "Splaiul Independenței, 313"
+            MATCH (b:Building)
+            WHERE b.name = "Centrul PRECIS"
+            MATCH (a:Address)
+            WHERE a.street = "Splaiul Independenței, 313"
             MERGE (b)-[:hasAddress]->(a)
             """,
             """
-            MATCH (sc:SmartCity), (s:Sensor)
-            WHERE sc.name = "Metropolis" AND s.sensorId = "Sensor123"
+            MATCH (sc:SmartCity)
+            WHERE sc.name = "Metropolis"
+            MATCH (s:Sensor)
+            WHERE s.sensorId = "Sensor123"
             MERGE (sc)-[:hasSensor]->(s)
             """,
             """
-            MATCH (s:Sensor), (b:Building)
-            WHERE s.sensorId = "Sensor123" AND b.name = "Corp EC"
+            MATCH (s:Sensor)
+            WHERE s.sensorId = "Sensor123"
+            MATCH (b:Building)
+            WHERE b.name = "Corp EC"
             MERGE (s)-[:locatedIn]->(b)
             """
         ]
@@ -114,4 +212,22 @@ class Neo4jManager:
 
     def close(self):
         """Close the Neo4j driver."""
-        self.driver.close()
+        if self.driver:
+            self.driver.close()
+            logger.info("Neo4j connection closed")
+
+    def health_check(self):
+        """Check if Neo4j connection is healthy."""
+        try:
+            if not self.driver:
+                return {"status": "error", "message": "No database connection"}
+            
+            with self.driver.session() as session:
+                result = session.run("RETURN 1 as test")
+                record = result.single()
+                if record and record["test"] == 1:
+                    return {"status": "healthy", "message": "Neo4j connection is working"}
+                else:
+                    return {"status": "error", "message": "Unexpected response from database"}
+        except Exception as e:
+            return {"status": "error", "message": f"Database health check failed: {str(e)}"}
