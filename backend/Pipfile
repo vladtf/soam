@@ -13,6 +13,7 @@ pyspark = "==3.5.5"
 pyarrow = "*"
 pandas = "*"
 requests = "*"
+httpx = "*"
 
 [dev-packages]
 

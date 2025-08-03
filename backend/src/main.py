@@ -1,13 +1,17 @@
-from collections import deque
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-import os
+"""
+FastAPI application with proper dependency injection for the SOAM smart city platform.
+"""
 import logging
-from src.spark import SparkManager
-from src.neo4j.neo4j_manager import Neo4jManager
-from fastapi.exceptions import HTTPException
 import sys
+from contextlib import asynccontextmanager
+from collections import deque
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_config
+from src.api.routers import buildings, spark, health
+
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -19,205 +23,113 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Global state for thread management (if needed for future features)
+app_state = {
+    "data_buffer": deque(maxlen=100),
+    "connection_configs": [],
+    "active_connection": None,
+    "threads": {},
+    "thread_counter": 1,
+    "last_connection_error": None
+}
 
-class SmartCityBackend:
-    def __init__(self):
-        self.app = FastAPI()
-        self.data_buffer = deque(maxlen=100)  # Buffer to store the last 100 messages
-        self.connection_configs = []          # List of connection configs
-        self.active_connection = None         # Active connection config
-        self.threads = {}                     # Map to store threads for later shutdown
-        self.thread_counter = 1               # Counter for unique thread keys
-        self.last_connection_error = None
 
-        # Initialize variables
-        self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "verystrongpassword")
-
-        self.spark_host = os.getenv("SPARK_HOST", "localhost")
-        self.spark_port = os.getenv("SPARK_PORT", "7077")
-        self.minio_endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-        self.minio_access_key = os.getenv("MINIO_ACCESS_KEY", "minio")
-        self.minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minio123")
-        self.minio_bucket = os.getenv("MINIO_BUCKET", "lake")
-        self.spark_history = os.getenv("SPARK_HISTORY", "http://spark-history:18080")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager for startup and shutdown events.
+    """
+    # Startup
+    logger.info("Starting SOAM Smart City Backend...")
+    
+    # Initialize dependencies to ensure they're created
+    try:
+        config = get_config()
+        spark_manager = get_spark_manager(config)
+        neo4j_manager = get_neo4j_manager(config)
+        logger.info("All dependencies initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize dependencies: {e}")
+        raise
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down SOAM Smart City Backend...")
+    
+    # Stop and join all threads stored in the map
+    for key, thread in app_state["threads"].items():
+        if thread.is_alive():
+            logger.info(f"Stopping thread {key}")
+            thread.join(timeout=5)  # join with timeout for safety
+    
+    # Clean shutdown of managers
+    try:
+        # Get cached instances for cleanup
+        config = get_config()
+        spark_manager = get_spark_manager(config)
+        neo4j_manager = get_neo4j_manager(config)
         
-        # Initialize SparkManager in the constructor
-        self.spark_manager = SparkManager(
-            self.spark_host,
-            self.spark_port,
-            self.minio_endpoint,
-            self.minio_access_key,
-            self.minio_secret_key,
-            self.minio_bucket,
-            self.spark_history,
-        )
-        
-        # Initialize Neo4jManager
-        self.neo4j_manager = Neo4jManager(self.neo4j_uri, self.neo4j_user, self.neo4j_password)
-
-        # Enable CORS
-        self.app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-
-        # Register routes
-        self.app.get("/buildings")(self.get_buildings)  # new route to fetch buildings
-        self.app.post("/buildings")(self.add_building)  # new endpoint to add a building
-        self.app.get("/averageTemperature")(self.get_average_temperature)  # Register new route
-        self.app.get("/sparkMasterStatus")(self.get_spark_master_status)  # Spark master status endpoint
-        self.app.get("/temperatureAlerts")(self.get_temperature_alerts)
-        self.app.get("/health")(self.get_health_status)  # Health check endpoint
-        self.app.get("/test-spark")(self.test_spark_computation)  # Spark test endpoint
-        self.app.get("/test-sensor-data")(self.test_sensor_data_access)  # Sensor data test
-
-        # Provision Neo4j with initial data from utils.txt
-        self.neo4j_manager.provision_data()
-
-        # Register shutdown event to gracefully close
-        self.app.on_event("shutdown")(self.shutdown_event)
-
-    def get_buildings(self):
-        try:
-            return self.neo4j_manager.get_buildings()
-        except Exception as e:
-            logger.error(f"Error fetching buildings: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    async def add_building(self, request: Request):
-        data = await request.json()
-        try:
-            return self.neo4j_manager.add_building(data)
-        except KeyError as e:
-            logger.error(f"Missing field in add_building: {str(e)}")
-            raise HTTPException(status_code=400, detail=f"Missing field: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error adding building: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    async def shutdown_event(self):
-        # Stop and join all threads stored in the map
-        for key, thread in self.threads.items():
-            if thread.is_alive():
-                thread.join(timeout=5)  # join with timeout for safety
-        
-        # Stop Spark streams
-        try:
-            self.spark_manager.stop_streams()
-        except Exception as e:
-            logger.error(f"Error stopping Spark streams: {e}")
+        # Stop Spark streams and close manager
+        if spark_manager:
+            spark_manager.close()
+            logger.info("SparkManager stopped successfully")
             
-        self.neo4j_manager.close()
-        logger.info("Shutdown event completed.")
-
-    def get_average_temperature(self):
-        try:
-            return self.spark_manager.get_streaming_average_temperature()
-        except Exception as e:
-            logger.error(f"Error fetching average temperature: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    def get_spark_master_status(self):
-        """Get Spark master status including workers and applications"""
-        try:
-            return self.spark_manager.get_spark_master_status()
-        except Exception as e:
-            logger.error(f"Error fetching Spark master status: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    def get_temperature_alerts(self, since_minutes=60):
-        since_minutes = int(since_minutes)
-        try:
-            return self.spark_manager.get_temperature_alerts(since_minutes)
-        except Exception as e:
-            logger.error(f"Error fetching temperature alerts: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    def get_health_status(self):
-        """Health check endpoint to monitor system status"""
-        try:
-            health_status = {
-                "status": "healthy",
-                "components": {
-                    "neo4j": "unknown",
-                    "spark": "unknown",
-                    "streams": {
-                        "temperature": "unknown",
-                        "alerts": "unknown"
-                    }
-                }
-            }
+        # Close Neo4j connection
+        if neo4j_manager:
+            neo4j_manager.close()
+            logger.info("Neo4jManager stopped successfully")
             
-            # Check Neo4j
-            try:
-                neo4j_health = self.neo4j_manager.health_check()
-                if neo4j_health["status"] == "healthy":
-                    health_status["components"]["neo4j"] = "healthy"
-                else:
-                    health_status["components"]["neo4j"] = f"unhealthy: {neo4j_health['message']}"
-                    health_status["status"] = "degraded"
-            except Exception as e:
-                health_status["components"]["neo4j"] = f"unhealthy: {str(e)}"
-                health_status["status"] = "degraded"
-            
-            # Check Spark
-            try:
-                if self.spark_manager._check_spark_connection():
-                    health_status["components"]["spark"] = "healthy"
-                else:
-                    health_status["components"]["spark"] = "unhealthy"
-                    health_status["status"] = "degraded"
-            except Exception as e:
-                health_status["components"]["spark"] = f"unhealthy: {str(e)}"
-                health_status["status"] = "degraded"
-            
-            # Check Streams
-            try:
-                if hasattr(self.spark_manager, 'avg_query') and self.spark_manager.avg_query:
-                    health_status["components"]["streams"]["temperature"] = "active" if self.spark_manager.avg_query.isActive else "inactive"
-                else:
-                    health_status["components"]["streams"]["temperature"] = "not_started"
-                    
-                if hasattr(self.spark_manager, 'alert_query') and self.spark_manager.alert_query:
-                    health_status["components"]["streams"]["alerts"] = "active" if self.spark_manager.alert_query.isActive else "inactive"
-                else:
-                    health_status["components"]["streams"]["alerts"] = "not_started"
-            except Exception as e:
-                health_status["components"]["streams"]["temperature"] = f"error: {str(e)}"
-                health_status["components"]["streams"]["alerts"] = f"error: {str(e)}"
-            
-            return health_status
-            
-        except Exception as e:
-            logger.error(f"Error in health check: {str(e)}")
-            return {
-                "status": "unhealthy", 
-                "error": str(e)
-            }
-
-    def test_spark_computation(self):
-        """Test Spark with a basic computation"""
-        try:
-            return self.spark_manager.test_spark_basic_computation()
-        except Exception as e:
-            logger.error(f"Error in Spark computation test: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    def test_sensor_data_access(self):
-        """Test Spark access to sensor data"""
-        try:
-            return self.spark_manager.test_sensor_data_access()
-        except Exception as e:
-            logger.error(f"Error in sensor data access test: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+    
+    logger.info("Shutdown completed.")
 
 
-# Instantiate the backend and expose its app
-backend = SmartCityBackend()
-app = backend.app
+def create_app() -> FastAPI:
+    """
+    Create and configure the FastAPI application.
+    """
+    app = FastAPI(
+        title="SOAM Smart City Backend",
+        description="Backend API for the Smart City Ontology and Analytics Management platform",
+        version="1.0.0",
+        lifespan=lifespan
+    )
+    
+    # Enable CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # In production, replace with specific origins
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Include routers
+    app.include_router(buildings.router)
+    app.include_router(spark.router)
+    app.include_router(health.router)
+    
+    return app
+
+
+# Create the FastAPI app
+app = create_app()
+
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with basic API information."""
+    return {
+        "message": "SOAM Smart City Backend API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

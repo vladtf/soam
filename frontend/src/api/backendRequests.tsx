@@ -66,7 +66,7 @@ export const fetchSensorData = (): Promise<SensorData[]> => {
 
 export const fetchAverageTemperature = (): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown[]>(`${backendUrl}/averageTemperature`);
+  return doFetch<unknown[]>(`${backendUrl}/spark/average-temperature`);
 };
 
 // Spark Master Status interfaces
@@ -111,7 +111,7 @@ export interface SparkMasterStatus {
 
 export const fetchSparkMasterStatus = (): Promise<SparkMasterStatus> => {
   const { backendUrl } = getConfig();
-  return doFetch<SparkMasterStatus>(`${backendUrl}/sparkMasterStatus`);
+  return doFetch<SparkMasterStatus>(`${backendUrl}/spark/master-status`);
 };
 
 export const postNewBuilding = (newBuilding: Building): Promise<unknown> => {
@@ -128,7 +128,7 @@ export const fetchTemperatureAlerts = (
 ): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
   return doFetch<unknown[]>(
-    `${backendUrl}/temperatureAlerts?sinceMinutes=${sinceMinutes}`
+    `${backendUrl}/spark/temperature-alerts?since_minutes=${sinceMinutes}`
   );
 };
 
