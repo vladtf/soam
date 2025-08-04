@@ -69,6 +69,9 @@ spec:
               value: minio123
             - name: MINIO_BUCKET
               value: lake
+            # Database configuration  
+            - name: DATABASE_URL
+              value: sqlite:////app/data/feedback.db
             # Spark driver configuration for Kubernetes
             - name: SPARK_DRIVER_BIND_ADDRESS
               value: "0.0.0.0"
@@ -84,9 +87,14 @@ spec:
           volumeMounts:
             - name: spark-events
               mountPath: /tmp/spark-events
+            - name: backend-db
+              mountPath: /app/data
       volumes:
         - name: spark-events
           emptyDir: {}
+        - name: backend-db
+          persistentVolumeClaim:
+            claimName: backend-db-pvc
 ---
 apiVersion: v1
 kind: Service

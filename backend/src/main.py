@@ -5,13 +5,14 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 from collections import deque
-from src.api import health_routes
+from src.api import health_routes, feedback_routes
 from src.neo4j import building_routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_config
 from src.spark import spark_routes
+from src.database import create_tables
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +44,14 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Starting SOAM Smart City Backend...")
+    
+    # Initialize database tables
+    try:
+        create_tables()
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        raise
     
     # Initialize dependencies to ensure they're created
     try:
@@ -112,6 +121,7 @@ def create_app() -> FastAPI:
     app.include_router(building_routes.router)
     app.include_router(spark_routes.router)
     app.include_router(health_routes.router)
+    app.include_router(feedback_routes.router)
     
     return app
 

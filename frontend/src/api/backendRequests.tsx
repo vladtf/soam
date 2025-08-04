@@ -159,3 +159,30 @@ export const addConnection = (config: unknown): Promise<unknown> => {
     body: JSON.stringify(config),
   });
 };
+
+// Feedback API functions
+export interface FeedbackData {
+  email: string;
+  message: string;
+}
+
+export interface FeedbackResponse {
+  id: number;
+  email: string;
+  message: string;
+  created_at: string;
+}
+
+export const submitFeedback = (feedback: FeedbackData): Promise<ApiResponse<{ id: number }>> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ApiResponse<{ id: number }>>(`${backendUrl}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(feedback),
+  });
+};
+
+export const fetchFeedbacks = (): Promise<FeedbackResponse[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<FeedbackResponse[]>(`${backendUrl}/feedback`);
+};

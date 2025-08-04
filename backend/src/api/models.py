@@ -66,3 +66,17 @@ class ApiResponse(BaseModel):
     data: Optional[Any] = None
     message: Optional[str] = None
     error: Optional[str] = None
+
+
+class FeedbackCreate(BaseModel):
+    """Schema for creating feedback."""
+    email: str = Field(..., description="User email address")
+    message: str = Field(..., description="Feedback message")
+
+
+class FeedbackResponse(BaseModel):
+    """Schema for feedback response."""
+    id: int
+    email: str
+    message: str
+    created_at: str
