@@ -7,6 +7,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
 
 from .config import SparkConfig, SparkSchemas
+from .cleaner import DataCleaner
 from .session import SparkSessionManager
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,24 @@ class StreamingManager:
         self.alert_query: Optional[StreamingQuery] = None
         # New: enrichment query
         self.enrich_query: Optional[StreamingQuery] = None
+
+        # Stable query names to enforce single instance per stream
+        self.ENRICH_QUERY_NAME = "enrich_stream"
+        self.AVG_QUERY_NAME = "five_min_avg_stream"
+        self.ALERT_QUERY_NAME = "alert_stream"
+
+    def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
+        """Return active StreamingQuery by name if present."""
+        try:
+            for q in self.session_manager.spark.streams.active:
+                try:
+                    if q.name == name:
+                        return q
+                except Exception:
+                    continue
+        except Exception:
+            return None
+        return None
     
     def is_data_directory_ready(self) -> bool:
         """Check if the sensors data directory exists and is accessible."""
@@ -69,17 +88,29 @@ class StreamingManager:
             # Ensure enrichment first, as downstream jobs rely on it
             if self.enrich_query is None or not self.enrich_query.isActive:
                 logger.info("Enrichment stream not active, attempting to start...")
-                self.start_enrichment_stream()
+                existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
+                if existing and existing.isActive:
+                    self.enrich_query = existing
+                else:
+                    self.start_enrichment_stream()
 
             # Check temperature stream
             if self.avg_query is None or not self.avg_query.isActive:
                 logger.info("Temperature stream not active, attempting to start...")
-                self.start_temperature_stream()
+                existing = self._get_query_by_name(self.AVG_QUERY_NAME)
+                if existing and existing.isActive:
+                    self.avg_query = existing
+                else:
+                    self.start_temperature_stream()
 
             # Check alert stream
             if self.alert_query is None or not self.alert_query.isActive:
                 logger.info("Alert stream not active, attempting to start...")
-                self.start_alert_stream()
+                existing = self._get_query_by_name(self.ALERT_QUERY_NAME)
+                if existing and existing.isActive:
+                    self.alert_query = existing
+                else:
+                    self.start_alert_stream()
 
         except Exception as e:
             logger.error(f"Error ensuring streams are running: {e}")
@@ -118,6 +149,7 @@ class StreamingManager:
             .option("path", self.silver_path)
             .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.FIVE_MIN_AVG_CHECKPOINT}")
             .outputMode("complete")
+            .queryName(self.AVG_QUERY_NAME)
             .trigger(processingTime=SparkConfig.TEMPERATURE_STREAM_TRIGGER)
             .start()
         )
@@ -152,27 +184,54 @@ class StreamingManager:
             .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.ALERT_STREAM_CHECKPOINT}")
             .option("mergeSchema", "true")
             .outputMode("append")
+            .queryName(self.ALERT_QUERY_NAME)
             .trigger(processingTime=SparkConfig.ALERT_STREAM_TRIGGER)
             .start()
         )
     
     def start_enrichment_stream(self) -> None:
         """Start the enrichment stream: read raw sensors, add metadata, write silver/enriched."""
-        schema = SparkSchemas.get_sensor_schema()
         spark = self.session_manager.spark
+        cleaner = DataCleaner()
 
+        # Try to infer schema from existing parquet files (batch read), fallback to known sensor schema
+        try:
+            static_df = (
+                spark.read
+                .option("basePath", self.sensors_path)
+                .parquet(f"{self.sensors_path}date=*/hour=*")
+            )
+            inferred_schema = static_df.schema
+            logger.info("Inferred raw sensors schema from existing files for streaming read")
+        except Exception:
+            inferred_schema = SparkSchemas.get_sensor_schema()
+            logger.info("Falling back to predefined sensor schema for streaming read")
+
+        # Read raw parquet with schema (required by structured streaming for file sources)
         raw_stream = (
             spark.readStream
-            .schema(schema)
+            .schema(inferred_schema)
             .option("basePath", self.sensors_path)
             .option("maxFilesPerTrigger", SparkConfig.MAX_FILES_PER_TRIGGER)
             .parquet(f"{self.sensors_path}date=*/hour=*")
+        )
+
+        # Normalize/cleanup: lower-case columns and rename known variants
+        normalized = cleaner.normalize_sensor_columns(raw_stream)
+
+        # Cast to expected schema types (safe casts) and derive event time
+        typed = (
+            normalized
+            .withColumn("sensorId", F.col("sensorId").cast("string"))
+            .withColumn("temperature", F.col("temperature").cast("double"))
+            .withColumn("humidity", F.col("humidity").cast("double"))
+            .withColumn("timestamp", F.col("timestamp").cast("string"))
             .withColumn("event_time", F.to_timestamp("timestamp"))
         )
 
         # Example enrichment: add ingest_date, hour, and static metadata fields
         enriched = (
-            raw_stream
+            typed
             .withColumn("ingest_ts", F.current_timestamp())
             .withColumn("ingest_date", F.to_date(F.col("event_time")))
             .withColumn("ingest_hour", F.date_format(F.col("event_time"), "HH"))
@@ -192,17 +251,35 @@ class StreamingManager:
             )
         )
 
+        # Avoid duplicate starts if another session/thread already launched it
+        existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
+        if existing and existing.isActive:
+            self.enrich_query = existing
+            return
+
         # Write enriched records to Delta in silver/enriched
-        self.enrich_query = (
-            enriched.writeStream
-            .format("delta")
-            .option("path", self.enriched_path)
-            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.ENRICH_STREAM_CHECKPOINT}")
-            .option("mergeSchema", "true")
-            .outputMode("append")
-            .trigger(processingTime=SparkConfig.ENRICH_STREAM_TRIGGER)
-            .start()
-        )
+        try:
+            self.enrich_query = (
+                enriched.writeStream
+                .format("delta")
+                .option("path", self.enriched_path)
+                .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.ENRICH_STREAM_CHECKPOINT}")
+                .option("mergeSchema", "true")
+                .outputMode("append")
+                .queryName(self.ENRICH_QUERY_NAME)
+                .trigger(processingTime=SparkConfig.ENRICH_STREAM_TRIGGER)
+                .start()
+            )
+        except Exception as e:
+            # If concurrent start detected, bind to the existing one
+            if "SparkConcurrentModificationException" in str(e) or "CONCURRENT_QUERY" in str(e):
+                logger.warning("Concurrent start detected for enrichment stream; reusing active query")
+                existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
+                if existing and existing.isActive:
+                    self.enrich_query = existing
+                    return
+            # Re-raise if it's another kind of error
+            raise
     
     def stop_streams(self) -> None:
         """Stop all streaming queries gracefully."""
