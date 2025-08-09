@@ -6,11 +6,14 @@ import io
 import json
 import datetime
 import sys
+import logging
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from minio import Minio
 from minio.error import S3Error
+
+logger = logging.getLogger(__name__)
 
 
 class MinioClient:
@@ -38,7 +41,7 @@ class MinioClient:
         elif minio_endpoint.startswith("https://"):
             minio_endpoint = minio_endpoint[8:]
 
-        print(f"MinIO ▶ Initializing with endpoint: {minio_endpoint}, bucket: {bucket}")
+        logger.info("MinIO ▶ Initializing with endpoint: %s, bucket: %s", minio_endpoint, bucket)
 
         self.client = Minio(
             minio_endpoint,
@@ -49,12 +52,12 @@ class MinioClient:
         self.bucket = bucket
         if not self.client.bucket_exists(bucket):
             self.client.make_bucket(bucket)
-            print(f"MinIO ▶ Created bucket: {bucket}")
+            logger.info("MinIO ▶ Created bucket: %s", bucket)
         else:
-            print(f"MinIO ▶ Using existing bucket: {bucket}")
+            logger.info("MinIO ▶ Using existing bucket: %s", bucket)
 
         # buffer & accounting
-        self._batch: list[dict] = []
+        self._batch = []
         self._current_bytes = 0       # approximate buffer size
         self._lock = threading.Lock()
 
@@ -119,11 +122,11 @@ class MinioClient:
     # ---- the heavy lift --------------------------------------------------- #
     def _upload_rows(self, rows: list[dict]) -> None:
         if not rows:
-            print("MinIO ▶ No rows to upload")
+            logger.debug("MinIO ▶ No rows to upload")
             return
 
-        print(f"MinIO ▶ Preparing to upload {len(rows)} rows")
-        print(f"MinIO ▶ Sample row: {rows[0] if rows else 'None'}")
+        logger.info("MinIO ▶ Preparing to upload %d rows", len(rows))
+        logger.debug("MinIO ▶ Sample row: %s", rows[0] if rows else None)
 
         df = pd.DataFrame(rows)
 
@@ -148,9 +151,9 @@ class MinioClient:
                 length=buf.getbuffer().nbytes,
                 content_type="application/octet-stream",
             )
-            print(f"MinIO ▶ wrote {len(rows)} rows • {self._get_buf_size_message(buf.getbuffer().nbytes)} → {object_key}")
+            logger.info("MinIO ▶ wrote %d rows • %s → %s", len(rows), self._get_buf_size_message(buf.getbuffer().nbytes), object_key)
         except S3Error as e:
-            print("MinIO upload error:", e)
+            logger.error("MinIO upload error: %s", e)
 
     # ------------------------------------------------------------------ #
     # graceful shutdown

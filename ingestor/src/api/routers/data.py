@@ -24,10 +24,10 @@ router = APIRouter(tags=["data"])
 async def get_data(state: IngestorStateDep):
     """Returns the buffered sensor data."""
     try:
-        print(f"Fetching {len(state.data_buffer)} buffered rows")
+        logger.debug("Fetching %d buffered rows", len(state.data_buffer))
         return list(state.data_buffer)
     except Exception as e:
-        logger.error(f"Error fetching data: {str(e)}")
+        logger.error("Error fetching data: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -35,7 +35,9 @@ async def get_data(state: IngestorStateDep):
 async def get_connections(state: IngestorStateDep):
     """Get all connection configurations."""
     try:
-        print(f"Fetching {len(state.connection_configs)} connection configurations")
+        logger.debug(
+            "Fetching %d connection configurations", len(state.connection_configs)
+        )
         return {
             "status": "success",
             "data": {

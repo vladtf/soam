@@ -1,9 +1,13 @@
 import json
 import threading
+import logging
 from collections import deque
 import paho.mqtt.client as mqtt
 from minio import S3Error
 from src.storage.minio_client import MinioClient
+
+
+logger = logging.getLogger(__name__)
 
 
 class MQTTClientHandler:
@@ -21,7 +25,7 @@ class MQTTClientHandler:
 
     def on_connect(self, client, userdata, flags, rc):
         try:
-            print("Connected to MQTT broker with result code", rc)
+            logger.info("Connected to MQTT broker with result code %s", rc)
             client.subscribe(self.topic)
         except Exception as e:
             self._handle_connection_error(e)
@@ -32,19 +36,19 @@ class MQTTClientHandler:
             try:
                 payload: dict = json.loads(msg.payload.decode("utf-8"))
                 self.data_buffer.append(payload)
-                print("Received message:", payload)
+                logger.debug("Received message: %s", payload)
 
                 # Add to MinIO buffer (may not upload immediately)
                 self.minio_client.add_row(payload)
-                print(f"Added data to MinIO buffer.")
+                logger.debug("Added data to MinIO buffer")
                 self.messages_processed.inc()  # Increment processed messages counter
             except S3Error as s3e:
-                print(f"MinIO error: {s3e}")
+                logger.error("MinIO error: %s", s3e)
             except Exception as e:
-                print("Error processing message:", e)
+                logger.exception("Error processing message: %s", e)
 
     def _handle_connection_error(self, error):
-        print("Error in on_connect:", error)
+        logger.error("Error in on_connect: %s", error)
         self.last_connection_error = str(error)
         self.data_buffer.clear()
         self.data_buffer.append({"error": "Connection error"})
@@ -66,4 +70,4 @@ class MQTTClientHandler:
             try:
                 self.client.disconnect()
             except Exception as e:
-                print("Error disconnecting MQTT client:", e)
+                logger.warning("Error disconnecting MQTT client: %s", e)
