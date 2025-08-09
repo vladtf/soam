@@ -12,6 +12,7 @@ import AppNavbar from './components/AppNavbar';
 import { Suspense } from 'react';
 import { ConfigProvider } from './context/ConfigContext';
 import FeedbackPage from './pages/FeedbackPage';
+import MinioBrowserPage from './pages/MinioBrowserPage.tsx';
 
 function App() {
 
@@ -28,6 +29,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/map" element={<MapPage />} />
               <Route path="/feedback" element={<FeedbackPage />} />
+              <Route path="/minio" element={<MinioBrowserPage />} />
               <Route path="/new-events" element={<NewEventsPage />} /> {/* new route */}
             </Routes>
             <AppFooter />

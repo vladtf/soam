@@ -6,6 +6,7 @@ import sys
 from contextlib import asynccontextmanager
 from collections import deque
 from src.api import health_routes, feedback_routes
+from src.api import minio_routes
 from src.neo4j import building_routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -121,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(building_routes.router)
     app.include_router(spark_routes.router)
     app.include_router(health_routes.router)
+    app.include_router(minio_routes.router)
     app.include_router(feedback_routes.router)
     
     return app

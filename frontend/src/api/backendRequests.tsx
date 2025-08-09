@@ -186,3 +186,41 @@ export const fetchFeedbacks = (): Promise<FeedbackResponse[]> => {
   const { backendUrl } = getConfig();
   return doFetch<FeedbackResponse[]>(`${backendUrl}/feedback`);
 };
+
+// MinIO Browser API
+export interface MinioListResponse {
+  prefixes: string[];
+  files: string[];
+}
+
+export interface MinioObjectInfo {
+  key: string;
+  size: number;
+}
+
+export interface ParquetPreview {
+  schema: Record<string, string>;
+  rows: Record<string, unknown>[];
+}
+
+export const minioList = (prefix = ""): Promise<MinioListResponse> => {
+  const { backendUrl } = getConfig();
+  const url = new URL(`${backendUrl}/minio/ls`);
+  if (prefix) url.searchParams.set('prefix', prefix);
+  return doFetch<MinioListResponse>(url.toString());
+};
+
+export const minioFind = (prefix = ""): Promise<MinioObjectInfo[]> => {
+  const { backendUrl } = getConfig();
+  const url = new URL(`${backendUrl}/minio/find`);
+  if (prefix) url.searchParams.set('prefix', prefix);
+  return doFetch<MinioObjectInfo[]>(url.toString());
+};
+
+export const minioPreviewParquet = (key: string, limit = 50): Promise<ParquetPreview> => {
+  const { backendUrl } = getConfig();
+  const url = new URL(`${backendUrl}/minio/preview`);
+  url.searchParams.set('key', key);
+  url.searchParams.set('limit', String(limit));
+  return doFetch<ParquetPreview>(url.toString());
+};

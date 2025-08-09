@@ -9,6 +9,7 @@ from typing import Annotated
 
 from src.spark import SparkManager
 from src.neo4j.neo4j_manager import Neo4jManager
+from minio import Minio
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,27 @@ def get_neo4j_manager(config: Annotated[AppConfig, Depends(get_config)]) -> Neo4
     return manager
 
 
+@lru_cache()
+def get_minio_client(config: Annotated[AppConfig, Depends(get_config)]) -> Minio:
+    """Create a MinIO client using app configuration (cached)."""
+    endpoint = config.minio_endpoint
+    # Default to HTTP unless explicitly https://
+    secure = False
+    # Normalize endpoint and secure flag based on scheme
+    if endpoint.startswith("http://"):
+        endpoint = endpoint[len("http://"):]
+        secure = False
+    elif endpoint.startswith("https://"):
+        endpoint = endpoint[len("https://"):]
+        secure = True
+    return Minio(endpoint, config.minio_access_key, config.minio_secret_key, secure=secure)
+
+
+# Type aliases for dependency injection
+
+
 # Type aliases for dependency injection
 SparkManagerDep = Annotated[SparkManager, Depends(get_spark_manager)]
 Neo4jManagerDep = Annotated[Neo4jManager, Depends(get_neo4j_manager)]
 ConfigDep = Annotated[AppConfig, Depends(get_config)]
+MinioClientDep = Annotated[Minio, Depends(get_minio_client)]
