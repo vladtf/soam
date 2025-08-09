@@ -11,16 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.dependencies import get_config, get_minio_client, get_ingestor_state
 from src.api.routers import data, health
 from src.mqtt_client import MQTTClientHandler
+from src.logging_config import setup_logging
+from src.middleware import RequestIdMiddleware
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("ingestor.log")
-    ]
-)
+# Configure structured logging once
+setup_logging(service_name="ingestor", log_file="ingestor.log")
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +103,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan
     )
+    app.add_middleware(RequestIdMiddleware)
     
     # Enable CORS
     app.add_middleware(

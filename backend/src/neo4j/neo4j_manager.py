@@ -3,7 +3,6 @@ import logging
 import time
 from neo4j.exceptions import ServiceUnavailable, AuthError
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Neo4jManager:

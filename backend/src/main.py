@@ -12,18 +12,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_config
+from src.logging_config import setup_logging
+from src.middleware import RequestIdMiddleware
 from src.spark import spark_routes
 from src.database import create_tables
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("backend.log")
-    ]
-)
+# Configure structured logging once
+setup_logging(service_name="backend", log_file="backend.log")
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +103,8 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan
     )
+    # Request ID middleware and basic access logging
+    app.add_middleware(RequestIdMiddleware)
     
     # Enable CORS
     app.add_middleware(
