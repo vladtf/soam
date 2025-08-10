@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: simulator
+  name: simulator-temperature
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: simulator
+      app: simulator-temperature
   template:
     metadata:
       labels:
-        app: simulator
+        app: simulator-temperature
     spec:
       initContainers:
         - name: wait-for-mosquitto
@@ -21,25 +21,123 @@ spec:
         - name: simulator
           image: simulator:latest
           imagePullPolicy: IfNotPresent
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 200m
-              memory: 256Mi
           env:
             - name: MQTT_BROKER
               value: mosquitto
+            - name: SIMULATOR_TYPE
+              value: temperature
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
 ---
-apiVersion: v1
-kind: Service
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: simulator
+  name: simulator-traffic
 spec:
+  replicas: 1
   selector:
-    app: simulator
-  ports:
-    - port: 80
-      targetPort: 80
-  type: ClusterIP
+    matchLabels:
+      app: simulator-traffic
+  template:
+    metadata:
+      labels:
+        app: simulator-traffic
+    spec:
+      initContainers:
+        - name: wait-for-mosquitto
+          image: busybox:1.35
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
+      containers:
+        - name: simulator
+          image: simulator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MQTT_BROKER
+              value: mosquitto
+            - name: SIMULATOR_TYPE
+              value: traffic
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulator-air-quality
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simulator-air-quality
+  template:
+    metadata:
+      labels:
+        app: simulator-air-quality
+    spec:
+      initContainers:
+        - name: wait-for-mosquitto
+          image: busybox:1.35
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
+      containers:
+        - name: simulator
+          image: simulator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MQTT_BROKER
+              value: mosquitto
+            - name: SIMULATOR_TYPE
+              value: air_quality
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulator-smart-bin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simulator-smart-bin
+  template:
+    metadata:
+      labels:
+        app: simulator-smart-bin
+    spec:
+      initContainers:
+        - name: wait-for-mosquitto
+          image: busybox:1.35
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
+      containers:
+        - name: simulator
+          image: simulator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MQTT_BROKER
+              value: mosquitto
+            - name: SIMULATOR_TYPE
+              value: smart_bin
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

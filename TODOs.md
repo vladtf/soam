@@ -112,7 +112,8 @@ Below is a list of tasks that need to be completed for the project. This list wi
 
 ## Tasks
 
-- To handle the connection to the mqttt server before adding the new sensor (a device is a topic?)
+- To handle the connection to the mqtt server before adding the new sensor (a device is a topic?)
 - To make the data integration store raw data in the minio and spark to stream the cleaned data to the silver layer and then to the gold layer after the aggregation.
 - To add input validation for the self-onboarding process to ensure data integrity.
 - To add input validation for feedback forms to ensure data integrity.
+- To add topic discovery mechanisms to identify available MQTT topics dynamically.
