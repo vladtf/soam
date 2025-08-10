@@ -1,6 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Container, Form, Button, Alert, Card, Table, Badge, Spinner } from 'react-bootstrap';
 import { submitFeedback, fetchFeedbacks, FeedbackData, FeedbackResponse } from '../api/backendRequests';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MESSAGE_MIN = 10;
+const MESSAGE_MAX = 2000;
+const MESSAGE_MAX_LINES = 50;
 
 const FeedbackPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -8,7 +13,11 @@ const FeedbackPage: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
+  // validation state
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
   // Feedback list state
   const [feedbacks, setFeedbacks] = useState<FeedbackResponse[]>([]);
   const [feedbacksLoading, setFeedbacksLoading] = useState(false);
@@ -31,24 +40,73 @@ const FeedbackPage: React.FC = () => {
     loadFeedbacks();
   }, []);
 
+  // reset success banner when user edits again
+  useEffect(() => {
+    if (submitted) setSubmitted(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, feedback]);
+
+  // ---- validation helpers ----
+  const validateEmail = (value: string): string | null => {
+    const v = value.trim();
+    if (!v) return 'Email is required.';
+    if (!EMAIL_REGEX.test(v)) return 'Please enter a valid email address.';
+    if (v.length > 254) return 'Email is too long.';
+    return null;
+  };
+
+  const validateMessage = (value: string): string | null => {
+    const v = value.replace(/\r\n/g, '\n'); // normalize newlines
+    const trimmed = v.trim();
+    if (!trimmed) return 'Feedback is required.';
+    if (trimmed.length < MESSAGE_MIN) return `Please provide at least ${MESSAGE_MIN} characters.`;
+    if (trimmed.length > MESSAGE_MAX) return `Feedback must be at most ${MESSAGE_MAX} characters.`;
+    const lines = v.split('\n').length;
+    if (lines > MESSAGE_MAX_LINES) return `Please keep it under ${MESSAGE_MAX_LINES} lines.`;
+    return null;
+  };
+
+  // live validation on change
+  const onEmailChange = (val: string) => {
+    setEmail(val);
+    setEmailError(validateEmail(val));
+  };
+  const onFeedbackChange = (val: string) => {
+    setFeedback(val);
+    setFeedbackError(validateMessage(val));
+  };
+
+  const charCount = feedback.length;
+  const canSubmit = useMemo(() => {
+    return !loading && !validateEmail(email) && !validateMessage(feedback);
+  }, [loading, email, feedback]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
-    
+
+    // final validation before submit
+    const eErr = validateEmail(email);
+    const fErr = validateMessage(feedback);
+    setEmailError(eErr);
+    setFeedbackError(fErr);
+    if (eErr || fErr) return;
+
+    setLoading(true);
     try {
       const feedbackData: FeedbackData = {
-        email,
-        message: feedback
+        email: email.trim(),
+        message: feedback.trim()
       };
-      
+
       await submitFeedback(feedbackData);
-      
+
       setSubmitted(true);
       setEmail('');
       setFeedback('');
-      
-      // Reload feedbacks to show the new submission
+      setEmailError(null);
+      setFeedbackError(null);
+
       await loadFeedbacks();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit feedback');
@@ -66,12 +124,10 @@ const FeedbackPage: React.FC = () => {
   };
 
   const getEmailBadgeVariant = (email: string) => {
-    // Simple hash to determine badge color based on email
     const hash = email.split('').reduce((a, b) => {
       a = ((a << 5) - a) + b.charCodeAt(0);
       return a & a;
     }, 0);
-    
     const variants = ['primary', 'secondary', 'success', 'info', 'warning'];
     return variants[Math.abs(hash) % variants.length];
   };
@@ -79,7 +135,7 @@ const FeedbackPage: React.FC = () => {
   return (
     <Container className="mt-4">
       <h1>Feedback / Bug Report</h1>
-      
+
       {/* Feedback Form */}
       <Card className="mb-4">
         <Card.Header>
@@ -88,31 +144,55 @@ const FeedbackPage: React.FC = () => {
         <Card.Body>
           {submitted && <Alert variant="success">Feedback submitted successfully!</Alert>}
           {error && <Alert variant="danger">{error}</Alert>}
-          <Form onSubmit={handleSubmit}>
+          <Form onSubmit={handleSubmit} noValidate>
             <Form.Group controlId="feedbackEmail" className="mb-3">
               <Form.Label>Email address</Form.Label>
-              <Form.Control 
-                type="email" 
-                placeholder="Enter your email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
+              <Form.Control
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => onEmailChange(e.target.value)}
+                onBlur={(e) => setEmailError(validateEmail(e.target.value))}
+                isInvalid={!!emailError}
                 disabled={loading}
+                autoComplete="email"
+                inputMode="email"
+                maxLength={254}
+                required
               />
+              <Form.Control.Feedback type="invalid">
+                {emailError}
+              </Form.Control.Feedback>
             </Form.Group>
-            <Form.Group controlId="feedbackMessage" className="mb-3">
+
+            <Form.Group controlId="feedbackMessage" className="mb-2">
               <Form.Label>Feedback / Bug Description</Form.Label>
-              <Form.Control 
-                as="textarea" 
-                rows={5} 
-                placeholder="Describe your feedback or bug here" 
-                value={feedback} 
-                onChange={(e) => setFeedback(e.target.value)} 
-                required 
+              <Form.Control
+                as="textarea"
+                rows={5}
+                placeholder="Describe your feedback or bug here"
+                value={feedback}
+                onChange={(e) => onFeedbackChange(e.target.value)}
+                onBlur={(e) => setFeedbackError(validateMessage(e.target.value))}
+                isInvalid={!!feedbackError}
                 disabled={loading}
+                maxLength={MESSAGE_MAX}
+                required
               />
+              <div className="d-flex justify-content-between">
+                <Form.Control.Feedback type="invalid">
+                  {feedbackError}
+                </Form.Control.Feedback>
+                <small className="text-muted ms-auto">
+                  {charCount}/{MESSAGE_MAX}
+                </small>
+              </div>
+              <Form.Text className="text-muted">
+                Tips: include steps to reproduce, expected vs. actual behavior, and any IDs/log snippets.
+              </Form.Text>
             </Form.Group>
-            <Button variant="primary" type="submit" disabled={loading}>
+
+            <Button variant="primary" type="submit" disabled={!canSubmit}>
               {loading ? 'Submitting...' : 'Submit Feedback'}
             </Button>
           </Form>
@@ -123,9 +203,9 @@ const FeedbackPage: React.FC = () => {
       <Card>
         <Card.Header className="d-flex justify-content-between align-items-center">
           <h5 className="mb-0">Previous Feedback Submissions</h5>
-          <Button 
-            variant="outline-primary" 
-            size="sm" 
+          <Button
+            variant="outline-primary"
+            size="sm"
             onClick={loadFeedbacks}
             disabled={feedbacksLoading}
           >
@@ -138,7 +218,7 @@ const FeedbackPage: React.FC = () => {
               {feedbacksError}
             </Alert>
           )}
-          
+
           {feedbacksLoading ? (
             <div className="text-center py-4">
               <Spinner animation="border" role="status">
@@ -149,9 +229,7 @@ const FeedbackPage: React.FC = () => {
           ) : feedbacks.length === 0 ? (
             <div className="text-center py-4">
               <h6>No feedback submitted yet</h6>
-              <p className="text-muted mb-0">
-                Submitted feedback will appear here.
-              </p>
+              <p className="text-muted mb-0">Submitted feedback will appear here.</p>
             </div>
           ) : (
             <>
@@ -186,11 +264,13 @@ const FeedbackPage: React.FC = () => {
                         </small>
                       </td>
                       <td>
-                        <div style={{ 
-                          maxWidth: '400px', 
-                          wordWrap: 'break-word',
-                          whiteSpace: 'pre-wrap'
-                        }}>
+                        <div
+                          style={{
+                            maxWidth: '400px',
+                            wordWrap: 'break-word',
+                            whiteSpace: 'pre-wrap'
+                          }}
+                        >
                           {feedbackItem.message}
                         </div>
                       </td>
