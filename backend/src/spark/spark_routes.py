@@ -49,6 +49,19 @@ async def get_temperature_alerts(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/enrichment-summary", response_model=ApiResponse)
+async def get_enrichment_summary(
+    spark_manager: SparkManagerDep,
+    minutes: int = Query(10, ge=1, le=1440, description="Lookback window in minutes")
+):
+    """Summarize enrichment inputs and recent activity (registered devices, recent sensors, matches)."""
+    try:
+        return spark_manager.get_enrichment_summary(minutes)
+    except Exception as e:
+        logger.error(f"Error fetching enrichment summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/test/computation", response_model=SparkTestResult)
 async def test_spark_computation(spark_manager: SparkManagerDep):
     """Test Spark with a basic computation."""

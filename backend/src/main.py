@@ -5,6 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 from collections import deque
 from src.api import health_routes, feedback_routes
+from src.api import device_routes
 from src.api import normalization_routes
 from src.api import dashboard_tiles_routes
 from src.api import minio_routes
@@ -150,6 +151,7 @@ def create_app() -> FastAPI:
     app.include_router(spark_routes.router)
     app.include_router(health_routes.router)
     app.include_router(minio_routes.router)
+    app.include_router(device_routes.router)
     app.include_router(feedback_routes.router)
     app.include_router(normalization_routes.router)
     app.include_router(computation_routes.router)

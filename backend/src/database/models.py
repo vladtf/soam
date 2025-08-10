@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for application storage.
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.sql import func
 from src.database.database import Base
 
@@ -113,6 +113,35 @@ class DashboardTile(Base):
             "viz_type": self.viz_type,
             "config": cfg,
             "layout": lay,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Device(Base):
+    """Registered device allowed for enrichment and downstream processing."""
+    __tablename__ = "devices"
+    __table_args__ = (
+        UniqueConstraint('sensor_id', 'ingestion_id', name='uq_device_sensor_ingestion'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    sensor_id = Column(String(255), nullable=False)
+    ingestion_id = Column(String(255), nullable=True)
+    name = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "sensor_id": self.sensor_id,
+            "ingestion_id": self.ingestion_id,
+            "name": self.name,
+            "description": self.description,
             "enabled": self.enabled,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

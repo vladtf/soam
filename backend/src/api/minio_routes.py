@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, Any, List
+from pydantic import BaseModel
 
 from src.api.dependencies import ConfigDep, MinioClientDep
 from src.minio.minio_browser import MinioBrowser
@@ -45,5 +46,45 @@ def preview_parquet(
 ) -> Dict[str, Any]:
     try:
         return _browser(config, client).preview_parquet(key=key, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class DeleteKeysPayload(BaseModel):
+    keys: List[str]
+
+
+@router.delete("/object")
+def delete_object(
+    config: ConfigDep,
+    client: MinioClientDep,
+    key: str = Query(..., description="Single object key to delete"),
+) -> Dict[str, Any]:
+    try:
+        return _browser(config, client).delete_object(key)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/delete")
+def delete_objects(
+    config: ConfigDep,
+    client: MinioClientDep,
+    payload: DeleteKeysPayload,
+) -> Dict[str, Any]:
+    try:
+        return _browser(config, client).delete_objects(payload.keys)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/prefix")
+def delete_prefix(
+    config: ConfigDep,
+    client: MinioClientDep,
+    prefix: str = Query(..., description="Delete all objects under this prefix"),
+) -> Dict[str, Any]:
+    try:
+        return _browser(config, client).delete_prefix(prefix)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

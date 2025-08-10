@@ -73,6 +73,12 @@ class SparkManager:
         self.streaming_manager.ensure_streams_running()
         return self.data_access.get_temperature_alerts(since_minutes)
 
+    def get_enrichment_summary(self, minutes: int = 10) -> Dict[str, Any]:
+        """Summarize enrichment inputs and recent activity."""
+        # Ensure enrichment has been attempted
+        self.streaming_manager.ensure_streams_running()
+        return self.data_access.get_enrichment_summary(minutes)
+
     # ================================================================
     # Testing and Diagnostics
     # ================================================================
