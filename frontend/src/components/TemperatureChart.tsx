@@ -23,14 +23,14 @@ const TemperatureChart: React.FC<TemperatureChartProps> = ({
   onTimeRangeChange 
 }) => {
   return (
-    <Card className="mb-3">
-      <Card.Body>
+    <Card className="mb-3 shadow-sm border-body">
+      <Card.Body className="bg-body-tertiary">
         <Card.Title>
           <FaThermometerHalf className="me-2" /> Hourly Average Temperature
         </Card.Title>
         {/* Updated select for time range with more options */}
         <div className="mb-3">
-          <label htmlFor="tempRangeSelect" className="form-label">Select Time Range:</label>
+          <label htmlFor="tempRangeSelect" className="form-label text-body-secondary">Select Time Range:</label>
           <select
             id="tempRangeSelect"
             value={timeRange}
@@ -46,7 +46,7 @@ const TemperatureChart: React.FC<TemperatureChartProps> = ({
           </select>
         </div>
         {loading ? (
-          <div>Loading...</div>
+          <div className="text-body-secondary">Loading...</div>
         ) : (
           // Use ResponsiveContainer to fill the entire card
           <ResponsiveContainer width="100%" height={400}>

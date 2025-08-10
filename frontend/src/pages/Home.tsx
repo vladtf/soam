@@ -22,11 +22,11 @@ const Home: React.FC = () => {
         <h1>Welcome to Smart City Middleware</h1>
       </div>
 
-      <Container className="mt-4">
+      <Container className="pt-3 pb-4">
         {/* Overview Cards */}
-        <Row>
+        <Row className="g-3">
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaChartLine /> Real-Time Sensor Data</Card.Title>
                 <Card.Text>
@@ -37,7 +37,7 @@ const Home: React.FC = () => {
             </Card>
           </Col>
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaSitemap /> Ontology Viewer</Card.Title>
                 <Card.Text>
@@ -48,7 +48,7 @@ const Home: React.FC = () => {
             </Card>
           </Col>
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaTachometerAlt /> Dashboard</Card.Title>
                 <Card.Text>
@@ -58,10 +58,10 @@ const Home: React.FC = () => {
               </Card.Body>
             </Card>
           </Col>
-        </Row>
-        <Row>
+    </Row>
+    <Row className="g-3">
           <Col md={4}>
-            <Card className="mb-4">
+      <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaMapMarkedAlt /> Interactive Map</Card.Title>
                 <Card.Text>
@@ -72,7 +72,7 @@ const Home: React.FC = () => {
             </Card>
           </Col>
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaChartBar /> Grafana</Card.Title>
                 <Card.Text>
@@ -83,7 +83,7 @@ const Home: React.FC = () => {
             </Card>
           </Col>
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaDatabase /> Prometheus</Card.Title>
                 <Card.Text>
@@ -93,10 +93,10 @@ const Home: React.FC = () => {
               </Card.Body>
             </Card>
           </Col>
-        </Row>
-        <Row>
+    </Row>
+    <Row className="g-3">
           <Col md={4}>
-            <Card className="mb-4">
+      <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaCloud /> MinIO</Card.Title>
                 <Card.Text>
@@ -107,7 +107,7 @@ const Home: React.FC = () => {
             </Card>
           </Col>
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaServer /> Spark Master</Card.Title>
                 <Card.Text>
@@ -118,9 +118,9 @@ const Home: React.FC = () => {
             </Card>
           </Col>
         </Row>
-        <Row>
+        <Row className="g-3">
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaProjectDiagram /> Neo4j</Card.Title>
                 <Card.Text>
@@ -131,7 +131,7 @@ const Home: React.FC = () => {
             </Card>
           </Col>
           <Col md={4}>
-            <Card className="mb-4">
+            <Card className="mb-3 shadow-sm border-body">
               <Card.Body>
                 <Card.Title><FaDocker /> cAdvisor</Card.Title>
                 <Card.Text>
@@ -146,7 +146,7 @@ const Home: React.FC = () => {
         {/* Information Section */}
         <Row className="mb-4">
           <Col>
-            <Card>
+            <Card className="shadow-sm border-body">
               <Card.Body>
                 <Card.Title>About Our Platform</Card.Title>
                 <Card.Text>

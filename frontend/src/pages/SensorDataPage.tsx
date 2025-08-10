@@ -30,16 +30,16 @@ const SensorDataPage: React.FC = () => {
     }, [setError]);
 
     return (
-        <Container className="mt-3">
+        <Container className="pt-3 pb-4">
             <ConnectionStatus />
-            <Row>
+            <Row className="g-3">
                 <Col md={6}>
                     <SensorForm dataSchema={dataSchema} />
                 </Col>
                 <Col md={6}>
-                    <h1>Sensor Data</h1>
+                    <h1 className="h3 mb-3">Sensor Data</h1>
                     {data && data.length > 0 ? (
-                        <div style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', maxHeight: '70vh', overflowY: 'auto' }}>
+                        <div className="p-2 border rounded bg-body-tertiary" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
                             <ReactJson src={data} theme="tomorrow" collapsed={false} />
                         </div>
                     ) : (

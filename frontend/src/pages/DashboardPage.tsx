@@ -5,6 +5,7 @@ import StatisticsCards from '../components/StatisticsCards';
 import TemperatureChart from '../components/TemperatureChart';
 import SparkApplicationsCard from '../components/SparkApplicationsCard';
 import TemperatureAlertsCard from '../components/TemperatureAlertsCard';
+import PageHeader from '../components/PageHeader';
 
 const DashboardPage: React.FC = () => {
   const {
@@ -15,18 +16,30 @@ const DashboardPage: React.FC = () => {
     sparkMasterStatus,
     loadingSparkStatus,
     temperatureAlerts,
-    loadingAlerts
+  loadingAlerts,
+  lastUpdated,
+  autoRefresh,
+  setAutoRefresh,
+  refreshAll,
   } = useDashboardData();
 
   return (
-    <Container className="mt-3">
-      <h1>Dashboard</h1>
+    <Container className="pt-3 pb-4">
+      <PageHeader
+        title="Dashboard"
+        subtitle="Overview of key metrics and cluster status"
+        onRefresh={refreshAll}
+        refreshing={loading || loadingSparkStatus || loadingAlerts}
+        autoRefresh={autoRefresh}
+        onToggleAutoRefresh={setAutoRefresh}
+        lastUpdated={lastUpdated}
+      />
       
       {/* Statistics Cards (static charts) */}
       <StatisticsCards />
       
       {/* Temperature Chart */}
-      <Row className="mt-4">
+  <Row className="g-3 mt-1">
         <Col md={12}>
           <TemperatureChart
             data={averageTemperature}
@@ -38,7 +51,7 @@ const DashboardPage: React.FC = () => {
       </Row>
       
       {/* Spark Applications */}
-      <Row className="mt-4">
+  <Row className="g-3 mt-1">
         <Col md={12}>
           <SparkApplicationsCard
             sparkMasterStatus={sparkMasterStatus}
@@ -48,7 +61,7 @@ const DashboardPage: React.FC = () => {
       </Row>
       
       {/* Temperature Alerts */}
-      <Row className="mt-4">
+  <Row className="g-3 mt-1">
         <Col md={12}>
           <TemperatureAlertsCard
             alerts={temperatureAlerts}

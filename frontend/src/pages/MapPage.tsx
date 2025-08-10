@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Container } from 'react-bootstrap';
+import { Button, ButtonGroup, Container } from 'react-bootstrap';
 import NewBuildingModal from '../components/NewBuildingModal';
 import { postNewBuilding, fetchBuildings } from '../api/backendRequests';
 import { Building } from '../models/Building';
+import PageHeader from '../components/PageHeader';
+import { useTheme } from '../context/ThemeContext';
+
+type MapClickEvent = { latlng: { lat: number; lng: number } };
 
 // Fix Leaflet default marker icons issue in React
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,7 +22,37 @@ L.Icon.Default.mergeOptions({
 
 
 
+type BaseMapMode = 'auto' | 'light' | 'dark';
+
+function getInitialBasemapMode(): BaseMapMode {
+  try {
+    const v = localStorage.getItem('basemapMode');
+    if (v === 'auto' || v === 'light' || v === 'dark') return v;
+  } catch {
+    // ignore
+  }
+  return 'auto';
+}
+
+function basemapFor(mode: BaseMapMode, theme: 'light' | 'dark') {
+  const effective = mode === 'auto' ? theme : mode;
+  if (effective === 'dark') {
+    return {
+      // CartoDB Dark Matter
+      url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    };
+  }
+  return {
+    // Standard OSM
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="http://osm.org/copyright">OSM</a> contributors',
+  };
+}
+
 const MapPage: React.FC = () => {
+  const { theme } = useTheme();
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedLat, setSelectedLat] = useState(0);
@@ -27,6 +61,9 @@ const MapPage: React.FC = () => {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('');
+  const [basemapMode, setBasemapMode] = useState<BaseMapMode>(getInitialBasemapMode);
+
+  const tile = useMemo(() => basemapFor(basemapMode, theme), [basemapMode, theme]);
 
   useEffect(() => {
     loadBuildings();
@@ -51,7 +88,7 @@ const MapPage: React.FC = () => {
   // Inner component to handle map click events.
   const MapClickHandler: React.FC<{ onClick: (lat: number, lng: number) => void }> = ({ onClick }) => {
     useMapEvents({
-      click(e) {
+      click(e: MapClickEvent) {
         onClick(e.latlng.lat, e.latlng.lng);
       }
     });
@@ -81,13 +118,31 @@ const MapPage: React.FC = () => {
 
 
   return (
-    <Container className="mt-3">
-      <h1>Building Map</h1>
+  <Container className="pt-3 pb-4">
+      <PageHeader
+        title="Building Map"
+        right={
+      <ButtonGroup size="sm" aria-label="Basemap mode">
+            {(['auto', 'light', 'dark'] as BaseMapMode[]).map((m) => (
+              <Button
+                key={m}
+                variant={basemapMode === m ? 'primary' : 'outline-secondary'}
+                onClick={() => {
+                  setBasemapMode(m);
+                  try { localStorage.setItem('basemapMode', m); } catch { /* ignore */ }
+                }}
+        title={`Basemap: ${m}`}
+        aria-pressed={basemapMode === m}
+        aria-label={`Basemap ${m}${basemapMode === m ? ' (selected)' : ''}`}
+              >
+                {m[0].toUpperCase() + m.slice(1)}
+              </Button>
+            ))}
+          </ButtonGroup>
+        }
+      />
       <MapContainer center={[44.436170, 26.102765]} zoom={13} style={{ height: '80vh', width: '100%' }}>
-        <TileLayer
-          attribution='&copy; <a href="http://osm.org/copyright">OSM</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer attribution={tile.attribution} url={tile.url} />
         {buildings.map((b, i) => (
           <Marker key={i} position={[b.lat, b.lng]}>
             <Popup>{b.name}</Popup>

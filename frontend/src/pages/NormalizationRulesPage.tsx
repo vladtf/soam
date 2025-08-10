@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Form, Row, Table, Spinner } from 'react-bootstrap';
+import { Button, Card, Col, Form, Row, Table, Spinner, Pagination, Breadcrumb } from 'react-bootstrap';
 import {
   NormalizationRule,
   listNormalizationRules,
@@ -8,10 +8,13 @@ import {
   deleteNormalizationRule,
 } from '../api/backendRequests';
 import { useError } from '../context/ErrorContext';
+import { useTheme } from '../context/ThemeContext';
 
 const emptyForm = { raw_key: '', canonical_key: '', enabled: true };
 
 const NormalizationRulesPage: React.FC = () => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const { setError } = useError();
   const [rules, setRules] = useState<NormalizationRule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -20,6 +23,10 @@ const NormalizationRulesPage: React.FC = () => {
   const [filter, setFilter] = useState('');
   const [errors, setErrors] = useState<{ raw_key?: string; canonical_key?: string }>({});
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortKey, setSortKey] = useState<'raw_key' | 'canonical_key' | 'enabled' | 'applied_count' | 'last_applied_at' | 'updated_at'>('raw_key');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   // Validation rules
   const RAW_KEY_MAX = 128;
@@ -78,6 +85,38 @@ const NormalizationRulesPage: React.FC = () => {
   const totalCount = rules.length;
   const visibleCount = filtered.length;
 
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      const av = (a as any)[sortKey];
+      const bv = (b as any)[sortKey];
+      // Normalize undefined/null
+      const A = av ?? '';
+      const B = bv ?? '';
+      if (typeof A === 'number' && typeof B === 'number') return (A - B) * dir;
+      const as = String(A).toLowerCase();
+      const bs = String(B).toLowerCase();
+      if (as < bs) return -1 * dir;
+      if (as > bs) return 1 * dir;
+      return 0;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * pageSize;
+  const paged = useMemo(() => sorted.slice(startIdx, startIdx + pageSize), [sorted, startIdx, pageSize]);
+
+  const setSort = (key: typeof sortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
   const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleString() : '');
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -134,12 +173,19 @@ const NormalizationRulesPage: React.FC = () => {
   };
 
   return (
-    <div className="container mt-4">
-      <Row>
+    <div className="container pt-3 pb-4">
+      <Row className="g-2 mb-2">
+        <Col>
+          <Breadcrumb className="mb-0">
+            <Breadcrumb.Item active>Normalization</Breadcrumb.Item>
+          </Breadcrumb>
+        </Col>
+      </Row>
+      <Row className="g-3">
         <Col md={5}>
-          <Card>
-            <Card.Header>{editingId ? 'Edit Rule' : 'Add Rule'}</Card.Header>
-            <Card.Body>
+          <Card className="shadow-sm border-body">
+            <Card.Header className="bg-body-tertiary">{editingId ? 'Edit Rule' : 'Add Rule'}</Card.Header>
+            <Card.Body className="bg-body-tertiary">
               <Form onSubmit={onSubmit}>
                 <Form.Group className="mb-3">
                   <Form.Label>Raw Key</Form.Label>
@@ -161,7 +207,7 @@ const NormalizationRulesPage: React.FC = () => {
                     }}
                     required
                   />
-                  <Form.Text className="text-muted">
+                  <Form.Text className="text-body-secondary">
                     Original column name from incoming data. Lowercased automatically on backend.
                   </Form.Text>
                   <Form.Control.Feedback type="invalid">{errors.raw_key}</Form.Control.Feedback>
@@ -185,7 +231,7 @@ const NormalizationRulesPage: React.FC = () => {
                     }}
                     required
                   />
-                  <Form.Text className="text-muted">
+                  <Form.Text className="text-body-secondary">
                     Start with a letter. Use only letters, numbers, and underscore. Max {CANON_KEY_MAX} chars.
                   </Form.Text>
                   <Form.Control.Feedback type="invalid">{errors.canonical_key}</Form.Control.Feedback>
@@ -218,17 +264,28 @@ const NormalizationRulesPage: React.FC = () => {
           </Card>
         </Col>
         <Col md={7}>
-          <Card>
-            <Card.Header>
+          <Card className="shadow-sm border-body">
+            <Card.Header className="bg-body-tertiary">
               <div className="d-flex flex-wrap gap-2 align-items-center justify-content-between">
                 <div className="d-flex align-items-center gap-2">
                   <strong>Normalization Rules</strong>
-                  <small className="text-muted">({visibleCount} of {totalCount})</small>
+                  <small className="text-body-secondary">({visibleCount} of {totalCount})</small>
                   {lastRefreshed && (
-                    <small className="text-muted">• Updated {lastRefreshed.toLocaleTimeString()}</small>
+                    <small className="text-body-secondary">• Updated {lastRefreshed.toLocaleTimeString()}</small>
                   )}
                 </div>
                 <div className="d-flex align-items-center gap-2">
+                  <Form.Select
+                    size="sm"
+                    style={{ width: 90 }}
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                    aria-label="Rows per page"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                  </Form.Select>
                   <Form.Control
                     size="sm"
                     style={{ maxWidth: 260 }}
@@ -259,21 +316,21 @@ const NormalizationRulesPage: React.FC = () => {
               </div>
             </Card.Header>
             <Card.Body>
-              <Table striped hover responsive>
-                <thead>
+              <Table striped hover responsive variant={isDark ? 'dark' : undefined}>
+                <thead className={isDark ? 'table-dark' : 'table-light'}>
                   <tr>
-                    <th>ID</th>
-                    <th>Raw Key</th>
-                    <th>Canonical Key</th>
-                    <th>Enabled</th>
-                    <th>Applied</th>
-                    <th>Last Applied</th>
-                    <th>Updated</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>ID</th>
+                    <th role="button" onClick={() => setSort('raw_key')}>Raw Key {sortKey==='raw_key' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
+                    <th role="button" onClick={() => setSort('canonical_key')}>Canonical Key {sortKey==='canonical_key' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
+                    <th role="button" onClick={() => setSort('enabled')}>Enabled {sortKey==='enabled' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
+                    <th role="button" onClick={() => setSort('applied_count')}>Applied {sortKey==='applied_count' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
+                    <th role="button" onClick={() => setSort('last_applied_at')}>Last Applied {sortKey==='last_applied_at' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
+                    <th role="button" onClick={() => setSort('updated_at')}>Updated {sortKey==='updated_at' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((r) => (
+                  {paged.map((r) => (
                     <tr key={r.id} style={{ opacity: r.enabled ? 1 : 0.7 }}>
                       <td>{r.id}</td>
                       <td>{r.raw_key}</td>
@@ -309,6 +366,14 @@ const NormalizationRulesPage: React.FC = () => {
                   ))}
                 </tbody>
               </Table>
+              <div className="d-flex justify-content-between align-items-center mt-2">
+                <div className="text-body-secondary small">Showing {startIdx + 1}-{Math.min(startIdx + pageSize, sorted.length)} of {sorted.length}</div>
+                <Pagination size="sm" className="mb-0">
+                  <Pagination.Prev onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} />
+                  <Pagination.Item active>{currentPage}</Pagination.Item>
+                  <Pagination.Next onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} />
+                </Pagination>
+              </div>
               {loading && <div>Loading...</div>}
               {!loading && filtered.length === 0 && <div>No rules found.</div>}
             </Card.Body>

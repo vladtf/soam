@@ -42,8 +42,8 @@ const ConnectionStatus: React.FC = () => {
 
     return (
         <>
-            <Card className="mb-3">
-                <Card.Header>Connection Status</Card.Header>
+            <Card className="mb-3 shadow-sm border-body">
+                <Card.Header className="bg-body-tertiary">Connection Status</Card.Header>
                 <ListGroup variant="flush">
                     {connections.length > 0 ? (
                         connections.map((info, idx) => {
@@ -84,10 +84,10 @@ const ConnectionStatus: React.FC = () => {
                             );
                         })
                     ) : (
-                        <ListGroup.Item>No connections configured</ListGroup.Item>
+            <ListGroup.Item className="text-body-secondary">No connections configured</ListGroup.Item>
                     )}
                 </ListGroup>
-                <Card.Footer>
+        <Card.Footer className="bg-body-tertiary">
                     <Button variant="secondary" onClick={() => setShowConfig(true)}>
                         Configure Connection
                     </Button>

@@ -133,12 +133,12 @@ const FeedbackPage: React.FC = () => {
   };
 
   return (
-    <Container className="mt-4">
-      <h1>Feedback / Bug Report</h1>
+    <Container className="pt-3 pb-4">
+      <h1 className="h3 mb-3">Feedback / Bug Report</h1>
 
       {/* Feedback Form */}
-      <Card className="mb-4">
-        <Card.Header>
+      <Card className="mb-4 shadow-sm border-body">
+        <Card.Header className="bg-body-tertiary">
           <h5 className="mb-0">Submit New Feedback</h5>
         </Card.Header>
         <Card.Body>
@@ -183,11 +183,11 @@ const FeedbackPage: React.FC = () => {
                 <Form.Control.Feedback type="invalid">
                   {feedbackError}
                 </Form.Control.Feedback>
-                <small className="text-muted ms-auto">
+                <small className="text-body-secondary ms-auto">
                   {charCount}/{MESSAGE_MAX}
                 </small>
               </div>
-              <Form.Text className="text-muted">
+              <Form.Text className="text-body-secondary">
                 Tips: include steps to reproduce, expected vs. actual behavior, and any IDs/log snippets.
               </Form.Text>
             </Form.Group>
@@ -200,8 +200,8 @@ const FeedbackPage: React.FC = () => {
       </Card>
 
       {/* Feedback List */}
-      <Card>
-        <Card.Header className="d-flex justify-content-between align-items-center">
+      <Card className="shadow-sm border-body">
+        <Card.Header className="d-flex justify-content-between align-items-center bg-body-tertiary">
           <h5 className="mb-0">Previous Feedback Submissions</h5>
           <Button
             variant="outline-primary"
@@ -227,13 +227,13 @@ const FeedbackPage: React.FC = () => {
               <p className="mt-2">Loading feedback submissions...</p>
             </div>
           ) : feedbacks.length === 0 ? (
-            <div className="text-center py-4">
+            <div className="text-center py-4 text-body-secondary">
               <h6>No feedback submitted yet</h6>
-              <p className="text-muted mb-0">Submitted feedback will appear here.</p>
+              <p className="text-body-secondary mb-0">Submitted feedback will appear here.</p>
             </div>
           ) : (
             <>
-              <p className="text-muted mb-3">
+              <p className="text-body-secondary mb-3">
                 Total submissions: <strong>{feedbacks.length}</strong>
               </p>
               <Table striped hover responsive>
@@ -259,7 +259,7 @@ const FeedbackPage: React.FC = () => {
                         </Badge>
                       </td>
                       <td>
-                        <small className="text-muted">
+                        <small className="text-body-secondary">
                           {formatDate(feedbackItem.created_at)}
                         </small>
                       </td>

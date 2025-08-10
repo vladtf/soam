@@ -50,10 +50,10 @@ const events = [
 const StatisticsCards: React.FC = () => {
   return (
     <>
-      <Row className="mt-4">
+      <Row className="g-3">
         <Col md={6}>
-          <Card className="mb-3">
-            <Card.Body>
+          <Card className="mb-3 shadow-sm border-body">
+            <Card.Body className="bg-body-tertiary">
               <Card.Title>
                 <FaChartLine className="me-2" /> Monthly Sensors Trend
               </Card.Title>
@@ -69,8 +69,8 @@ const StatisticsCards: React.FC = () => {
           </Card>
         </Col>
         <Col md={6}>
-          <Card className="mb-3">
-            <Card.Body>
+          <Card className="mb-3 shadow-sm border-body">
+            <Card.Body className="bg-body-tertiary">
               <Card.Title>
                 <FaMapMarkerAlt className="me-2" /> Sensor Distribution
               </Card.Title>
@@ -86,10 +86,10 @@ const StatisticsCards: React.FC = () => {
           </Card>
         </Col>
       </Row>
-      <Row className="mt-4">
+      <Row className="g-3 mt-1">
         <Col md={6}>
-          <Card className="mb-3">
-            <Card.Body>
+          <Card className="mb-3 shadow-sm border-body">
+            <Card.Body className="bg-body-tertiary">
               <Card.Title>
                 <FaThermometerHalf className="me-2" /> Status Distribution
               </Card.Title>
@@ -114,15 +114,15 @@ const StatisticsCards: React.FC = () => {
           </Card>
         </Col>
         <Col md={6}>
-          <Card className="mb-3">
-            <Card.Body>
+          <Card className="mb-3 shadow-sm border-body">
+            <Card.Body className="bg-body-tertiary">
               <Card.Title>
                 <FaBell className="me-2" /> Event Feed
               </Card.Title>
               <ListGroup variant="flush">
                 {events.map(event => (
                   <ListGroup.Item key={event.id}>
-                    <strong>{event.time}</strong>: {event.description}
+                    <strong className="text-body-secondary">{event.time}</strong>: {event.description}
                   </ListGroup.Item>
                 ))}
               </ListGroup>

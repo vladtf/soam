@@ -1,20 +1,64 @@
-import React from 'react';
-import { Navbar, Nav, Container, Button, Dropdown } from 'react-bootstrap';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Navbar, Nav, Container, Button, Dropdown, Badge } from 'react-bootstrap';
 import { FaCity, FaMoon, FaSun } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { getConfig } from '../config';
+import { fetchConnections } from '../api/backendRequests';
 
 const AppNavbar: React.FC = () => {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, mode, toggleMode } = useTheme();
   const { username, login, logout } = useAuth();
   const isDark = theme === 'dark';
+
+  // backend connectivity status
+  const [status, setStatus] = useState<'green' | 'yellow' | 'red'>('red');
+  const [envLabel, setEnvLabel] = useState<string>('');
+
+  useEffect(() => {
+    // derive env from config URL
+    try {
+      const { backendUrl } = getConfig();
+      if (backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1')) setEnvLabel('Local');
+      else if (/\.azure\.|\baksc\b|\.cloudapp\./i.test(backendUrl)) setEnvLabel('K8s');
+      else setEnvLabel('Dev');
+    } catch {
+      setEnvLabel('');
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ping = async () => {
+      try {
+        // Using connections API as a lightweight health probe
+        await fetchConnections();
+        if (!cancelled) setStatus('green');
+      } catch {
+        if (!cancelled) setStatus('red');
+      }
+    };
+    ping();
+    const id = setInterval(ping, 10000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
   const promptLogin = () => {
     const name = window.prompt('Enter your username (letters, numbers, dot, dash, underscore):', username ?? '');
     if (name) login(name);
   };
+  const initials = useMemo(() => (username ? username.trim().slice(0, 2).toUpperCase() : ''), [username]);
+
+  const StatusDot = (
+    <span
+      className="d-inline-block rounded-circle me-2"
+      style={{ width: 10, height: 10, backgroundColor: status === 'green' ? '#28a745' : status === 'yellow' ? '#ffc107' : '#dc3545' }}
+      aria-label={`Status: ${status}`}
+    />
+  );
+
   return (
-    <Navbar bg={isDark ? 'dark' : 'light'} variant={isDark ? 'dark' : 'light'} expand="lg">
+    <Navbar expand="lg" className="border-bottom border-body bg-body-tertiary">
       <Container>
           <Navbar.Brand as={Link} to="/">
             <FaCity className="me-2" /> SOAM
@@ -32,17 +76,26 @@ const AppNavbar: React.FC = () => {
               <Nav.Link as={Link} to="/feedback">Feedback</Nav.Link>
           </Nav>
           <Nav className="ms-auto align-items-center gap-2">
+            <div className="d-flex align-items-center text-body-secondary small">
+              {StatusDot}
+              {envLabel && <Badge bg="light" text="dark" className="me-2">{envLabel}</Badge>}
+            </div>
             <Button
               size="sm"
               variant={isDark ? 'outline-light' : 'outline-dark'}
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
+              onClick={toggleMode}
+              aria-label={mode === 'auto' ? 'Theme: Auto (system)' : `Theme: ${mode}`}
+              title={mode === 'auto' ? 'Theme: Auto (system)' : `Theme: ${mode}`}
             >
-              {isDark ? (<><FaSun className="me-1" /> Light</>) : (<><FaMoon className="me-1" /> Dark</>)}
+              {mode === 'auto' ? 'A' : isDark ? (<><FaSun className="me-1" /> Light</>) : (<><FaMoon className="me-1" /> Dark</>)}
             </Button>
             <Dropdown align="end">
-              <Dropdown.Toggle size="sm" variant={isDark ? 'outline-light' : 'outline-dark'}>
-                {username ? `@${username}` : 'Sign in'}
+              <Dropdown.Toggle size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} className="d-flex align-items-center" aria-label={username ? `User menu for ${username}` : 'User menu'}>
+                {username ? (
+                  <span className="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary text-white" style={{ width: 28, height: 28, fontSize: 12 }}>
+                    {initials}
+                  </span>
+                ) : 'Sign in'}
               </Dropdown.Toggle>
               <Dropdown.Menu>
                 {!username && (

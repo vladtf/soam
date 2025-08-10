@@ -36,10 +36,11 @@ export const useDashboardData = () => {
   
   // Time range for temperature data
   const [timeRange, setTimeRange] = useState<number>(24);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
 
   // Fetch temperature data
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchTemperature = async () => {
       try {
         const data = await fetchAverageTemperature();
         // Format the time_start field for proper display on the X-axis
@@ -55,18 +56,20 @@ export const useDashboardData = () => {
         console.error("Error fetching average temperature:", error);
         setError(error instanceof Error ? error.message : error);
       } finally {
-        if (loading) setLoading(false); // Only stop loading indicator after the first load
+        if (loading) setLoading(false);
+        setLastUpdated(new Date());
       }
     };
 
-    fetchData();
-    const interval = setInterval(fetchData, 15000); // Refresh every 15 seconds
-    return () => clearInterval(interval); // Cleanup interval on component unmount
-  }, [averageTemperature, loading, setError]);
+  useEffect(() => {
+    fetchTemperature();
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchTemperature, 15000);
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
 
   // Fetch Spark status
-  useEffect(() => {
-    const fetchSparkStatus = async () => {
+  const fetchSparkStatusNow = async () => {
       setLoadingSparkStatus(true);
       try {
         const data = await fetchSparkMasterStatus();
@@ -79,14 +82,15 @@ export const useDashboardData = () => {
       }
     };
 
-    fetchSparkStatus();
-    const interval = setInterval(fetchSparkStatus, 15000); // Fetch every 15 seconds
+  useEffect(() => {
+    fetchSparkStatusNow();
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchSparkStatusNow, 15000);
     return () => clearInterval(interval); // Cleanup interval on component unmount
-  }, [setError]);
+  }, [setError, autoRefresh]);
 
   // Fetch temperature alerts
-  useEffect(() => {
-    const fetchAlerts = async () => {
+  const fetchAlertsNow = async () => {
       try {
         const data = await fetchTemperatureAlerts();
         setTemperatureAlerts(data as TemperatureAlert[]);
@@ -98,10 +102,12 @@ export const useDashboardData = () => {
       }
     };
 
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 15000); // Poll every 15 seconds
-    return () => clearInterval(interval); // Cleanup interval on component unmount
-  }, [setError]);
+  useEffect(() => {
+    fetchAlertsNow();
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchAlertsNow, 15000);
+    return () => clearInterval(interval);
+  }, [setError, autoRefresh]);
 
   return {
     // Temperature data
@@ -109,6 +115,17 @@ export const useDashboardData = () => {
     loading,
     timeRange,
     setTimeRange,
+    lastUpdated,
+    autoRefresh,
+    setAutoRefresh,
+    refreshAll: async () => {
+      await Promise.all([
+        fetchTemperature(),
+        fetchSparkStatusNow(),
+        fetchAlertsNow(),
+      ]);
+      setLastUpdated(new Date());
+    },
     
     // Spark status
     sparkMasterStatus,

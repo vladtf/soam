@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, ListGroup, Button, Breadcrumb, Spinner, Table, Form, Card, InputGroup, Alert, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import PageHeader from '../components/PageHeader';
 import { minioList, minioPreviewParquet, MinioListResponse, ParquetPreview } from '../api/backendRequests';
 import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy } from 'react-icons/fa';
 
@@ -99,25 +100,25 @@ const MinioBrowserPage: React.FC = () => {
   const refresh = () => load(prefix);
 
   return (
-    <Container className="mt-3">
-      <Row className="mb-2 align-items-center">
-        <Col>
-          <h3 className="mb-0">MinIO Browser</h3>
-        </Col>
-        <Col xs="auto" className="d-flex gap-2">
-          <Button variant="outline-secondary" onClick={upOne} disabled={!prefix} title="Up one level">
-            <FaLevelUpAlt className="me-1" /> Up
-          </Button>
-          <Button variant="outline-primary" onClick={refresh} title="Refresh">
-            <FaSync className="me-1" /> Refresh
-          </Button>
-        </Col>
-      </Row>
+    <Container className="pt-3 pb-4">
+      <PageHeader
+        title="MinIO Browser"
+        right={
+          <div className="d-flex gap-2">
+            <Button variant="outline-secondary" onClick={upOne} disabled={!prefix} title="Up one level">
+              <FaLevelUpAlt className="me-1" /> Up
+            </Button>
+            <Button variant="outline-primary" onClick={refresh} title="Refresh">
+              <FaSync className="me-1" /> Refresh
+            </Button>
+          </div>
+        }
+      />
 
-      <Row className="mb-3">
+  <Row className="g-2 mb-3">
         <Col>
           <Breadcrumb>
-            <Breadcrumb.Item onClick={() => goTo('')} role="button">
+            <Breadcrumb.Item onClick={() => goTo('')} role="button" aria-label="Root" title="Root">
               <FaHome className="me-1" /> /
             </Breadcrumb.Item>
             {breadcrumbParts.map((b, i) => (
@@ -130,7 +131,7 @@ const MinioBrowserPage: React.FC = () => {
       </Row>
 
       {error && (
-        <Row className="mb-3">
+        <Row className="g-2 mb-3">
           <Col>
             <Alert variant="danger" className="mb-0">
               {error}
@@ -139,12 +140,17 @@ const MinioBrowserPage: React.FC = () => {
         </Row>
       )}
 
-      <Row>
-        <Col md={4} className="mb-3">
-          <Card>
+      <Row className="g-3">
+        <Col md={4}>
+          <Card className="shadow-sm border-body">
             <Card.Header className="d-flex align-items-center justify-content-between">
               <div>Browse</div>
-              {loading && <Spinner animation="border" size="sm" />}
+              {loading && (
+                <span role="status" aria-live="polite" className="d-inline-flex align-items-center">
+                  <Spinner animation="border" size="sm" aria-hidden="true" />
+                  <span className="visually-hidden ms-1">Loading...</span>
+                </span>
+              )}
             </Card.Header>
             <Card.Body>
               <InputGroup className="mb-2">
@@ -165,9 +171,9 @@ const MinioBrowserPage: React.FC = () => {
               />
 
               <div className="mb-2 fw-semibold">Folders</div>
-              <ListGroup variant="flush" className="mb-3">
+        <ListGroup variant="flush" className="mb-3">
                 {filteredFolders.length === 0 && (
-                  <ListGroup.Item className="text-muted">No folders</ListGroup.Item>
+          <ListGroup.Item className="text-body-secondary">No folders</ListGroup.Item>
                 )}
                 {filteredFolders.map((p) => {
                   const name = (p.split('/').filter(Boolean).pop() || p) + '/';
@@ -183,9 +189,9 @@ const MinioBrowserPage: React.FC = () => {
               </ListGroup>
 
               <div className="mb-2 fw-semibold">Files</div>
-              <ListGroup variant="flush">
+        <ListGroup variant="flush">
                 {filteredFiles.length === 0 && (
-                  <ListGroup.Item className="text-muted">No files</ListGroup.Item>
+          <ListGroup.Item className="text-body-secondary">No files</ListGroup.Item>
                 )}
                 {filteredFiles.map((f) => {
                   const name = f.split('/').pop() || f;
@@ -199,7 +205,7 @@ const MinioBrowserPage: React.FC = () => {
                         </OverlayTrigger>
                         {isParquet && <Badge bg="secondary" className="ms-2">parquet</Badge>}
                       </div>
-                      <Button size="sm" variant="outline-secondary" onClick={(e) => { e.stopPropagation(); previewParquet(f); }}>
+                      <Button size="sm" variant="outline-secondary" aria-label={`Preview ${name}`} onClick={(e) => { e.stopPropagation(); previewParquet(f); }}>
                         <FaEye className="me-1" /> Preview
                       </Button>
                     </ListGroup.Item>
@@ -209,8 +215,8 @@ const MinioBrowserPage: React.FC = () => {
             </Card.Body>
           </Card>
         </Col>
-        <Col md={8} className="mb-3">
-          <Card>
+        <Col md={8}>
+          <Card className="shadow-sm border-body">
             <Card.Header className="d-flex align-items-center justify-content-between">
               <div>
                 Preview {previewKey && (
@@ -218,15 +224,17 @@ const MinioBrowserPage: React.FC = () => {
                     <OverlayTrigger placement="top" overlay={<Tooltip>{previewKey}</Tooltip>}>
                       <Badge bg="light" text="dark" className="text-truncate" style={{ maxWidth: 420, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{previewKey}</Badge>
                     </OverlayTrigger>
-                    <Button size="sm" variant="outline-secondary" className="ms-2" onClick={() => { if (previewKey) navigator.clipboard?.writeText(previewKey); }}>
-                      <FaCopy />
-                    </Button>
+                    <OverlayTrigger placement="top" overlay={<Tooltip>Copy object key</Tooltip>}>
+                      <Button size="sm" variant="outline-secondary" className="ms-2" aria-label="Copy object key" onClick={() => { if (previewKey) navigator.clipboard?.writeText(previewKey); }}>
+                        <FaCopy />
+                      </Button>
+                    </OverlayTrigger>
                   </span>
                 )}
               </div>
               <div className="d-flex align-items-center gap-2">
                 <InputGroup size="sm" style={{ width: 140 }}>
-                  <InputGroup.Text>Rows</InputGroup.Text>
+                  <InputGroup.Text id="rows-label">Rows</InputGroup.Text>
                   <Form.Control
                     size="sm"
                     type="number"
@@ -234,17 +242,24 @@ const MinioBrowserPage: React.FC = () => {
                     max={500}
                     value={limit}
                     onChange={(e) => setLimit(Number(e.target.value))}
+                    aria-labelledby="rows-label"
+                    aria-label="Rows to preview"
                   />
                 </InputGroup>
-                <Button size="sm" variant="outline-primary" disabled={!previewKey} onClick={() => { if (previewKey) previewParquet(previewKey); }}>
+                <Button size="sm" variant="outline-primary" disabled={!previewKey} onClick={() => { if (previewKey) previewParquet(previewKey); }} aria-label="Reload preview" title="Reload preview">
                   <FaSync className="me-1" /> Reload
                 </Button>
               </div>
             </Card.Header>
-            <Card.Body>
-              {loading && previewKey && <Spinner animation="border" />}
+      <Card.Body>
+              {loading && previewKey && (
+                <span role="status" aria-live="polite" className="d-inline-flex align-items-center">
+                  <Spinner animation="border" aria-hidden="true" />
+                  <span className="visually-hidden ms-2">Loading preview…</span>
+                </span>
+              )}
               {!previewKey && (
-                <div className="text-muted">Select a Parquet file to preview.</div>
+        <div className="text-body-secondary">Select a Parquet file to preview.</div>
               )}
               {preview && (
                 <div style={{ overflowX: 'auto', maxHeight: 520 }}>

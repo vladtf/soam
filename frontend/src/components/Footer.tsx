@@ -4,11 +4,11 @@ import { FaGithub } from 'react-icons/fa';
 
 const AppFooter: React.FC = () => {
     return (
-        <Container>
+        <Container className="pt-3 pb-4">
             <Row>
-                <Col >
-                    <footer className="bg-dark text-white mt-5 p-2">
-                        <a href="https://github.com/vladtf/soam" target="_blank" rel="noopener noreferrer" className="text-white">
+                <Col>
+                    <footer className="bg-body-tertiary border-top border-body rounded-2 p-2 text-body">
+                        <a href="https://github.com/vladtf/soam" target="_blank" rel="noopener noreferrer" className="text-decoration-none">
                             <FaGithub /><span className="ms-2">Repository</span>
                         </a>
                     </footer>

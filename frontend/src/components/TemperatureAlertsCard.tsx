@@ -13,30 +13,27 @@ interface TemperatureAlertsCardProps {
   loading: boolean;
 }
 
-const TemperatureAlertsCard: React.FC<TemperatureAlertsCardProps> = ({ 
-  alerts, 
-  loading 
-}) => {
+const TemperatureAlertsCard: React.FC<TemperatureAlertsCardProps> = ({ alerts, loading }) => {
   return (
-    <Card className="mb-3">
-      <Card.Body>
+    <Card className="mb-3 shadow-sm border-body">
+      <Card.Body className="bg-body-tertiary">
         <Card.Title>
           <FaBell className="me-2" /> Temperature Alerts
         </Card.Title>
         {loading ? (
-          <div>Loading...</div>
+          <div className="text-body-secondary">Loading...</div>
         ) : alerts.length > 0 ? (
           <ListGroup variant="flush">
             {alerts.map((alert, index) => (
               <ListGroup.Item key={index}>
-                <strong>Sensor:</strong> {alert.sensorId} | 
-                <strong> Temp:</strong> {alert.temperature}°C | 
-                <strong> Time:</strong> {alert.event_time}
+                <strong>Sensor:</strong> {alert.sensorId} |{' '}
+                <strong>Temp:</strong> {alert.temperature}°C |{' '}
+                <strong>Time:</strong> <span className="text-body-secondary">{alert.event_time}</span>
               </ListGroup.Item>
             ))}
           </ListGroup>
         ) : (
-          <div>No alerts found.</div>
+          <div className="text-body-secondary">No alerts found.</div>
         )}
       </Card.Body>
     </Card>

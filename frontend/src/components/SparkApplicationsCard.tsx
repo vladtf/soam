@@ -60,7 +60,10 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
       <Card.Body>
         {loading ? (
           <div className="text-center py-4">
-            <Spinner animation="border" variant="primary" />
+            <span role="status" aria-live="polite" className="d-inline-flex align-items-center">
+              <Spinner animation="border" variant="primary" aria-hidden="true" />
+              <span className="visually-hidden ms-2">Loading…</span>
+            </span>
             <div className="mt-2">Loading Spark cluster information...</div>
           </div>
         ) : sparkMasterStatus?.activeapps && sparkMasterStatus.activeapps.length > 0 ? (

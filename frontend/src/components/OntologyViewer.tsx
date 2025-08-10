@@ -90,7 +90,9 @@ const OntologyViewer: React.FC = () => {
       const width = 800, height = 600;
       const svg = d3.select(svgRef.current)
         .attr("width", width)
-        .attr("height", height);
+        .attr("height", height)
+        // Use Bootstrap CSS variables so colors adapt to light/dark themes.
+        .style("color", "var(--bs-body-color)");
       svg.selectAll("*").remove();
       
       // Create container group for zooming/panning
@@ -112,7 +114,8 @@ const OntologyViewer: React.FC = () => {
         .enter()
         .append("line")
         .attr("stroke-width", 1.2)
-        .attr("stroke", "#999");
+        // Theme-aware stroke color
+        .attr("stroke", "var(--bs-border-color)");
       
       const node = container.append("g")
         .attr("class", "nodes")
@@ -127,9 +130,10 @@ const OntologyViewer: React.FC = () => {
           .on("drag", dragged)
           .on("end", dragended))
         // Add hover and click event listeners
-        .on("mouseover", function() {
+    .on("mouseover", function() {
           d3.select(this)
-            .attr("stroke", "black")
+      // Use currentColor so hover outline adapts to theme
+      .attr("stroke", "currentColor")
             .attr("stroke-width", 2);
         })
         .on("mouseout", function() {
@@ -150,6 +154,8 @@ const OntologyViewer: React.FC = () => {
         .append("text")
         .attr("text-anchor", "middle")
         .attr("font-size", 10)
+        // Make label color follow theme
+        .attr("fill", "currentColor")
         .text((d: any) => d.label);
       
       const label = container.append("g")
@@ -160,6 +166,8 @@ const OntologyViewer: React.FC = () => {
         .append("text")
         .attr("dy", (d: GraphNode) => d.isClass ? -20 : -8)
         .attr("text-anchor", "middle")
+        // Make node text color follow theme
+        .attr("fill", "currentColor")
         .text((d: GraphNode) => d.label);
       
       simulation.on("tick", () => {
@@ -228,7 +236,7 @@ const OntologyViewer: React.FC = () => {
         <Button variant="secondary" onClick={zoomOut} className="me-2">Zoom Out</Button>
         <Button variant="outline-dark" onClick={resetZoom}>Reset</Button>
       </div>
-      <svg ref={svgRef} style={{ width: '100%', border: "1px solid black" }}></svg>
+  <svg ref={svgRef} style={{ width: '100%', border: '1px solid var(--bs-border-color)' }}></svg>
     </div>
   );
 };

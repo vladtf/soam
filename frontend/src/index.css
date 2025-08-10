@@ -1,0 +1,12 @@
+/* Accessibility: visible focus outlines */
+:focus-visible {
+	outline: 2px solid var(--bs-primary) !important;
+	outline-offset: 2px;
+}
+
+/* Improve badge contrast in dark mode for light badges */
+[data-bs-theme="dark"] .badge.bg-light,
+[data-bs-theme="dark"] .badge.text-bg-light {
+	background-color: var(--bs-tertiary-bg) !important;
+	color: var(--bs-body-color) !important;
+}
