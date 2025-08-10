@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Button, ButtonGroup, Container } from 'react-bootstrap';
+import { Button, ButtonGroup, Container, Modal } from 'react-bootstrap';
 import NewBuildingModal from '../components/NewBuildingModal';
-import { postNewBuilding, fetchBuildings } from '../api/backendRequests';
+import { postNewBuilding, fetchBuildings, deleteBuilding } from '../api/backendRequests';
 import { Building } from '../models/Building';
 import PageHeader from '../components/PageHeader';
 import { useTheme } from '../context/ThemeContext';
+import { toast } from 'react-toastify';
 
 type MapClickEvent = { latlng: { lat: number; lng: number } };
 
@@ -62,6 +63,9 @@ const MapPage: React.FC = () => {
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('');
   const [basemapMode, setBasemapMode] = useState<BaseMapMode>(getInitialBasemapMode);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{ name: string; lat: number; lng: number } | null>(null);
+  const [addrCache, setAddrCache] = useState<Record<string, string>>({});
 
   const tile = useMemo(() => basemapFor(basemapMode, theme), [basemapMode, theme]);
 
@@ -82,6 +86,47 @@ const MapPage: React.FC = () => {
     await postNewBuilding(newBuilding);
     await loadBuildings(); // Refetch buildings after adding new building
     setShowModal(false);
+    toast.success('Building added');
+  };
+
+  const handleDeleteBuilding = async (name: string, lat: number, lng: number) => {
+    try {
+      await deleteBuilding(name, lat, lng);
+      await loadBuildings();
+      toast.success('Building deleted');
+    } catch (err) {
+      console.error('Error deleting building:', err);
+      toast.error(`Failed to delete building: ${String(err)}`);
+    }
+  };
+
+  const openConfirmDelete = (name: string, lat: number, lng: number) => {
+    setConfirmTarget({ name, lat, lng });
+    setConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!confirmTarget) return;
+    await handleDeleteBuilding(confirmTarget.name, confirmTarget.lat, confirmTarget.lng);
+    setConfirmOpen(false);
+    setConfirmTarget(null);
+  };
+
+  const keyFor = (lat: number, lng: number) => `${lat.toFixed(6)},${lng.toFixed(6)}`;
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    const key = keyFor(lat, lng);
+    if (addrCache[key]) return; // cached
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+      const data = await res.json();
+      const addr = data?.display_name || [data?.address?.road, data?.address?.city || data?.address?.town || data?.address?.village, data?.address?.country]
+        .filter(Boolean)
+        .join(', ');
+      setAddrCache(prev => ({ ...prev, [key]: addr || key }));
+    } catch {
+      setAddrCache(prev => ({ ...prev, [key]: key }));
+    }
   };
 
 
@@ -144,10 +189,50 @@ const MapPage: React.FC = () => {
       <MapContainer center={[44.436170, 26.102765]} zoom={13} style={{ height: '80vh', width: '100%' }}>
         <TileLayer attribution={tile.attribution} url={tile.url} />
         {buildings.map((b, i) => (
-          <Marker key={i} position={[b.lat, b.lng]}>
-            <Popup>{b.name}</Popup>
+          <Marker
+            key={`${b.name}-${b.lat}-${b.lng}-${i}`}
+            position={[b.lat, b.lng]}
+            eventHandlers={{ click: () => reverseGeocode(b.lat, b.lng) }}
+          >
+            <Popup>
+              <div className="d-flex flex-column gap-2">
+                <div>
+                  <strong>{b.name}</strong>
+                </div>
+                <small className="text-muted">
+                  {addrCache[keyFor(b.lat, b.lng)] || `${b.lat.toFixed(6)}, ${b.lng.toFixed(6)}`}
+                </small>
+                <div>
+                  <Button size="sm" variant="outline-danger" onClick={() => openConfirmDelete(b.name, b.lat, b.lng)}>
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </Popup>
           </Marker>
         ))}
+
+      {/* Confirm Deletion Modal */}
+      <Modal show={confirmOpen} onHide={() => setConfirmOpen(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Delete Building</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {confirmTarget ? (
+            <div>
+              Are you sure you want to delete
+              {' '}<strong>{confirmTarget.name}</strong>?
+              <div className="mt-2 text-muted">
+                {addrCache[keyFor(confirmTarget.lat, confirmTarget.lng)] || `${confirmTarget.lat.toFixed(6)}, ${confirmTarget.lng.toFixed(6)}`}
+              </div>
+            </div>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button variant="danger" onClick={confirmDelete}>Delete</Button>
+        </Modal.Footer>
+      </Modal>
         <MapClickHandler onClick={handleMapClick} />
       </MapContainer>
       <NewBuildingModal

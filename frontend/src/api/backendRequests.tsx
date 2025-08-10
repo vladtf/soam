@@ -151,6 +151,15 @@ export const fetchBuildings = (): Promise<Building[]> => {
   return doFetch<Building[]>(`${backendUrl}/buildings`);
 };
 
+export const deleteBuilding = (name: string, lat: number, lng: number): Promise<{ status?: string; message?: string }> => {
+  const { backendUrl } = getConfig();
+  const url = new URL(`${backendUrl}/buildings`);
+  url.searchParams.set('name', name);
+  url.searchParams.set('lat', String(lat));
+  url.searchParams.set('lng', String(lng));
+  return doFetch<{ status?: string; message?: string }>(url.toString(), { method: 'DELETE' });
+};
+
 export const addConnection = (config: unknown): Promise<unknown> => {
   const { backendUrl } = getConfig();
   return doFetch<unknown>(`${backendUrl}/addConnection`, {

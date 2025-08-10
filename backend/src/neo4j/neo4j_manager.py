@@ -64,10 +64,13 @@ class Neo4jManager:
         if not self.driver:
             logger.error("No database connection available")
             return []
-            
+        
+        # If a building is linked to multiple addresses, pick the first deterministically to avoid duplicates in UI
         query = """
         MATCH (b:Building)-[:hasAddress]->(a:Address)
-        RETURN b.name AS name, a.location.latitude AS lat, a.location.longitude AS lng
+        WITH b, a ORDER BY a.location.latitude, a.location.longitude
+        WITH b, head(collect(a)) AS a1
+        RETURN b.name AS name, a1.location.latitude AS lat, a1.location.longitude AS lng
         """
         try:
             with self.driver.session() as session:
@@ -105,6 +108,35 @@ class Neo4jManager:
                 b = record["b"]
                 a = record["a"]
                 return {"status": "Building added", "building": dict(b), "address": dict(a)}
+        except Exception as e:
+            return {"status": "error", "detail": str(e)}
+
+    def delete_building(self, name: str, lat: float, lng: float):
+        """Delete a building-address link by name and coordinates. If building/address become orphaned, delete them too."""
+        if not self.driver:
+            return {"status": "error", "detail": "No database connection available"}
+
+        query = """
+        MATCH (b:Building { name: $name })- [r:hasAddress] -> (a:Address)
+        WHERE a.location.latitude = $lat AND a.location.longitude = $lng
+        DELETE r
+        WITH b, a
+        OPTIONAL MATCH (b)-[:hasAddress]->()
+        WITH b, a, COUNT(*) AS remain
+        FOREACH (_ IN CASE WHEN remain = 0 THEN [1] ELSE [] END | DETACH DELETE b)
+        WITH a
+        OPTIONAL MATCH (:Building)-[:hasAddress]->(a)
+        WITH a, COUNT(*) AS ref
+        FOREACH (_ IN CASE WHEN ref = 0 THEN [1] ELSE [] END | DETACH DELETE a)
+        RETURN true AS done
+        """
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, name=name, lat=lat, lng=lng)
+                rec = result.single()
+                if rec is None:
+                    return {"status": "error", "detail": "Building/address not found"}
+            return {"status": "Building deleted"}
         except Exception as e:
             return {"status": "error", "detail": str(e)}
 
@@ -164,27 +196,27 @@ class Neo4jManager:
             MERGE (s:Sensor { sensorId: "Sensor123", measurementTime: datetime("2023-10-14T12:00:00"),
                                temperature: 22.5, humidity: 45.0 })
             """,
-            """
-            MATCH (b:Building)
-            WHERE b.name = "Corp EC"
-            MATCH (a:Address)
-            WHERE a.street = "Splaiul Independenței, 313"
-            MERGE (b)-[:hasAddress]->(a)
-            """,
-            """
-            MATCH (b:Building)
-            WHERE b.name = "Corp ED"
-            MATCH (a:Address)
-            WHERE a.street = "Splaiul Independenței, 313"
-            MERGE (b)-[:hasAddress]->(a)
-            """,
-            """
-            MATCH (b:Building)
-            WHERE b.name = "Centrul PRECIS"
-            MATCH (a:Address)
-            WHERE a.street = "Splaiul Independenței, 313"
-            MERGE (b)-[:hasAddress]->(a)
-            """,
+                        """
+                        MATCH (b:Building { name: "Corp EC" })
+                        MATCH (a:Address)
+                        WHERE a.street = "Splaiul Independenței, 313" AND a.city = "Bucharest" AND a.country = "Romania"
+                            AND a.location.latitude = 44.435907 AND a.location.longitude = 26.047295
+                        MERGE (b)-[:hasAddress]->(a)
+                        """,
+                        """
+                        MATCH (b:Building { name: "Corp ED" })
+                        MATCH (a:Address)
+                        WHERE a.street = "Splaiul Independenței, 313" AND a.city = "Bucharest" AND a.country = "Romania"
+                            AND a.location.latitude = 44.435751 AND a.location.longitude = 26.048120
+                        MERGE (b)-[:hasAddress]->(a)
+                        """,
+                        """
+                        MATCH (b:Building { name: "Centrul PRECIS" })
+                        MATCH (a:Address)
+                        WHERE a.street = "Splaiul Independenței, 313" AND a.city = "Bucharest" AND a.country = "Romania"
+                            AND a.location.latitude = 44.435013 AND a.location.longitude = 26.047758
+                        MERGE (b)-[:hasAddress]->(a)
+                        """,
             """
             MATCH (sc:SmartCity)
             WHERE sc.name = "Metropolis"

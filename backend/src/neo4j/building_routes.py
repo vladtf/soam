@@ -2,7 +2,7 @@
 Building-related API endpoints.
 """
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
 from src.api.models import BuildingLocation, BuildingCreateNeo4j, BuildingCreateResult, ApiResponse
@@ -43,4 +43,22 @@ async def add_building(building: BuildingCreateNeo4j, neo4j_manager: Neo4jManage
         raise HTTPException(status_code=400, detail=f"Missing field: {str(e)}")
     except Exception as e:
         logger.error(f"Error adding building: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/", response_model=ApiResponse)
+async def delete_building(
+    name: str = Query(..., description="Building name"),
+    lat: float = Query(..., description="Latitude"),
+    lng: float = Query(..., description="Longitude"),
+    neo4j_manager: Neo4jManagerDep = None,
+):
+    """Delete a building by name and coordinates. If only the relationship exists, remove it; cleanup orphan nodes."""
+    try:
+        res = neo4j_manager.delete_building(name=name, lat=lat, lng=lng)
+        if res.get("status") == "error":
+            raise HTTPException(status_code=400, detail=res.get("detail") or "Error deleting building")
+        return {"status": "success", "data": {"message": res.get("status")}}
+    except Exception as e:
+        logger.error(f"Error deleting building: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
