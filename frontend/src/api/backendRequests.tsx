@@ -2,8 +2,9 @@ import { getConfig } from '../config';
 import { Building } from '../models/Building';
 
 export interface SensorData {
-    temperature?: number;
-    humidity?: number;
+  sensorId?: string;
+  temperature?: number;
+  humidity?: number;
 }
 
 // Standard API response wrapper
@@ -14,13 +15,13 @@ type ApiResponse<T> = {
 };
 
 export const extractDataSchema = (data: SensorData[]): Record<string, string[]> => {
-    const schema: Record<string, string[]> = {};
-    data.forEach((sensorData) => {
-        Object.keys(sensorData).forEach((key) => {
-            schema[key] = ['http://www.w3.org/2001/XMLSchema#float']; // TODO: actual type extraction
-        });
+  const schema: Record<string, string[]> = {};
+  data.forEach((sensorData) => {
+    Object.keys(sensorData).forEach((key) => {
+      schema[key] = ['http://www.w3.org/2001/XMLSchema#float']; // TODO: actual type extraction
     });
-    return schema;
+  });
+  return schema;
 };
 
 // General fetch handler
@@ -59,14 +60,55 @@ async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
   return resultRaw as T;
 }
 
-export const fetchSensorData = (): Promise<SensorData[]> => {
+export const fetchSensorData = (partition?: string): Promise<SensorData[]> => {
   const { ingestorUrl } = getConfig();
+  if (partition && partition.length > 0) {
+    return doFetch<SensorData[]>(`${ingestorUrl}/data/${encodeURIComponent(partition)}`);
+  }
   return doFetch<SensorData[]>(`${ingestorUrl}/data`);
+};
+
+export const fetchPartitions = (): Promise<string[]> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<string[]>(`${ingestorUrl}/partitions`);
+};
+
+export const setBufferMaxRows = (max_rows: number): Promise<{ status?: string; data?: { max_rows: number } }> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ status?: string; data?: { max_rows: number } }>(`${ingestorUrl}/buffer/size`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ max_rows }),
+  });
 };
 
 export const fetchAverageTemperature = (): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
   return doFetch<unknown[]>(`${backendUrl}/spark/average-temperature`);
+};
+
+// Enrichment summary (verification aid)
+export interface EnrichmentSummary {
+  registered_total: number;
+  registered_any_partition: number;
+  registered_by_partition: Record<string, number>;
+  enriched: {
+    exists: boolean;
+    recent_rows: number;
+    recent_sensors: number;
+    sample_sensors: string[];
+    matched_sensors: number;
+  };
+  silver: {
+    exists: boolean;
+    recent_rows: number;
+    recent_sensors: number;
+  };
+}
+
+export const fetchEnrichmentSummary = (minutes = 10): Promise<EnrichmentSummary> => {
+  const { backendUrl } = getConfig();
+  return doFetch<EnrichmentSummary>(`${backendUrl}/spark/enrichment-summary?minutes=${minutes}`);
 };
 
 // Spark Master Status interfaces
@@ -232,6 +274,29 @@ export const minioPreviewParquet = (key: string, limit = 50): Promise<ParquetPre
   url.searchParams.set('key', key);
   url.searchParams.set('limit', String(limit));
   return doFetch<ParquetPreview>(url.toString());
+};
+
+export const minioDeleteObject = (key: string): Promise<{ deleted: number; errors: unknown[] }> => {
+  const { backendUrl } = getConfig();
+  const url = new URL(`${backendUrl}/minio/object`);
+  url.searchParams.set('key', key);
+  return doFetch<{ deleted: number; errors: unknown[] }>(url.toString(), { method: 'DELETE' });
+};
+
+export const minioDeleteObjects = (keys: string[]): Promise<{ deleted: number; errors: unknown[] }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ deleted: number; errors: unknown[] }>(`${backendUrl}/minio/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keys }),
+  });
+};
+
+export const minioDeletePrefix = (prefix: string): Promise<{ deleted: number; errors: unknown[] }> => {
+  const { backendUrl } = getConfig();
+  const url = new URL(`${backendUrl}/minio/prefix`);
+  url.searchParams.set('prefix', prefix);
+  return doFetch<{ deleted: number; errors: unknown[] }>(url.toString(), { method: 'DELETE' });
 };
 
 // Normalization Rules API
@@ -430,4 +495,40 @@ export interface DashboardTileExamplesResponse {
 export const fetchDashboardTileExamples = (): Promise<DashboardTileExamplesResponse> => {
   const { backendUrl } = getConfig();
   return doFetch<DashboardTileExamplesResponse>(`${backendUrl}/dashboard/examples`);
+};
+
+// Devices API
+export interface Device {
+  id?: number;
+  sensor_id: string;
+  ingestion_id?: string;
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const listDevices = (): Promise<Device[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Device[]>(`${backendUrl}/devices/`);
+};
+
+export const registerDevice = (payload: { sensor_id: string; ingestion_id?: string; name?: string; description?: string; enabled?: boolean }): Promise<Device> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Device>(`${backendUrl}/devices/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: true, ...payload }),
+  });
+};
+
+export const deleteDevice = (id: number): Promise<{ status?: string; message?: string }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/devices/${id}`, { method: 'DELETE' });
+};
+
+export const toggleDevice = (id: number): Promise<Device> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Device>(`${backendUrl}/devices/${id}/toggle`, { method: 'POST' });
 };

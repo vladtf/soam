@@ -1,8 +1,9 @@
 import React from 'react';
-import { Card, Table, Badge, Row, Col, ProgressBar, Spinner } from 'react-bootstrap';
+import { Card, Badge, Row, Col, ProgressBar, Spinner } from 'react-bootstrap';
 import { FaTasks, FaServer, FaCog, FaMemory, FaUsers, FaClock } from 'react-icons/fa';
 import { SparkMasterStatus, SparkApplication } from '../api/backendRequests';
 import { useTheme } from '../context/ThemeContext';
+import ThemedTable from './ThemedTable';
 
 interface SparkApplicationsCardProps {
   sparkMasterStatus: SparkMasterStatus | null;
@@ -72,7 +73,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
               <FaTasks className="me-2" />
               Active Applications ({sparkMasterStatus.activeapps.length})
             </h6>
-            <Table striped hover responsive className="mb-0" variant={isDark ? 'dark' : undefined}>
+            <ThemedTable striped hover responsive className="mb-0">
               <thead className={isDark ? 'table-dark' : 'table-light'}>
                 <tr>
                   <th><FaTasks className="me-1" /> App Name</th>
@@ -101,7 +102,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                   </tr>
                 ))}
               </tbody>
-            </Table>
+            </ThemedTable>
           </div>
         ) : (
           <div className="text-center py-4 text-body-secondary">

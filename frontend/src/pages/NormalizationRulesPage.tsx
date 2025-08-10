@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Form, Row, Table, Spinner, Pagination, Breadcrumb } from 'react-bootstrap';
+import { Button, Card, Col, Form, Row, Spinner, Pagination, Breadcrumb } from 'react-bootstrap';
 import {
   NormalizationRule,
   listNormalizationRules,
@@ -8,13 +8,11 @@ import {
   deleteNormalizationRule,
 } from '../api/backendRequests';
 import { useError } from '../context/ErrorContext';
-import { useTheme } from '../context/ThemeContext';
+import ThemedTable from '../components/ThemedTable';
 
 const emptyForm = { raw_key: '', canonical_key: '', enabled: true };
 
 const NormalizationRulesPage: React.FC = () => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const { setError } = useError();
   const [rules, setRules] = useState<NormalizationRule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -316,8 +314,8 @@ const NormalizationRulesPage: React.FC = () => {
               </div>
             </Card.Header>
             <Card.Body>
-              <Table striped hover responsive variant={isDark ? 'dark' : undefined}>
-                <thead className={isDark ? 'table-dark' : 'table-light'}>
+              <ThemedTable striped hover responsive>
+                <thead>
                   <tr>
                     <th style={{ whiteSpace: 'nowrap' }}>ID</th>
                     <th role="button" onClick={() => setSort('raw_key')}>Raw Key {sortKey==='raw_key' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
@@ -365,7 +363,7 @@ const NormalizationRulesPage: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
-              </Table>
+              </ThemedTable>
               <div className="d-flex justify-content-between align-items-center mt-2">
                 <div className="text-body-secondary small">Showing {startIdx + 1}-{Math.min(startIdx + pageSize, sorted.length)} of {sorted.length}</div>
                 <Pagination size="sm" className="mb-0">

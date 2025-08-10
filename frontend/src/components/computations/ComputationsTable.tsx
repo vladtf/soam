@@ -1,21 +1,21 @@
 import React from 'react';
-import { Table, Badge, Button } from 'react-bootstrap';
+import { Badge, Button } from 'react-bootstrap';
 import WithTooltip from '../WithTooltip';
+import ThemedTable from '../ThemedTable';
 import type { ComputationDef } from '../../api/backendRequests';
 
 interface Props {
   items: ComputationDef[];
-  isDark: boolean;
   loading: boolean;
   onEdit: (item: ComputationDef) => void;
   onPreview: (id?: number) => void;
   onDelete: (id?: number) => void;
 }
 
-const ComputationsTable: React.FC<Props> = ({ items, isDark, loading, onEdit, onPreview, onDelete }) => {
+const ComputationsTable: React.FC<Props> = ({ items, loading, onEdit, onPreview, onDelete }) => {
   if (loading) return <div>Loading…</div>;
   return (
-    <Table responsive hover size="sm" variant={isDark ? 'dark' : undefined}>
+    <ThemedTable responsive hover size="sm">
       <thead>
         <tr>
           <th>Name</th>
@@ -52,7 +52,7 @@ const ComputationsTable: React.FC<Props> = ({ items, isDark, loading, onEdit, on
           </tr>
         ))}
       </tbody>
-    </Table>
+    </ThemedTable>
   );
 };
 

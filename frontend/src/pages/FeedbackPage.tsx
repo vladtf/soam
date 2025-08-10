@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Container, Form, Button, Alert, Card, Table, Badge, Spinner } from 'react-bootstrap';
+import { Container, Form, Button, Alert, Card, Badge, Spinner } from 'react-bootstrap';
 import { submitFeedback, fetchFeedbacks, FeedbackData, FeedbackResponse } from '../api/backendRequests';
+import ThemedTable from '../components/ThemedTable';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MESSAGE_MIN = 10;
@@ -236,13 +237,12 @@ const FeedbackPage: React.FC = () => {
               <p className="text-body-secondary mb-3">
                 Total submissions: <strong>{feedbacks.length}</strong>
               </p>
-              <Table striped hover responsive>
+              <ThemedTable striped hover responsive className="mb-0">
                 <thead>
                   <tr>
-                    <th style={{ width: '80px' }}>ID</th>
-                    <th style={{ width: '200px' }}>Email</th>
-                    <th style={{ width: '180px' }}>Submitted</th>
+                    <th>Email</th>
                     <th>Message</th>
+                    <th>Created</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -277,7 +277,7 @@ const FeedbackPage: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
-              </Table>
+              </ThemedTable>
             </>
           )}
         </Card.Body>

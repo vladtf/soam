@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Card } from 'react-bootstrap';
 import PageHeader from '../components/PageHeader';
-import { useTheme } from '../context/ThemeContext';
 import {
   ComputationDef,
   createComputation,
@@ -21,8 +20,6 @@ import WithTooltip from '../components/WithTooltip';
 const empty: ComputationDef = { name: '', dataset: 'silver', definition: {}, description: '', enabled: true };
 
 const ComputationsPage: React.FC = () => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [items, setItems] = useState<ComputationDef[]>([]);
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState(false);
@@ -135,7 +132,6 @@ const ComputationsPage: React.FC = () => {
           )}
           <ComputationsTable
             items={items}
-            isDark={isDark}
             loading={loading}
             onEdit={openEdit}
             onPreview={doPreview}

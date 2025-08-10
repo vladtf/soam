@@ -84,12 +84,12 @@ const ConnectionStatus: React.FC = () => {
                             );
                         })
                     ) : (
-            <ListGroup.Item className="text-body-secondary">No connections configured</ListGroup.Item>
+                        <ListGroup.Item className="text-body-secondary">No connections configured</ListGroup.Item>
                     )}
                 </ListGroup>
-        <Card.Footer className="bg-body-tertiary">
+                <Card.Footer className="bg-body-tertiary">
                     <Button variant="secondary" onClick={() => setShowConfig(true)}>
-                        Configure Connection
+                        Add Connection
                     </Button>
                 </Card.Footer>
             </Card>

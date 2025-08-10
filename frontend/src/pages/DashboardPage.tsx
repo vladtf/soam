@@ -9,6 +9,7 @@ import TemperatureChart from '../components/TemperatureChart';
 import SparkApplicationsCard from '../components/SparkApplicationsCard';
 import TemperatureAlertsCard from '../components/TemperatureAlertsCard';
 import PageHeader from '../components/PageHeader';
+import EnrichmentStatusCard from '../components/EnrichmentStatusCard';
 import { DashboardTile } from '../components/DashboardTile';
 import { DashboardTileDef, fetchDashboardTileExamples, listDashboardTiles, createDashboardTile, listComputations, previewDashboardTile, deleteDashboardTile, updateDashboardTile } from '../api/backendRequests';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -23,11 +24,11 @@ const DashboardPage: React.FC = () => {
     sparkMasterStatus,
     loadingSparkStatus,
     temperatureAlerts,
-  loadingAlerts,
-  lastUpdated,
-  autoRefresh,
-  setAutoRefresh,
-  refreshAll,
+    loadingAlerts,
+    lastUpdated,
+    autoRefresh,
+    setAutoRefresh,
+    refreshAll,
   } = useDashboardData();
 
   // User-defined dashboard tiles
@@ -35,15 +36,30 @@ const DashboardPage: React.FC = () => {
   const [tileLoading, setTileLoading] = useState(false);
   const [showTileModal, setShowTileModal] = useState(false);
   const [editing, setEditing] = useState<DashboardTileDef | null>(null);
-  const [examples, setExamples] = useState<{ id: string; title: string; tile: Omit<DashboardTileDef,'id'> }[]>([]);
+  const [examples, setExamples] = useState<{ id: string; title: string; tile: Omit<DashboardTileDef, 'id'> }[]>([]);
   const [computations, setComputations] = useState<{ id: number; name: string }[]>([]);
   const [layouts, setLayouts] = useState<Record<string, Layout>>({});
   const [configText, setConfigText] = useState<string>('{}');
   const [configValid, setConfigValid] = useState<boolean>(true);
   const [configErrors, setConfigErrors] = useState<string[]>([]);
   const [dragEnabled, setDragEnabled] = useState<boolean>(false);
+  const [enableStaticCards, setEnableStaticCards] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('enableStaticCards') === '1';
+    } catch {
+      return false;
+    }
+  });
 
-  const validateTile = (tile: Omit<DashboardTileDef,'id'>, comps: { id: number; name: string }[]) => {
+  useEffect(() => {
+    try {
+      localStorage.setItem('enableStaticCards', enableStaticCards ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [enableStaticCards]);
+
+  const validateTile = (tile: Omit<DashboardTileDef, 'id'>, comps: { id: number; name: string }[]) => {
     const errs: string[] = [];
     if (!tile.name?.trim()) errs.push('Name is required.');
     if (!tile.computation_id) errs.push('Computation is required.');
@@ -78,7 +94,7 @@ const DashboardPage: React.FC = () => {
       });
       setLayouts(nextLayouts);
       setExamples(ex.examples || []);
-  setComputations((comps || []).filter((c) => typeof c.id === 'number').map((c) => ({ id: c.id as number, name: c.name })));
+      setComputations((comps || []).filter((c) => typeof c.id === 'number').map((c) => ({ id: c.id as number, name: c.name })));
     } catch (e) {
       console.warn('Failed loading tiles/examples:', e);
     } finally {
@@ -108,7 +124,7 @@ const DashboardPage: React.FC = () => {
   const onSaveTile = async () => {
     if (!editing) return;
     try {
-  const errs = validateTile(editing as Omit<DashboardTileDef,'id'>, computations);
+      const errs = validateTile(editing as Omit<DashboardTileDef, 'id'>, computations);
       if (errs.length) { setConfigErrors(errs); return; }
       if (editing.id) {
         await updateDashboardTile(editing.id, {
@@ -141,6 +157,15 @@ const DashboardPage: React.FC = () => {
         lastUpdated={lastUpdated}
         right={
           <div className="d-flex align-items-center gap-3">
+            <WithTooltip tip="Show or hide the static cards section">
+              <Form.Check
+                type="switch"
+                id="static-cards"
+                label="Static cards"
+                checked={enableStaticCards}
+                onChange={(e) => setEnableStaticCards(e.target.checked)}
+              />
+            </WithTooltip>
             <WithTooltip tip="Enable to rearrange tiles by dragging the ⠿ handle">
               <Form.Check
                 type="switch"
@@ -156,24 +181,12 @@ const DashboardPage: React.FC = () => {
           </div>
         }
       />
-      
+
       {/* Statistics Cards (static charts) */}
-      <StatisticsCards />
-      
-      {/* Temperature Chart */}
-  <Row className="g-3 mt-1">
-        <Col md={12}>
-          <TemperatureChart
-            data={averageTemperature}
-            loading={loading}
-            timeRange={timeRange}
-            onTimeRangeChange={setTimeRange}
-          />
-        </Col>
-      </Row>
-      
+      {enableStaticCards && <StatisticsCards />}
+
       {/* Spark Applications */}
-  <Row className="g-3 mt-1">
+      <Row className="g-3 mt-1">
         <Col md={12}>
           <SparkApplicationsCard
             sparkMasterStatus={sparkMasterStatus}
@@ -181,10 +194,27 @@ const DashboardPage: React.FC = () => {
           />
         </Col>
       </Row>
-      
-      {/* Temperature Alerts */}
-  <Row className="g-3 mt-1">
+
+      {/* Temperature Chart */}
+      <Row className="g-3 mt-1">
         <Col md={12}>
+          <EnrichmentStatusCard minutes={10} />
+        </Col>
+      </Row>
+
+
+
+      {/* Temperature Alerts */}
+      <Row className="g-3 mt-1">
+        <Col md={8}>
+          <TemperatureChart
+            data={averageTemperature}
+            loading={loading}
+            timeRange={timeRange}
+            onTimeRangeChange={setTimeRange}
+          />
+        </Col>
+        <Col md={4}>
           <TemperatureAlertsCard
             alerts={temperatureAlerts}
             loading={loadingAlerts}
@@ -194,12 +224,12 @@ const DashboardPage: React.FC = () => {
 
       {/* User-defined tiles in grid */}
       {dragEnabled ? (
-  <div className="small text-primary mt-2">Drag is ON. Use the <span className="user-select-none">⠿</span> handle next to each tile title to move tiles. Toggle off to finish arranging.</div>
+        <div className="small text-primary mt-2">Drag is ON. Use the <span className="user-select-none">⠿</span> handle next to each tile title to move tiles. Toggle off to finish arranging.</div>
       ) : (
         <div className="small text-body-secondary mt-2">Drag is OFF. Enable "Drag mode" to rearrange tiles.</div>
       )}
       {tileLoading ? (
-        <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2"/>Loading tiles…</div>
+        <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2" />Loading tiles…</div>
       ) : (
         <ResponsiveGrid
           className="layout mt-3"
@@ -224,9 +254,9 @@ const DashboardPage: React.FC = () => {
             });
           }}
         >
-      {tiles.filter(t => t.enabled !== false).map((t) => (
+          {tiles.filter(t => t.enabled !== false).map((t) => (
             <div key={String(t.id)} data-grid={layouts[String(t.id)] || { i: String(t.id), x: 0, y: 0, w: 4, h: 4 }}>
-        <TileWithData tile={t} dragEnabled={dragEnabled}
+              <TileWithData tile={t} dragEnabled={dragEnabled}
                 onDelete={async () => { if (t.id) { await deleteDashboardTile(t.id); await loadTiles(); } }}
                 onEdit={() => openEditTile(t)}
               />
@@ -246,7 +276,7 @@ const DashboardPage: React.FC = () => {
                 <Button key={ex.id} size="sm" variant="outline-secondary" onClick={() => {
                   setEditing(s => ({ ...(s as DashboardTileDef), ...ex.tile }));
                   setConfigText(JSON.stringify(ex.tile.config || {}, null, 2));
-                  const errs = validateTile(ex.tile as Omit<DashboardTileDef,'id'>, computations);
+                  const errs = validateTile(ex.tile as Omit<DashboardTileDef, 'id'>, computations);
                   setConfigErrors(errs);
                 }}>{ex.title}</Button>
               ))}
@@ -271,7 +301,7 @@ const DashboardPage: React.FC = () => {
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Visualization</Form.Label>
-                <Form.Select value={editing?.viz_type ?? 'table'} onChange={(e) => setEditing(s => ({ ...(s as DashboardTileDef), viz_type: e.target.value as 'table'|'stat'|'timeseries' }))}>
+                <Form.Select value={editing?.viz_type ?? 'table'} onChange={(e) => setEditing(s => ({ ...(s as DashboardTileDef), viz_type: e.target.value as 'table' | 'stat' | 'timeseries' }))}>
                   <option value="table">table</option>
                   <option value="stat">stat</option>
                   <option value="timeseries">timeseries</option>
@@ -373,7 +403,7 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
       </div>
       <div className="flex-grow-1 border rounded p-2 bg-body-tertiary">
         {loading ? (
-          <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2"/>Loading…</div>
+          <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2" />Loading…</div>
         ) : tile.viz_type === 'timeseries' ? (
           <ResponsiveContainer width="100%" height={Math.max(120, Number((tile.config as any)?.chartHeight ?? 200))}>
             <LineChart data={(rows as any[]) || []}>
@@ -384,7 +414,7 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <DashboardTile title={''} viz={tile.viz_type as 'table'|'stat'|'timeseries'} data={rows || []} config={tile.config} />
+          <DashboardTile title={''} viz={tile.viz_type as 'table' | 'stat' | 'timeseries'} data={rows || []} config={tile.config} />
         )}
       </div>
     </div>
