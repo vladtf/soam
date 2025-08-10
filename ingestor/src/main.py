@@ -81,11 +81,11 @@ def start_mqtt_client(state, minio_client):
             broker=state.active_connection.broker,
             port=state.active_connection.port,
             topic=state.active_connection.topic,
-            data_buffer=state.data_buffer,
+            state=state,
             minio_client=minio_client,
             messages_received=state.messages_received,
             messages_processed=state.messages_processed,
-            processing_latency=state.processing_latency
+            processing_latency=state.processing_latency,
         )
         # Start MQTT client in daemon thread
         mqtt_thread = threading.Thread(target=state.mqtt_handler.start, daemon=True)

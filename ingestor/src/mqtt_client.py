@@ -1,4 +1,6 @@
 import json
+import hashlib
+import re
 import threading
 import logging
 from collections import deque
@@ -11,17 +13,28 @@ logger = logging.getLogger(__name__)
 
 
 class MQTTClientHandler:
-    def __init__(self, broker, port, topic, data_buffer, minio_client, messages_received, messages_processed, processing_latency):
+    def __init__(self, broker, port, topic, state, minio_client, messages_received, messages_processed, processing_latency):
         self.broker = broker
         self.port = port
         self.topic = topic
-        self.data_buffer = data_buffer
+        self.state = state
         self.minio_client = minio_client
         self.messages_received = messages_received
         self.messages_processed = messages_processed
         self.processing_latency = processing_latency
         self.client = None
         self.last_connection_error = None
+
+    @staticmethod
+    def _sanitize_string(s: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9]+", "_", s.strip())
+
+    def _ingestion_id_for(self, topic: str) -> str:
+        """Build a stable, unique ingestion id that includes the sanitized broker, port, and topic."""
+        broker_str = self._sanitize_string(str(self.broker))
+        port_str = self._sanitize_string(str(self.port))
+        topic_str = self._sanitize_string(topic)
+        return f"{broker_str}_{port_str}_{topic_str}"
 
     def on_connect(self, client, userdata, flags, rc):
         try:
@@ -41,7 +54,12 @@ class MQTTClientHandler:
         with self.processing_latency.time():  # Measure processing time
             try:
                 payload: dict = json.loads(msg.payload.decode("utf-8"))
-                self.data_buffer.append(payload)
+                # Attach metadata for downstream processing and storage
+                ingestion_id = self._ingestion_id_for(msg.topic)
+                payload["ingestion_id"] = ingestion_id
+                payload["topic"] = msg.topic
+                # Append to partitioned buffer
+                self.state.get_partition_buffer(ingestion_id).append(payload)
                 logger.debug("Received message: %s", payload)
 
                 # Add to MinIO buffer (may not upload immediately)
@@ -56,8 +74,9 @@ class MQTTClientHandler:
     def _handle_connection_error(self, error):
         logger.error("Error in on_connect: %s", error)
         self.last_connection_error = str(error)
-        self.data_buffer.clear()
-        self.data_buffer.append({"error": "Connection error"})
+        self.state.clear_all_buffers()
+        # Put a generic error in a synthetic partition for UI visibility
+        self.state.get_partition_buffer("errors").append({"error": "Connection error"})
 
     def start(self):
         """Start the MQTT client loop."""

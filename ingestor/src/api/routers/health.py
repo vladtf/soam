@@ -29,7 +29,7 @@ async def get_health_status(
                 "data_buffer": "unknown"
             },
             "metrics": {
-                "buffered_messages": len(state.data_buffer),
+                "buffered_messages": sum(len(b) for b in state.data_buffers.values()),
                 "active_connections": len(state.connection_configs),
                 "messages_received": state.messages_received._value._value,
                 "messages_processed": state.messages_processed._value._value
@@ -62,7 +62,7 @@ async def get_health_status(
         
         # Check data buffer status
         try:
-            buffer_size = len(state.data_buffer)
+            buffer_size = sum(len(b) for b in state.data_buffers.values())
             if buffer_size < 100:  # Buffer not full
                 health_status["components"]["data_buffer"] = "healthy"
             else:

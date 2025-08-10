@@ -3,14 +3,14 @@ Data and connection management API endpoints.
 """
 import logging
 from fastapi import APIRouter, HTTPException
-from typing import List
+from typing import List, Optional
 
 from src.api.models import (
-    ConnectionConfigCreate, 
-    ConnectionConfig, 
+    ConnectionConfigCreate,
+    ConnectionConfig,
     BrokerSwitchRequest,
     ConnectionsResponse,
-    ApiResponse
+    ApiResponse,
 )
 from src.api.dependencies import IngestorStateDep, MinioClientDep
 from src.config import ConnectionConfig as ConfigDataclass
@@ -21,14 +21,49 @@ router = APIRouter(tags=["data"])
 
 
 @router.get("/data", response_model=List[dict])
-async def get_data(state: IngestorStateDep):
-    """Returns the buffered sensor data."""
+async def get_data(state: IngestorStateDep, limit_per_partition: Optional[int] = None):
+    """Returns buffered sensor data across all partitions (optionally limited per partition)."""
     try:
-        logger.debug("Fetching %d buffered rows", len(state.data_buffer))
-        return list(state.data_buffer)
+        rows = state.all_data_flat(limit_per_partition=limit_per_partition)
+        logger.debug("Fetched %d buffered rows across %d partitions", len(rows), len(state.data_buffers))
+        return rows
     except Exception as e:
         logger.error("Error fetching data: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/partitions", response_model=List[str])
+async def list_partitions(state: IngestorStateDep):
+    """List known ingestion_id partitions currently in buffer."""
+    try:
+        parts = sorted(state.data_buffers.keys())
+        return parts
+    except Exception as e:
+        logger.error("Error listing partitions: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/data/{ingestion_id}", response_model=List[dict])
+async def get_data_by_partition(ingestion_id: str, state: IngestorStateDep):
+    """Return buffered data for a specific ingestion_id partition."""
+    try:
+        buf = state.get_partition_buffer(ingestion_id)
+        return list(buf)
+    except Exception as e:
+        logger.error("Error fetching partition %s: %s", ingestion_id, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/buffer/size", response_model=ApiResponse)
+async def set_buffer_size(payload: dict, state: IngestorStateDep):
+    """Set the maximum number of rows per partition buffer."""
+    try:
+        max_rows = int(payload.get("max_rows", 100))
+        state.set_buffer_max_rows(max_rows)
+        return {"status": "success", "data": {"max_rows": state.buffer_max_rows}}
+    except Exception as e:
+        logger.error("Error setting buffer size: %s", str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/connections", response_model=ConnectionsResponse)
@@ -105,7 +140,7 @@ async def switch_broker(
         for config in state.connection_configs:
             if config.id == target_id:
                 state.active_connection = config
-                state.data_buffer.clear()
+                state.clear_all_buffers()
                 
                 # TODO: Restart MQTT client with new configuration
                 # This would need to be handled in the application lifecycle

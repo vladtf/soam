@@ -39,7 +39,7 @@ kind: Deployment
 metadata:
   name: simulator-traffic
 spec:
-  replicas: 1
+  replicas: 1 # enable when ready
   selector:
     matchLabels:
       app: simulator-traffic
@@ -75,7 +75,7 @@ kind: Deployment
 metadata:
   name: simulator-air-quality
 spec:
-  replicas: 1
+  replicas: 1 # enable when ready
   selector:
     matchLabels:
       app: simulator-air-quality
@@ -111,7 +111,7 @@ kind: Deployment
 metadata:
   name: simulator-smart-bin
 spec:
-  replicas: 1
+  replicas: 1 # enable when ready
   selector:
     matchLabels:
       app: simulator-smart-bin

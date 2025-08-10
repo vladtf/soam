@@ -52,7 +52,10 @@ class IngestorState:
     """Application state management."""
 
     def __init__(self, config: IngestorConfig):
-        self.data_buffer = deque(maxlen=100)
+        # Partitioned buffers per ingestion_id
+        self.buffer_max_rows = int(os.getenv("BUFFER_MAX_ROWS", "100"))
+        # Map of ingestion_id -> deque
+        self.data_buffers = {}
         self.connection_configs = []
         self.active_connection = None
         self.mqtt_handler = None
@@ -62,7 +65,7 @@ class IngestorState:
             id=1,
             broker=config.mqtt_broker,
             port=config.mqtt_port,
-            topic=config.mqtt_topic
+            topic=config.mqtt_topic,
         )
         self.connection_configs.append(default_config)
         self.active_connection = default_config
@@ -71,6 +74,38 @@ class IngestorState:
         self.messages_received = MESSAGES_RECEIVED
         self.messages_processed = MESSAGES_PROCESSED
         self.processing_latency = PROCESSING_LATENCY
+
+    def get_partition_buffer(self, ingestion_id: str) -> deque:
+        if ingestion_id not in self.data_buffers:
+            self.data_buffers[ingestion_id] = deque(maxlen=self.buffer_max_rows)
+        buf = self.data_buffers[ingestion_id]
+        # Ensure buffer respects current max rows (if changed)
+        if buf.maxlen != self.buffer_max_rows:
+            new_buf = deque(buf, maxlen=self.buffer_max_rows)
+            self.data_buffers[ingestion_id] = new_buf
+            buf = new_buf
+        return buf
+
+    def clear_all_buffers(self) -> None:
+        for k in list(self.data_buffers.keys()):
+            self.data_buffers[k].clear()
+
+    def set_buffer_max_rows(self, max_rows: int) -> None:
+        self.buffer_max_rows = max(1, int(max_rows))
+        # Rebuild all buffers to respect new maxlen
+        for key, buf in list(self.data_buffers.items()):
+            if buf.maxlen != self.buffer_max_rows:
+                self.data_buffers[key] = deque(buf, maxlen=self.buffer_max_rows)
+
+    def all_data_flat(self, limit_per_partition: int | None = None):
+        out = []
+        for key, buf in self.data_buffers.items():
+            if limit_per_partition is None:
+                out.extend(list(buf))
+            else:
+                # take the most recent items from right side
+                out.extend(list(buf)[-limit_per_partition:])
+        return out
 
 
 # Global singleton instances

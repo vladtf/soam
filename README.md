@@ -91,3 +91,9 @@ docker-compose up -d
 ```bash
 skaffold dev
 ```
+
+or
+
+```bash
+skaffold dev --trigger=polling --watch-poll-interval=5000
+```

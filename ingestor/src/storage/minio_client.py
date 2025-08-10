@@ -130,11 +130,16 @@ class MinioClient:
 
         df = pd.DataFrame(rows)
 
-        # partition path: sensors/date=YYYY-MM-DD/hour=HH/part-uuid.parquet
+        # partition path: sensors/ingestion_id=<id>/date=YYYY-MM-DD/hour=HH/part-uuid.parquet
+        ingestion_id = None
+        try:
+            ingestion_id = str(df["ingestion_id"].iloc[0])
+        except Exception:
+            ingestion_id = "unknown"
         ts = pd.to_datetime(df["timestamp"].iloc[0], utc=True)
         date = ts.strftime("%Y-%m-%d")
         hour = ts.strftime("%H")
-        key_prefix = f"sensors/date={date}/hour={hour}/"
+        key_prefix = f"sensors/ingestion_id={ingestion_id}/date={date}/hour={hour}/"
         object_key = key_prefix + f"part-{uuid.uuid4().hex}.parquet"
 
         # write to an in-memory Parquet buffer
