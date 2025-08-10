@@ -26,7 +26,13 @@ class MQTTClientHandler:
     def on_connect(self, client, userdata, flags, rc):
         try:
             logger.info("Connected to MQTT broker with result code %s", rc)
-            client.subscribe(self.topic)
+            # Support comma-separated topics
+            topics = [t.strip() for t in str(self.topic).split(',') if t.strip()]
+            if len(topics) == 1:
+                client.subscribe(topics[0])
+            else:
+                # subscribe to multiple topics with QoS 0
+                client.subscribe([(t, 0) for t in topics])
         except Exception as e:
             self._handle_connection_error(e)
 

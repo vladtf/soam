@@ -13,7 +13,7 @@ class ConnectionConfig:
 # Default MQTT configuration
 DEFAULT_MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 DEFAULT_MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
-DEFAULT_MQTT_TOPIC = os.getenv("MQTT_TOPIC", "smartcity/sensor")
+DEFAULT_MQTT_TOPIC = os.getenv("MQTT_TOPIC", "smartcity/sensors/#")
 
 # MinIO configuration
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio:9000")

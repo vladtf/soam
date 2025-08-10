@@ -36,7 +36,10 @@ class IngestorConfig:
         # MQTT configuration
         self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
         self.mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
-        self.mqtt_topic = os.getenv("MQTT_TOPIC", "smartcity/sensor")
+        # Subscribe to all simulator topics by default
+        # e.g. smartcity/sensors/temperature, /traffic, /air_quality, /smart_bin
+        # Users can override via MQTT_TOPIC env var (supports comma-separated list)
+        self.mqtt_topic = os.getenv("MQTT_TOPIC", "smartcity/sensors/#")
 
         # MinIO configuration
         self.minio_endpoint = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
