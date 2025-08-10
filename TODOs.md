@@ -117,3 +117,16 @@ Below is a list of tasks that need to be completed for the project. This list wi
 - To add input validation for the self-onboarding process to ensure data integrity.
 - To add input validation for feedback forms to ensure data integrity.
 - To add topic discovery mechanisms to identify available MQTT topics dynamically.
+
+
+To fix:
+
+When trying to add a new buildong from the maps I get the following error:
+
+This is the request:
+{"name":"test","description":"Description of the building","street":"Street Name","city":"Bucharest","country":"Romania","lat":44.43524763009551,"lng":26.04545132541421}
+
+And this is the error:
+Uncaught (in promise) Error: [{"type":"missing","loc":["body","location"],"msg":"Field required","input":{"name":"Test building","description":"Description of the building","street":"Street Name","city":"Bucharest","country":"Romania","lat":44.435033110452004,"lng":26.045952692221004}},{"type":"missing","loc":["body","type"],"msg":"Field required","input":{"name":"Test building","description":"Description of the building","street":"Street Name","city":"Bucharest","country":"Romania","lat":44.435033110452004,"lng":26.045952692221004}},{"type":"missing","loc":["body","floors"],"msg":"Field required","input":{"name":"Test building","description":"Description of the building","street":"Street Name","city":"Bucharest","country":"Romania","lat":44.435033110452004,"lng":26.045952692221004}}]
+    at sn (index-TfrR7Zdk.js:127:20803)
+    at async T (index-TfrR7Zdk.js:203:157743)

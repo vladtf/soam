@@ -80,3 +80,40 @@ class Computation(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class DashboardTile(Base):
+    """User-defined dashboard tile configuration persisted in DB."""
+    __tablename__ = "dashboard_tiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    computation_id = Column(Integer, nullable=False)
+    viz_type = Column(String(64), nullable=False)  # table | stat | timeseries
+    config = Column(Text, nullable=False)          # JSON
+    layout = Column(Text, nullable=True)           # JSON (x,y,w,h) optional
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        import json as _json
+        try:
+            cfg = _json.loads(self.config) if isinstance(self.config, str) else (self.config or {})
+        except Exception:
+            cfg = {}
+        try:
+            lay = _json.loads(self.layout) if isinstance(self.layout, str) else (self.layout or None)
+        except Exception:
+            lay = None
+        return {
+            "id": self.id,
+            "name": self.name,
+            "computation_id": self.computation_id,
+            "viz_type": self.viz_type,
+            "config": cfg,
+            "layout": lay,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

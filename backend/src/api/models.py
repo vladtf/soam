@@ -136,3 +136,37 @@ class ComputationResponse(BaseModel):
     enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+# ===============================
+# Dashboard Tiles (User-defined)
+# ===============================
+
+class DashboardTileCreate(BaseModel):
+    name: str
+    computation_id: int
+    viz_type: str  # table | stat | timeseries
+    config: Dict[str, Any] = Field(default_factory=dict)
+    layout: Optional[Dict[str, Any]] = None
+    enabled: bool = True
+
+
+class DashboardTileUpdate(BaseModel):
+    name: Optional[str] = None
+    computation_id: Optional[int] = None
+    viz_type: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    layout: Optional[Dict[str, Any]] = None
+    enabled: Optional[bool] = None
+
+
+class DashboardTileResponse(BaseModel):
+    id: int
+    name: str
+    computation_id: int
+    viz_type: str
+    config: Dict[str, Any]
+    layout: Optional[Dict[str, Any]] = None
+    enabled: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

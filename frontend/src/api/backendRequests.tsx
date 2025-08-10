@@ -364,3 +364,61 @@ export const fetchComputationSchemas = (): Promise<ComputationSchemasResponse> =
   const { backendUrl } = getConfig();
   return doFetch<ComputationSchemasResponse>(`${backendUrl}/computations/schemas`);
 };
+
+// Dashboard tiles API
+export interface DashboardTileDef {
+  id?: number;
+  name: string;
+  computation_id: number;
+  viz_type: 'table' | 'stat' | 'timeseries';
+  config: Record<string, unknown>;
+  layout?: Record<string, unknown> | null;
+  enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const listDashboardTiles = (): Promise<DashboardTileDef[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<DashboardTileDef[]>(`${backendUrl}/dashboard/tiles`);
+};
+
+export const createDashboardTile = (payload: DashboardTileDef): Promise<DashboardTileDef> => {
+  const { backendUrl } = getConfig();
+  return doFetch<DashboardTileDef>(`${backendUrl}/dashboard/tiles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const updateDashboardTile = (id: number, payload: Partial<DashboardTileDef>): Promise<DashboardTileDef> => {
+  const { backendUrl } = getConfig();
+  return doFetch<DashboardTileDef>(`${backendUrl}/dashboard/tiles/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const deleteDashboardTile = (id: number): Promise<{ status?: string; message?: string }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/dashboard/tiles/${id}`, { method: 'DELETE' });
+};
+
+export const previewDashboardTile = (id: number): Promise<unknown[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<unknown[]>(`${backendUrl}/dashboard/tiles/${id}/preview`, {
+    method: 'POST',
+  });
+};
+
+export interface DashboardTileExamplesResponse {
+  examples: { id: string; title: string; tile: Omit<DashboardTileDef, 'id'> }[];
+  vizTypes: string[];
+}
+
+export const fetchDashboardTileExamples = (): Promise<DashboardTileExamplesResponse> => {
+  const { backendUrl } = getConfig();
+  return doFetch<DashboardTileExamplesResponse>(`${backendUrl}/dashboard/examples`);
+};
