@@ -68,6 +68,32 @@ class ApiResponse(BaseModel):
     error: Optional[str] = None
 
 
+# ===============================
+# Normalization Rules
+# ===============================
+
+class NormalizationRuleCreate(BaseModel):
+    raw_key: str = Field(..., description="Incoming raw field/column name")
+    canonical_key: str = Field(..., description="Canonical field/column name")
+    enabled: bool = Field(default=True)
+
+
+class NormalizationRuleUpdate(BaseModel):
+    canonical_key: Optional[str] = Field(None)
+    enabled: Optional[bool] = Field(None)
+
+
+class NormalizationRuleResponse(BaseModel):
+    id: int
+    raw_key: str
+    canonical_key: str
+    enabled: bool
+    applied_count: int | None = 0
+    last_applied_at: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
 class FeedbackCreate(BaseModel):
     """Schema for creating feedback."""
     email: str = Field(..., description="User email address")

@@ -224,3 +224,61 @@ export const minioPreviewParquet = (key: string, limit = 50): Promise<ParquetPre
   url.searchParams.set('limit', String(limit));
   return doFetch<ParquetPreview>(url.toString());
 };
+
+// Normalization Rules API
+export interface NormalizationRule {
+  id: number;
+  raw_key: string;
+  canonical_key: string;
+  enabled: boolean;
+  applied_count?: number;
+  last_applied_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface NormalizationRuleCreatePayload {
+  raw_key: string;
+  canonical_key: string;
+  enabled?: boolean;
+}
+
+export interface NormalizationRuleUpdatePayload {
+  canonical_key?: string;
+  enabled?: boolean;
+}
+
+export const listNormalizationRules = (): Promise<NormalizationRule[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<NormalizationRule[]>(`${backendUrl}/normalization/`);
+};
+
+export const createNormalizationRule = (
+  payload: NormalizationRuleCreatePayload
+): Promise<NormalizationRule> => {
+  const { backendUrl } = getConfig();
+  return doFetch<NormalizationRule>(`${backendUrl}/normalization/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: true, ...payload }),
+  });
+};
+
+export const updateNormalizationRule = (
+  id: number,
+  payload: NormalizationRuleUpdatePayload
+): Promise<NormalizationRule> => {
+  const { backendUrl } = getConfig();
+  return doFetch<NormalizationRule>(`${backendUrl}/normalization/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const deleteNormalizationRule = (id: number): Promise<{ status?: string; message?: string }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/normalization/${id}`, {
+    method: 'DELETE',
+  });
+};

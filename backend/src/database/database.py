@@ -39,3 +39,41 @@ def create_tables():
     Create all tables in the database.
     """
     Base.metadata.create_all(bind=engine)
+
+
+def ensure_rule_metrics_columns():
+    """Ensure applied_count and last_applied_at columns exist on normalization_rules.
+
+    This is a lightweight, idempotent migration mainly for SQLite.
+    """
+    try:
+        dialect = engine.url.get_backend_name()
+        with engine.connect() as conn:
+            if 'sqlite' in dialect:
+                rows = conn.exec_driver_sql("PRAGMA table_info('normalization_rules')").fetchall()
+                existing = {row[1] for row in rows}  # name is at index 1
+                if 'applied_count' not in existing:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN applied_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                if 'last_applied_at' not in existing:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN last_applied_at DATETIME NULL"
+                    )
+            else:
+                # Best-effort for other DBs
+                try:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN applied_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                except Exception:
+                    pass
+                try:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN last_applied_at TIMESTAMPTZ NULL"
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        # Non-fatal; table might not exist yet or DB may not support ALTER
+        pass

@@ -2,10 +2,10 @@
 FastAPI application with proper dependency injection for the SOAM smart city platform.
 """
 import logging
-import sys
 from contextlib import asynccontextmanager
 from collections import deque
 from src.api import health_routes, feedback_routes
+from src.api import normalization_routes
 from src.api import minio_routes
 from src.neo4j import building_routes
 from fastapi import FastAPI
@@ -15,7 +15,9 @@ from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_confi
 from src.logging_config import setup_logging
 from src.middleware import RequestIdMiddleware
 from src.spark import spark_routes
-from src.database import create_tables
+from src.database import create_tables, ensure_rule_metrics_columns
+from src.spark.cleaner import DataCleaner
+from src.spark.usage_tracker import NormalizationRuleUsageTracker
 
 # Configure structured logging once
 setup_logging(service_name="backend", log_file="backend.log")
@@ -33,6 +35,7 @@ app_state = {
 }
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -48,6 +51,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to create database tables: {e}")
         raise
+    
+    # Ensure metrics columns exist (idempotent)
+    try:
+        ensure_rule_metrics_columns()
+    except Exception as e:
+        logger.warning("Could not ensure normalization rule metrics columns: %s", e)
+
+    # Seed normalization rules (no-op if already present)
+    try:
+        inserted = DataCleaner.seed_normalization_rules()
+        if inserted:
+            logger.info("Seeded %d normalization rules", inserted)
+    except Exception as e:
+        logger.error("Error seeding normalization rules: %s", e)
+
+    # Start background aggregator for normalization rule usage
+    try:
+        NormalizationRuleUsageTracker.start()
+    except Exception as e:
+        logger.warning("Could not start normalization usage aggregator: %s", e)
     
     # Initialize dependencies to ensure they're created
     try:
@@ -89,6 +112,12 @@ async def lifespan(app: FastAPI):
             
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
+
+    # Stop usage aggregator
+    try:
+        NormalizationRuleUsageTracker.stop()
+    except Exception as e:
+        logger.warning("Error stopping normalization usage aggregator: %s", e)
     
     logger.info("Shutdown completed.")
 
@@ -121,6 +150,7 @@ def create_app() -> FastAPI:
     app.include_router(health_routes.router)
     app.include_router(minio_routes.router)
     app.include_router(feedback_routes.router)
+    app.include_router(normalization_routes.router)
     
     return app
 

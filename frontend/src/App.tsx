@@ -13,6 +13,7 @@ import { Suspense } from 'react';
 import { ConfigProvider } from './context/ConfigContext';
 import FeedbackPage from './pages/FeedbackPage';
 import MinioBrowserPage from './pages/MinioBrowserPage.tsx';
+import NormalizationRulesPage from './pages/NormalizationRulesPage';
 
 function App() {
 
@@ -30,6 +31,7 @@ function App() {
               <Route path="/map" element={<MapPage />} />
               <Route path="/feedback" element={<FeedbackPage />} />
               <Route path="/minio" element={<MinioBrowserPage />} />
+              <Route path="/normalization" element={<NormalizationRulesPage />} />
               <Route path="/new-events" element={<NewEventsPage />} /> {/* new route */}
             </Routes>
             <AppFooter />

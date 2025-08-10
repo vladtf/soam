@@ -41,7 +41,7 @@ while True:
         "humidity": round(random.uniform(20, 70), 2),         # Expanded range for humidity
         "timestamp": (datetime.now() + 
                       timedelta(seconds=random.randint(-10, 10))).isoformat(),  # Slight timestamp variation
-        "sensorId": sensor_id,
+        "sensor-id": sensor_id,
     }
     client.publish(topic, json.dumps(payload))
     logging.info("Published: %s", payload)
