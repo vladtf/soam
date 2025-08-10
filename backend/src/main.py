@@ -37,7 +37,6 @@ app_state = {
 }
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -45,7 +44,7 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Starting SOAM Smart City Backend...")
-    
+
     # Initialize database tables
     try:
         create_tables()
@@ -53,7 +52,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to create database tables: {e}")
         raise
-    
+
     # Ensure metrics columns exist (idempotent)
     try:
         ensure_rule_metrics_columns()
@@ -73,7 +72,7 @@ async def lifespan(app: FastAPI):
         NormalizationRuleUsageTracker.start()
     except Exception as e:
         logger.warning("Could not start normalization usage aggregator: %s", e)
-    
+
     # Initialize dependencies to ensure they're created
     try:
         config = get_config()
@@ -83,35 +82,35 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize dependencies: {e}")
         raise
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down SOAM Smart City Backend...")
-    
+
     # Stop and join all threads stored in the map
     for key, thread in app_state["threads"].items():
         if thread.is_alive():
             logger.info(f"Stopping thread {key}")
             thread.join(timeout=5)  # join with timeout for safety
-    
+
     # Clean shutdown of managers
     try:
         # Get cached instances for cleanup
         config = get_config()
         spark_manager = get_spark_manager(config)
         neo4j_manager = get_neo4j_manager(config)
-        
+
         # Stop Spark streams and close manager
         if spark_manager:
             spark_manager.close()
             logger.info("SparkManager stopped successfully")
-            
+
         # Close Neo4j connection
         if neo4j_manager:
             neo4j_manager.close()
             logger.info("Neo4jManager stopped successfully")
-            
+
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
 
@@ -120,7 +119,7 @@ async def lifespan(app: FastAPI):
         NormalizationRuleUsageTracker.stop()
     except Exception as e:
         logger.warning("Error stopping normalization usage aggregator: %s", e)
-    
+
     logger.info("Shutdown completed.")
 
 
@@ -136,7 +135,7 @@ def create_app() -> FastAPI:
     )
     # Request ID middleware and basic access logging
     app.add_middleware(RequestIdMiddleware)
-    
+
     # Enable CORS
     app.add_middleware(
         CORSMiddleware,
@@ -145,7 +144,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
     # Include routers
     app.include_router(building_routes.router)
     app.include_router(spark_routes.router)
@@ -155,7 +154,7 @@ def create_app() -> FastAPI:
     app.include_router(normalization_routes.router)
     app.include_router(computation_routes.router)
     app.include_router(dashboard_tiles_routes.router)
-    
+
     return app
 
 

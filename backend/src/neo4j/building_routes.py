@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from typing import List
 
-from src.api.models import Building, BuildingCreate, BuildingLocation
+from src.api.models import BuildingLocation, BuildingCreateNeo4j, BuildingCreateResult, ApiResponse
 from src.api.dependencies import Neo4jManagerDep
 
 logger = logging.getLogger(__name__)
@@ -23,12 +23,21 @@ async def get_buildings(neo4j_manager: Neo4jManagerDep):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/", response_model=Building)
-async def add_building(building: BuildingCreate, neo4j_manager: Neo4jManagerDep):
-    """Add a new building to the database."""
+@router.post("/", response_model=ApiResponse)
+async def add_building(building: BuildingCreateNeo4j, neo4j_manager: Neo4jManagerDep):
+    """Add a new building and its address to the database (Neo4j-backed)."""
     try:
         building_data = building.dict()
-        return neo4j_manager.add_building(building_data)
+        res = neo4j_manager.add_building(building_data)
+        # Normalize to ApiResponse shape for frontend doFetch()
+        if isinstance(res, dict) and res.get("status") == "error":
+            # surface as 400 so frontend sees detail
+            raise HTTPException(status_code=400, detail=res.get("detail") or "Error adding building")
+        payload = {
+            "building": (res or {}).get("building") if isinstance(res, dict) else None,
+            "address": (res or {}).get("address") if isinstance(res, dict) else None,
+        }
+        return {"status": "success", "data": payload, "message": (res or {}).get("status") if isinstance(res, dict) else None}
     except KeyError as e:
         logger.error(f"Missing field in add_building: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Missing field: {str(e)}")

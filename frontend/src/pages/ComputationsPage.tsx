@@ -16,6 +16,7 @@ import {
 import ComputationsTable from '../components/computations/ComputationsTable';
 import EditorModal from '../components/computations/EditorModal';
 import PreviewModal from '../components/computations/PreviewModal';
+import WithTooltip from '../components/WithTooltip';
 
 const empty: ComputationDef = { name: '', dataset: 'silver', definition: {}, description: '', enabled: true };
 
@@ -119,7 +120,7 @@ const ComputationsPage: React.FC = () => {
 
   return (
     <div className="container pt-3 pb-4">
-      <PageHeader title="Computations" right={<Button onClick={openNew}>New</Button>} />
+  <PageHeader title="Computations" right={<WithTooltip tip="Create a new computation"><Button onClick={openNew}>New</Button></WithTooltip>} />
       <Card className="shadow-sm border-body">
         <Card.Body>
           {sources.length > 0 && (

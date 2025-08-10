@@ -1,5 +1,6 @@
 import React from 'react';
 import { Table, Badge, Button } from 'react-bootstrap';
+import WithTooltip from '../WithTooltip';
 import type { ComputationDef } from '../../api/backendRequests';
 
 interface Props {
@@ -32,15 +33,21 @@ const ComputationsTable: React.FC<Props> = ({ items, isDark, loading, onEdit, on
             </td>
             <td>{it.enabled ? <Badge bg="success">enabled</Badge> : <Badge bg="secondary">disabled</Badge>}</td>
             <td className="d-flex gap-2">
-              <Button size="sm" variant="outline-primary" onClick={() => onEdit(it)}>
-                Edit
-              </Button>
-              <Button size="sm" variant="outline-secondary" onClick={() => onPreview(it.id)}>
-                Preview
-              </Button>
-              <Button size="sm" variant="outline-danger" onClick={() => onDelete(it.id)}>
-                Delete
-              </Button>
+              <WithTooltip tip="Edit this computation">
+                <Button size="sm" variant="outline-primary" onClick={() => onEdit(it)}>
+                  Edit
+                </Button>
+              </WithTooltip>
+              <WithTooltip tip="Run a quick preview to see sample results">
+                <Button size="sm" variant="outline-secondary" onClick={() => onPreview(it.id)}>
+                  Preview
+                </Button>
+              </WithTooltip>
+              <WithTooltip tip="Delete this computation">
+                <Button size="sm" variant="outline-danger" onClick={() => onDelete(it.id)}>
+                  Delete
+                </Button>
+              </WithTooltip>
             </td>
           </tr>
         ))}

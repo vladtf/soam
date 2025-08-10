@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button, ButtonGroup } from 'react-bootstrap';
+import WithTooltip from './WithTooltip';
 
 interface PageHeaderProps {
   title: string;
@@ -36,17 +37,21 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         {(onRefresh || onToggleAutoRefresh) && (
           <ButtonGroup size="sm">
             {onRefresh && (
-              <Button variant="outline-primary" onClick={onRefresh} disabled={refreshing}>
-                {refreshing ? 'Refreshing…' : 'Refresh'}
-              </Button>
+              <WithTooltip tip="Fetch the latest data now">
+                <Button variant="outline-primary" onClick={onRefresh} disabled={refreshing}>
+                  {refreshing ? 'Refreshing…' : 'Refresh'}
+                </Button>
+              </WithTooltip>
             )}
             {onToggleAutoRefresh && (
-              <Button
-                variant={autoRefresh ? 'primary' : 'outline-secondary'}
-                onClick={() => onToggleAutoRefresh(!autoRefresh)}
-              >
-                Auto-refresh {autoRefresh ? 'ON' : 'OFF'}
-              </Button>
+              <WithTooltip tip={autoRefresh ? 'Turn off automatic refresh' : 'Turn on automatic refresh'}>
+                <Button
+                  variant={autoRefresh ? 'primary' : 'outline-secondary'}
+                  onClick={() => onToggleAutoRefresh(!autoRefresh)}
+                >
+                  Auto-refresh {autoRefresh ? 'ON' : 'OFF'}
+                </Button>
+              </WithTooltip>
             )}
           </ButtonGroup>
         )}

@@ -32,6 +32,25 @@ class BuildingLocation(BaseModel):
     lng: float
 
 
+# Neo4j-specific create payload and response (used by /buildings POST)
+class BuildingCreateNeo4j(BaseModel):
+    """Create payload for Neo4j-backed buildings endpoint."""
+    name: str
+    description: str
+    street: str
+    city: str
+    country: str
+    lat: float
+    lng: float
+
+
+class BuildingCreateResult(BaseModel):
+    """Response shape returned by Neo4j manager when creating a building."""
+    status: str
+    building: Optional[Dict[str, Any]] = None
+    address: Optional[Dict[str, Any]] = None
+
+
 class HealthStatus(BaseModel):
     """Schema for health check response."""
     status: str = Field(..., description="Overall system status")

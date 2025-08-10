@@ -12,6 +12,7 @@ import PageHeader from '../components/PageHeader';
 import { DashboardTile } from '../components/DashboardTile';
 import { DashboardTileDef, fetchDashboardTileExamples, listDashboardTiles, createDashboardTile, listComputations, previewDashboardTile, deleteDashboardTile, updateDashboardTile } from '../api/backendRequests';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import WithTooltip from '../components/WithTooltip';
 
 const DashboardPage: React.FC = () => {
   const {
@@ -140,14 +141,18 @@ const DashboardPage: React.FC = () => {
         lastUpdated={lastUpdated}
         right={
           <div className="d-flex align-items-center gap-3">
-            <Form.Check
-              type="switch"
-              id="drag-mode"
-              label="Drag mode"
-              checked={dragEnabled}
-              onChange={(e) => setDragEnabled(e.target.checked)}
-            />
-            <Button size="sm" onClick={openNewTile}>New Tile</Button>
+            <WithTooltip tip="Enable to rearrange tiles by dragging the ⠿ handle">
+              <Form.Check
+                type="switch"
+                id="drag-mode"
+                label="Drag mode"
+                checked={dragEnabled}
+                onChange={(e) => setDragEnabled(e.target.checked)}
+              />
+            </WithTooltip>
+            <WithTooltip tip="Create a new dashboard tile">
+              <Button size="sm" onClick={openNewTile}>New Tile</Button>
+            </WithTooltip>
           </div>
         }
       />
@@ -189,7 +194,7 @@ const DashboardPage: React.FC = () => {
 
       {/* User-defined tiles in grid */}
       {dragEnabled ? (
-        <div className="small text-primary mt-2">Drag is ON. Use the ⠿ handle next to each tile title to move tiles. Toggle off to finish arranging.</div>
+  <div className="small text-primary mt-2">Drag is ON. Use the <span className="user-select-none">⠿</span> handle next to each tile title to move tiles. Toggle off to finish arranging.</div>
       ) : (
         <div className="small text-body-secondary mt-2">Drag is OFF. Enable "Drag mode" to rearrange tiles.</div>
       )}
@@ -355,9 +360,15 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
           <span>{tile.name}</span>
         </div>
         <ButtonGroup size="sm" className="tile-controls" onMouseDown={(e) => e.stopPropagation()}>
-          <Button variant="outline-secondary" onClick={(e) => { e.stopPropagation(); setTsKey(k => k + 1); setCache(null); }}>Refresh</Button>
-          <Button variant="outline-secondary" onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>Edit</Button>
-          <Button variant="outline-danger" onClick={(e) => { e.stopPropagation(); onDelete && onDelete(); }}>Delete</Button>
+          <WithTooltip tip="Reload the data for this tile">
+            <Button variant="outline-secondary" onClick={(e) => { e.stopPropagation(); setTsKey(k => k + 1); setCache(null); }}>Refresh</Button>
+          </WithTooltip>
+          <WithTooltip tip="Edit tile settings (computation, visualization, config)">
+            <Button variant="outline-secondary" onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>Edit</Button>
+          </WithTooltip>
+          <WithTooltip tip="Remove this tile from the dashboard">
+            <Button variant="outline-danger" onClick={(e) => { e.stopPropagation(); onDelete && onDelete(); }}>Delete</Button>
+          </WithTooltip>
         </ButtonGroup>
       </div>
       <div className="flex-grow-1 border rounded p-2 bg-body-tertiary">

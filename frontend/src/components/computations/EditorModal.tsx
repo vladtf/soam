@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Row, Col, Form, Alert, Button } from 'react-bootstrap';
+import WithTooltip from '../../components/WithTooltip';
 import type { ComputationDef, ComputationExample } from '../../api/backendRequests';
 import type { SchemaMap } from './DefinitionValidator';
 import { validateDefinition } from './DefinitionValidator';
@@ -44,24 +45,25 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
               <div className="d-flex flex-wrap gap-2 align-items-center">
                 <span className="text-body-secondary small">Examples:</span>
                 {examples.map((ex) => (
-                  <Button
-                    key={ex.id}
-                    size="sm"
-                    variant="outline-secondary"
-                    onClick={() => {
-                      setDefText(JSON.stringify(ex.definition, null, 2));
-                      setDefValid(true);
-                      setEditing((s) => ({ ...(s as ComputationDef), dataset: ex.dataset, definition: ex.definition }));
-                      try {
-                        const errs = validateDefinition(ex.definition, ex.dataset, schemas);
-                        setDefErrors(errs);
-                      } catch {
-                        setDefErrors([]);
-                      }
-                    }}
-                  >
-                    {ex.title}
-                  </Button>
+                  <WithTooltip key={ex.id} tip={`Load example: ${ex.title}`}>
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      onClick={() => {
+                        setDefText(JSON.stringify(ex.definition, null, 2));
+                        setDefValid(true);
+                        setEditing((s) => ({ ...(s as ComputationDef), dataset: ex.dataset, definition: ex.definition }));
+                        try {
+                          const errs = validateDefinition(ex.definition, ex.dataset, schemas);
+                          setDefErrors(errs);
+                        } catch {
+                          setDefErrors([]);
+                        }
+                      }}
+                    >
+                      {ex.title}
+                    </Button>
+                  </WithTooltip>
                 ))}
               </div>
             </Col>
@@ -107,16 +109,19 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
           <Col md={12}>
             <Form.Group>
               <Form.Label>Description</Form.Label>
-              <Form.Control
+              <WithTooltip tip="Short description to explain what this computation does">
+                <Form.Control
                 value={editing?.description ?? ''}
                 onChange={(e) => setEditing((s) => ({ ...(s as ComputationDef), description: e.target.value }))}
-              />
+                />
+              </WithTooltip>
             </Form.Group>
           </Col>
           <Col md={12}>
             <Form.Group>
               <Form.Label>Definition (JSON)</Form.Label>
-              <Form.Control
+              <WithTooltip tip="Edit the JSON definition: select, where, orderBy, limit">
+                <Form.Control
                 as="textarea"
                 rows={10}
                 value={defText}
@@ -135,7 +140,8 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
                     setDefErrors([]);
                   }
                 }}
-              />
+                />
+              </WithTooltip>
               <Form.Control.Feedback type="invalid">Invalid JSON</Form.Control.Feedback>
               {defErrors.length > 0 && defValid && (
                 <Alert variant="danger" className="mt-2 mb-0 py-2">
@@ -161,15 +167,19 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
         </Row>
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          onClick={onSave}
-          disabled={!editing || !defValid || defErrors.length > 0 || !editing.name?.trim()}
-        >
-          Save
-        </Button>
+        <WithTooltip tip="Discard changes and close">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+        </WithTooltip>
+        <WithTooltip tip="Save computation">
+          <Button
+            onClick={onSave}
+            disabled={!editing || !defValid || defErrors.length > 0 || !editing.name?.trim()}
+          >
+            Save
+          </Button>
+        </WithTooltip>
       </Modal.Footer>
     </Modal>
   );
