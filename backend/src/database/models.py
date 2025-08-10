@@ -49,3 +49,34 @@ class NormalizationRule(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class Computation(Base):
+    """User-defined computation stored as a JSON definition."""
+    __tablename__ = "computations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    dataset = Column(String(64), nullable=False)  # e.g., 'silver', 'alerts', 'sensors'
+    definition = Column(Text, nullable=False)     # JSON string of the computation definition
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        import json as _json
+        try:
+            parsed_def = _json.loads(self.definition) if isinstance(self.definition, str) else (self.definition or {})
+        except Exception:
+            parsed_def = {}
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "dataset": self.dataset,
+            "definition": parsed_def,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

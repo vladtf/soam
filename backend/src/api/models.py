@@ -106,3 +106,33 @@ class FeedbackResponse(BaseModel):
     email: str
     message: str
     created_at: str
+
+
+# ===============================
+# Computations (User-defined)
+# ===============================
+
+class ComputationCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    dataset: str = Field(..., description="Target dataset: silver | alerts | sensors")
+    definition: Dict[str, Any] = Field(..., description="JSON computation definition")
+    enabled: bool = True
+
+
+class ComputationUpdate(BaseModel):
+    description: Optional[str] = None
+    dataset: Optional[str] = None
+    definition: Optional[Dict[str, Any]] = None
+    enabled: Optional[bool] = None
+
+
+class ComputationResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    dataset: str
+    definition: Dict[str, Any]
+    enabled: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

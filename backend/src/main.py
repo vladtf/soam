@@ -8,6 +8,7 @@ from src.api import health_routes, feedback_routes
 from src.api import normalization_routes
 from src.api import minio_routes
 from src.neo4j import building_routes
+from src.computations import computation_routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -151,6 +152,7 @@ def create_app() -> FastAPI:
     app.include_router(minio_routes.router)
     app.include_router(feedback_routes.router)
     app.include_router(normalization_routes.router)
+    app.include_router(computation_routes.router)
     
     return app
 

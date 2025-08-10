@@ -282,3 +282,85 @@ export const deleteNormalizationRule = (id: number): Promise<{ status?: string; 
     method: 'DELETE',
   });
 };
+
+// Computations API
+export interface ComputationDef {
+  id?: number;
+  name: string;
+  description?: string;
+  dataset: string; // 'silver' | 'alerts' | 'sensors'
+  definition: Record<string, unknown>;
+  enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const listComputations = (): Promise<ComputationDef[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ComputationDef[]>(`${backendUrl}/computations/`);
+};
+
+export const createComputation = (payload: ComputationDef): Promise<ComputationDef> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ComputationDef>(`${backendUrl}/computations/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const updateComputation = (id: number, payload: Partial<ComputationDef>): Promise<ComputationDef> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ComputationDef>(`${backendUrl}/computations/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const deleteComputation = (id: number): Promise<{ status?: string; message?: string }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/computations/${id}`, { method: 'DELETE' });
+};
+
+export const previewComputation = (id: number): Promise<unknown[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<unknown[]>(`${backendUrl}/computations/${id}/preview`, {
+    method: 'POST',
+  });
+};
+
+// Computation examples and sources
+export interface ComputationExample {
+  id: string;
+  title: string;
+  description?: string;
+  dataset: string;
+  definition: Record<string, unknown>;
+}
+
+export interface ComputationExamplesResponse {
+  sources: string[];
+  examples: ComputationExample[];
+  dsl: { keys: string[]; ops: string[]; notes?: string };
+}
+
+export const fetchComputationExamples = (): Promise<ComputationExamplesResponse> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ComputationExamplesResponse>(`${backendUrl}/computations/examples`);
+};
+
+export const fetchComputationSources = (): Promise<{ sources: string[] }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ sources: string[] }>(`${backendUrl}/computations/sources`);
+};
+
+export interface ComputationSchemasResponse {
+  sources: string[];
+  schemas: Record<string, { name: string; type: string }[]>;
+}
+
+export const fetchComputationSchemas = (): Promise<ComputationSchemasResponse> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ComputationSchemasResponse>(`${backendUrl}/computations/schemas`);
+};
