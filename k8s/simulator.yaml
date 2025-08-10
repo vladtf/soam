@@ -14,11 +14,13 @@ spec:
     spec:
       initContainers:
         - name: wait-for-mosquitto
-          image: busybox
+          image: busybox:1.35
+          imagePullPolicy: IfNotPresent
           command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
       containers:
         - name: simulator
           image: simulator:latest
+          imagePullPolicy: IfNotPresent
           resources:
             requests:
               cpu: 50m

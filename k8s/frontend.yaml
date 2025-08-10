@@ -16,6 +16,7 @@ spec:
         # Wait for backend to be ready
         - name: wait-for-backend
           image: busybox:1.35
+          imagePullPolicy: IfNotPresent
           command: ['sh', '-c']
           args:
             - |
@@ -36,6 +37,7 @@ spec:
       containers:
         - name: frontend
           image: frontend:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
           resources:

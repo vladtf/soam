@@ -15,6 +15,7 @@ spec:
       containers:
         - name: ingestor
           image: ingestor:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8001
           resources:

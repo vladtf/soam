@@ -15,6 +15,7 @@ spec:
       containers:
         - name: prometheus
           image: prometheus:latest
+          imagePullPolicy: IfNotPresent
           args: ["--config.file=/etc/prometheus/prometheus.yml"]
           ports:
             - containerPort: 9090

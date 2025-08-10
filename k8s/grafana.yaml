@@ -15,6 +15,7 @@ spec:
       containers:
         - name: grafana
           image: grafana:latest
+          imagePullPolicy: IfNotPresent
           env:
             - name: GF_SECURITY_ADMIN_USER
               value: admin
