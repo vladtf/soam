@@ -14,11 +14,15 @@ import { ConfigProvider } from './context/ConfigContext';
 import FeedbackPage from './pages/FeedbackPage';
 import MinioBrowserPage from './pages/MinioBrowserPage.tsx';
 import NormalizationRulesPage from './pages/NormalizationRulesPage';
+import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider } from './context/AuthContext';
 
 function App() {
 
   return (
-    <ConfigProvider>
+    <ThemeProvider>
+      <ConfigProvider>
+        <AuthProvider>
       <BrowserRouter>
         <Suspense fallback={<div>Loading...</div>}>
           <div className="App">
@@ -38,7 +42,9 @@ function App() {
           </div>
         </Suspense>
       </BrowserRouter>
-    </ConfigProvider>
+        </AuthProvider>
+      </ConfigProvider>
+    </ThemeProvider>
   );
 }
 

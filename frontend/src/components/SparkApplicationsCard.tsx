@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, Table, Badge, Row, Col, ProgressBar, Spinner } from 'react-bootstrap';
 import { FaTasks, FaServer, FaCog, FaMemory, FaUsers, FaClock } from 'react-icons/fa';
 import { SparkMasterStatus, SparkApplication } from '../api/backendRequests';
+import { useTheme } from '../context/ThemeContext';
 
 interface SparkApplicationsCardProps {
   sparkMasterStatus: SparkMasterStatus | null;
@@ -12,6 +13,8 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
   sparkMasterStatus, 
   loading 
 }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const getStateVariant = (state: string) => {
     switch (state?.toLowerCase()) {
       case 'running':
@@ -62,12 +65,12 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
           </div>
         ) : sparkMasterStatus?.activeapps && sparkMasterStatus.activeapps.length > 0 ? (
           <div>
-            <h6 className="mb-3 text-muted">
+            <h6 className="mb-3 text-body-secondary">
               <FaTasks className="me-2" />
               Active Applications ({sparkMasterStatus.activeapps.length})
             </h6>
-            <Table striped hover responsive className="mb-0">
-              <thead className="table-light">
+            <Table striped hover responsive className="mb-0" variant={isDark ? 'dark' : undefined}>
+              <thead className={isDark ? 'table-dark' : 'table-light'}>
                 <tr>
                   <th><FaTasks className="me-1" /> App Name</th>
                   <th>App ID</th>
@@ -82,7 +85,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                   <tr key={index}>
                     <td className="fw-semibold">{app.name}</td>
                     <td>
-                      <code className="small text-muted">{app.id}</code>
+                      <code className="small text-body-secondary">{app.id}</code>
                     </td>
                     <td>{app.user}</td>
                     <td>
@@ -91,14 +94,14 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                       </Badge>
                     </td>
                     <td>{app.cores}</td>
-                    <td className="text-muted small">{formatDate(app.submitdate)}</td>
+                    <td className="text-body-secondary small">{formatDate(app.submitdate)}</td>
                   </tr>
                 ))}
               </tbody>
             </Table>
           </div>
         ) : (
-          <div className="text-center py-4 text-muted">
+          <div className="text-center py-4 text-body-secondary">
             <FaTasks size={48} className="mb-3 opacity-50" />
             <div>No active applications found</div>
             <small>Applications will appear here when they are running</small>
@@ -109,24 +112,24 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
         {sparkMasterStatus && (
           <div className="mt-4">
             <hr />
-            <h6 className="mb-3 text-muted">
+            <h6 className="mb-3 text-body-secondary">
               <FaServer className="me-2" />
               Cluster Overview
             </h6>
             
             <Row className="g-3">
               <Col md={6}>
-                <Card className="border-0 bg-light h-100">
+                <Card className="border-0 bg-body-tertiary h-100">
                   <Card.Body className="p-3">
                     <div className="d-flex align-items-center mb-2">
                       <FaServer className="text-primary me-2" />
                       <strong>Master Status</strong>
                     </div>
-                    <div className="small text-muted mb-1">Master URL:</div>
+                    <div className="small text-body-secondary mb-1">Master URL:</div>
                     <div className="fw-semibold mb-2">
                       <code className="small">{sparkMasterStatus.url}</code>
                     </div>
-                    <div className="small text-muted mb-1">Status:</div>
+                    <div className="small text-body-secondary mb-1">Status:</div>
                     <Badge bg={sparkMasterStatus.status === 'ALIVE' ? 'success' : 'danger'}>
                       {sparkMasterStatus.status}
                     </Badge>
@@ -135,7 +138,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
               </Col>
               
               <Col md={6}>
-                <Card className="border-0 bg-light h-100">
+                <Card className="border-0 bg-body-tertiary h-100">
                   <Card.Body className="p-3">
                     <div className="d-flex align-items-center mb-2">
                       <FaUsers className="text-info me-2" />
@@ -143,7 +146,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                     </div>
                     <div className="h4 mb-0 text-info">
                       {sparkMasterStatus.aliveworkers}
-                      <small className="text-muted h6"> alive</small>
+                      <small className="text-body-secondary h6"> alive</small>
                     </div>
                   </Card.Body>
                 </Card>
@@ -152,7 +155,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
             
             <Row className="g-3 mt-1">
               <Col md={6}>
-                <Card className="border-0 bg-light h-100">
+                <Card className="border-0 bg-body-tertiary h-100">
                   <Card.Body className="p-3">
                     <div className="d-flex align-items-center mb-2">
                       <FaCog className="text-warning me-2" />
@@ -160,7 +163,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                     </div>
                     <div className="mb-2">
                       <span className="h5 text-warning">{sparkMasterStatus.coresused}</span>
-                      <span className="text-muted"> / {sparkMasterStatus.cores} used</span>
+                      <span className="text-body-secondary"> / {sparkMasterStatus.cores} used</span>
                     </div>
                     <ProgressBar 
                       now={coreUtilization} 
@@ -168,13 +171,13 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                       className="mb-1"
                       style={{ height: '8px' }}
                     />
-                    <small className="text-muted">{coreUtilization.toFixed(1)}% utilization</small>
+                    <small className="text-body-secondary">{coreUtilization.toFixed(1)}% utilization</small>
                   </Card.Body>
                 </Card>
               </Col>
               
               <Col md={6}>
-                <Card className="border-0 bg-light h-100">
+                <Card className="border-0 bg-body-tertiary h-100">
                   <Card.Body className="p-3">
                     <div className="d-flex align-items-center mb-2">
                       <FaMemory className="text-success me-2" />
@@ -182,7 +185,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                     </div>
                     <div className="mb-2">
                       <span className="h5 text-success">{Math.round(sparkMasterStatus.memoryused / 1024)}MB</span>
-                      <span className="text-muted"> / {Math.round(sparkMasterStatus.memory / 1024)}MB used</span>
+                      <span className="text-body-secondary"> / {Math.round(sparkMasterStatus.memory / 1024)}MB used</span>
                     </div>
                     <ProgressBar 
                       now={memoryUtilization} 
@@ -190,7 +193,7 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                       className="mb-1"
                       style={{ height: '8px' }}
                     />
-                    <small className="text-muted">{memoryUtilization.toFixed(1)}% utilization</small>
+                    <small className="text-body-secondary">{memoryUtilization.toFixed(1)}% utilization</small>
                   </Card.Body>
                 </Card>
               </Col>
