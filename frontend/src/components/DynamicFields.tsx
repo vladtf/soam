@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Spinner, Alert } from 'react-bootstrap';
 import * as rdflib from 'rdflib';
+import { useError } from '../context/ErrorContext';
+import { reportClientError } from '../errors';
 
 export interface FormField {
 	propertyURI: string;
@@ -85,6 +87,7 @@ export const DynamicFieldsWrapper: React.FC<DynamicFieldsWrapperProps> = ({ clas
 	const [fields, setFields] = useState<FormField[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
+    const { setError: setGlobalError } = useError();
 
 	useEffect(() => {
 		const loadOntology = async () => {
@@ -114,7 +117,8 @@ export const DynamicFieldsWrapper: React.FC<DynamicFieldsWrapperProps> = ({ clas
 				setFields(extractedFields);
 				setLoading(false);
 			} catch (err: unknown) {
-				console.error('Error loading ontology:', err);
+				setGlobalError(err instanceof Error ? err.message : (err as any));
+				reportClientError({ message: String(err), severity: 'error', component: 'DynamicFields', context: 'loadOntology' }).catch(() => {});
 				setError('Error loading ontology');
 				setLoading(false);
 			}

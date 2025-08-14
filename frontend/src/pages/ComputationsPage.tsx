@@ -38,9 +38,7 @@ const ComputationsPage: React.FC = () => {
       const data = await listComputations();
       setItems(data);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      // surface minimally; could wire into global error toast
-      console.error('Failed to load computations:', message);
+      setItems([]);
     } finally {
       setLoading(false);
     }

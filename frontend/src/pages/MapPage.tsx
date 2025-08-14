@@ -9,6 +9,8 @@ import { Building } from '../models/Building';
 import PageHeader from '../components/PageHeader';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'react-toastify';
+import { useError } from '../context/ErrorContext';
+import { reportClientError } from '../errors';
 
 type MapClickEvent = { latlng: { lat: number; lng: number } };
 
@@ -73,12 +75,15 @@ const MapPage: React.FC = () => {
     loadBuildings();
   }, []);
 
+  const { setError } = useError();
+
   const loadBuildings = async () => {
     try {
       const data = await fetchBuildings();
       setBuildings(data);
     } catch (err) {
-      console.error("Error fetching buildings:", err);
+      setError(err);
+      reportClientError({ message: String(err), severity: 'error', component: 'MapPage', context: 'loadBuildings' }).catch(() => {});
     }
   };
 
@@ -95,7 +100,8 @@ const MapPage: React.FC = () => {
       await loadBuildings();
       toast.success('Building deleted');
     } catch (err) {
-      console.error('Error deleting building:', err);
+      setError(err);
+      reportClientError({ message: String(err), severity: 'error', component: 'MapPage', context: 'deleteBuilding' }).catch(() => {});
       toast.error(`Failed to delete building: ${String(err)}`);
     }
   };
@@ -150,7 +156,8 @@ const MapPage: React.FC = () => {
       setCity(data.address.city || data.address.town || data.address.village || '');
       setCountry(data.address.country || '');
     } catch (error) {
-      console.error("Error fetching address:", error);
+      setError(error);
+      reportClientError({ message: String(error), severity: 'warn', component: 'MapPage', context: 'fetchAddress' }).catch(() => {});
     }
   };
 

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Card, ListGroup, Button } from 'react-bootstrap';
 import ConnectionConfigModal from './ConnectionConfigModal';
 import { fetchConnections, switchBroker } from '../api/backendRequests';
+import { useError } from '../context/ErrorContext';
+import { reportClientError } from '../errors';
 
 interface ConnectionInfo {
     id?: number;
@@ -16,6 +18,8 @@ const ConnectionStatus: React.FC = () => {
     const [active, setActive] = useState<ConnectionInfo | null>(null);
     const [showConfig, setShowConfig] = useState(false);
 
+    const { setError } = useError();
+
     useEffect(() => {
         const loadConnections = async () => {
             try {
@@ -23,7 +27,8 @@ const ConnectionStatus: React.FC = () => {
                 setConnections(data.connections || []);
                 setActive(data.active || null);
             } catch (error) {
-                console.error('Error fetching connection statuses:', error);
+                setError(error instanceof Error ? error.message : (error as any));
+                reportClientError({ message: String(error), severity: 'warn', component: 'ConnectionStatus', context: 'fetchConnections' }).catch(() => {});
             }
         };
 
@@ -36,7 +41,8 @@ const ConnectionStatus: React.FC = () => {
         try {
             await switchBroker(id);
         } catch (error) {
-            console.error(`Error switching to connection ${id}:`, error);
+            setError(error instanceof Error ? error.message : (error as any));
+            reportClientError({ message: String(error), severity: 'error', component: 'ConnectionStatus', context: `switchBroker:${id}` }).catch(() => {});
         }
     };
 

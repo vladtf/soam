@@ -17,6 +17,7 @@ import NormalizationRulesPage from './pages/NormalizationRulesPage';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import ComputationsPage from './pages/ComputationsPage';
+import TroubleshootingPage from './pages/TroubleshootingPage';
 
 function App() {
 
@@ -38,6 +39,7 @@ function App() {
               <Route path="/minio" element={<MinioBrowserPage />} />
               <Route path="/normalization" element={<NormalizationRulesPage />} />
               <Route path="/computations" element={<ComputationsPage />} />
+              <Route path="/troubleshooting" element={<TroubleshootingPage />} />
               <Route path="/new-events" element={<NewEventsPage />} /> {/* new route */}
             </Routes>
             <AppFooter />

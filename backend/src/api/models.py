@@ -212,3 +212,33 @@ class DashboardTileResponse(BaseModel):
     enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+# ===============================
+# Client Error Reporting
+# ===============================
+
+class ClientErrorCreate(BaseModel):
+    message: str
+    stack: Optional[str] = None
+    url: Optional[str] = None
+    component: Optional[str] = None
+    context: Optional[str] = None
+    severity: Optional[str] = None
+    user_agent: Optional[str] = None
+    session_id: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+
+
+class ClientErrorResponse(BaseModel):
+    id: int
+    message: str
+    stack: Optional[str] = None
+    url: Optional[str] = None
+    component: Optional[str] = None
+    context: Optional[str] = None
+    severity: Optional[str] = None
+    user_agent: Optional[str] = None
+    session_id: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None

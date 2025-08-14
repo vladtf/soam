@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Navbar, Nav, Container, Button, Dropdown, Badge } from 'react-bootstrap';
-import { FaCity, FaMoon, FaSun } from 'react-icons/fa';
-import { Link } from 'react-router-dom';
+import { Navbar, Nav, Container, Button, Dropdown, Badge, NavDropdown } from 'react-bootstrap';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useError } from '../context/ErrorContext';
 import { getConfig } from '../config';
 import { fetchConnections } from '../api/backendRequests';
 
@@ -47,7 +46,9 @@ const AppNavbar: React.FC = () => {
     const name = window.prompt('Enter your username (letters, numbers, dot, dash, underscore):', username ?? '');
     if (name) login(name);
   };
+  
   const initials = useMemo(() => (username ? username.trim().slice(0, 2).toUpperCase() : ''), [username]);
+  const { openCenter } = useError();
 
   const StatusDot = (
     <span
@@ -60,27 +61,30 @@ const AppNavbar: React.FC = () => {
   return (
     <Navbar expand="lg" className="border-bottom border-body bg-body-tertiary">
       <Container>
-          <Navbar.Brand as={Link} to="/">
-            <FaCity className="me-2" /> SOAM
-          </Navbar.Brand>
+        <Navbar.Brand href="/">SOAM</Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" />
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
-              <Nav.Link as={Link} to="/sensor-data">Sensor Data</Nav.Link>
-              <Nav.Link as={Link} to="/ontology">Ontology</Nav.Link>
-              <Nav.Link as={Link} to="/dashboard">Dashboard</Nav.Link>
-              <Nav.Link as={Link} to="/map">Map</Nav.Link>
-              <Nav.Link as={Link} to="/new-events">New Events</Nav.Link>
-              <Nav.Link as={Link} to="/computations">Computations</Nav.Link>
-              <Nav.Link as={Link} to="/minio">Data Browser</Nav.Link>
-              <Nav.Link as={Link} to="/normalization">Normalization</Nav.Link>
-              <Nav.Link as={Link} to="/feedback">Feedback</Nav.Link>
+            <Nav.Link href="/dashboard">Dashboard</Nav.Link>
+            <Nav.Link href="/sensor-data">Sensor Data</Nav.Link>
+            <Nav.Link href="/computations">Computations</Nav.Link>
+            <Nav.Link href="/normalization">Normalization</Nav.Link>
+            <NavDropdown title="More" id="nav-more">
+              <NavDropdown.Item href="/map">Map</NavDropdown.Item>
+              <NavDropdown.Item href="/minio">Data Browser</NavDropdown.Item>
+              <NavDropdown.Item href="/ontology">Ontology</NavDropdown.Item>
+              <NavDropdown.Item href="/new-events">New Events</NavDropdown.Item>
+              <NavDropdown.Divider />
+              <NavDropdown.Item href="/feedback">Feedback</NavDropdown.Item>
+              <NavDropdown.Item href="/troubleshooting">Troubleshooting</NavDropdown.Item>
+            </NavDropdown>
           </Nav>
           <Nav className="ms-auto align-items-center gap-2">
             <div className="d-flex align-items-center text-body-secondary small">
               {StatusDot}
               {envLabel && <Badge bg="light" text="dark" className="me-2">{envLabel}</Badge>}
             </div>
+            <Button size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} onClick={openCenter} aria-label="Open Errors" title="Errors">!</Button>
             <Button
               size="sm"
               variant={isDark ? 'outline-light' : 'outline-dark'}
@@ -88,7 +92,7 @@ const AppNavbar: React.FC = () => {
               aria-label={mode === 'auto' ? 'Theme: Auto (system)' : `Theme: ${mode}`}
               title={mode === 'auto' ? 'Theme: Auto (system)' : `Theme: ${mode}`}
             >
-              {mode === 'auto' ? 'A' : isDark ? (<><FaSun className="me-1" /> Light</>) : (<><FaMoon className="me-1" /> Dark</>)}
+              {mode === 'auto' ? 'A' : isDark ? 'Light' : 'Dark'}
             </Button>
             <Dropdown align="end">
               <Dropdown.Toggle size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} className="d-flex align-items-center" aria-label={username ? `User menu for ${username}` : 'User menu'}>

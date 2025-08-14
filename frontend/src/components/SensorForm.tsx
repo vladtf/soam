@@ -4,6 +4,8 @@ import { Form, Button, Spinner, Alert } from 'react-bootstrap';
 import DynamicFields, { FormField } from './DynamicFields';
 import { useNavigate } from 'react-router-dom';
 import { fetchBuildings } from '../api/backendRequests';
+import { useError } from '../context/ErrorContext';
+import { reportClientError } from '../errors';
 
 const SENSOR_CLASS = 'http://example.org/smartcity#Sensor';
 const RDFS_DOMAIN = 'http://www.w3.org/2000/01/rdf-schema#domain';
@@ -15,14 +17,16 @@ interface SensorFormProps {
 }
 
 const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
-	const [fields, setFields] = useState<FormField[]>([]);
+    const [fields, setFields] = useState<FormField[]>([]);
 	const [formData, setFormData] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 	const [buildings, setBuildings] = useState<{ name: string }[]>([]); // new state for buildings
 	const navigate = useNavigate(); // new hook for navigation
 
-	useEffect(() => {
+    const { setError: setGlobalError } = useError();
+
+    useEffect(() => {
 		const loadOntology = async () => {
 			try {
 				const store = rdflib.graph();
@@ -45,9 +49,10 @@ const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 
 				setFields(extractedFields);
 				setLoading(false);
-			} catch (err: unknown) {
-				console.error('Error loading ontology:', err);
-				setError('Error loading ontology');
+            } catch (err: unknown) {
+                setGlobalError(err instanceof Error ? err.message : (err as any));
+                reportClientError({ message: String(err), severity: 'error', component: 'SensorForm', context: 'loadOntology' }).catch(() => {});
+                setError('Error loading ontology');
 				setLoading(false);
 			}
 		};
@@ -56,9 +61,12 @@ const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 
 	useEffect(() => {
 		// Fetch buildings from backend
-		fetchBuildings()
-			.then((data: { name: string }[]) => setBuildings(data))
-			.catch(err => console.error("Error fetching buildings:", err));
+        fetchBuildings()
+            .then((data: { name: string }[]) => setBuildings(data))
+            .catch(err => {
+                setGlobalError(err instanceof Error ? err.message : (err as any));
+                reportClientError({ message: String(err), severity: 'warn', component: 'SensorForm', context: 'fetchBuildings' }).catch(() => {});
+            });
 	}, []);
 
 	const handleFieldChange = (propertyURI: string, value: string) => {

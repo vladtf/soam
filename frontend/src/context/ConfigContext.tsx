@@ -9,7 +9,10 @@ export const ConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     useEffect(() => {
         loadConfig()
             .then((loadedConfig) => setConfig(loadedConfig))
-            .catch((error) => console.error('Error loading config:', error));
+            .catch(() => {
+                // Defer to global error handling; show a simple inline fallback
+                setConfig({ backendUrl: '/api', ingestorUrl: '/api' });
+            });
     }, []);
 
     if (!config) {

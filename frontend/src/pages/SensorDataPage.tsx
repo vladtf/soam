@@ -7,6 +7,7 @@ import RegisterDeviceCard from '../components/sensor-data/RegisterDeviceCard';
 import DevicesTableCard from '../components/sensor-data/DevicesTableCard';
 import { fetchSensorData, SensorData, listDevices, registerDevice, toggleDevice, deleteDevice, Device, fetchPartitions, setBufferMaxRows } from '../api/backendRequests';
 import { useError } from '../context/ErrorContext';
+import { reportClientError } from '../errors';
 
 const SensorDataPage: React.FC = () => {
     const { setError } = useError();
@@ -33,8 +34,8 @@ const SensorDataPage: React.FC = () => {
                 setKnownIds(ids);
                 if (!useManual && ids.length && !sensorId) setSensorId(ids[0]);
             } catch (err: unknown) {
-                console.error('Error fetching sensor data:', err);
                 setError(err instanceof Error ? err.message : (err as any));
+                reportClientError({ message: String(err), severity: 'error', component: 'SensorDataPage', context: 'fetchSensorData' }).catch(() => {});
             }
         };
 
@@ -59,8 +60,8 @@ const SensorDataPage: React.FC = () => {
                 const rows = await listDevices();
                 setDevices(rows);
             } catch (err) {
-                console.error('Error listing devices:', err);
                 setError(err instanceof Error ? err.message : (err as any));
+                reportClientError({ message: String(err), severity: 'error', component: 'SensorDataPage', context: 'listDevices' }).catch(() => {});
             }
         };
         loadDevices();
@@ -87,8 +88,8 @@ const SensorDataPage: React.FC = () => {
             const rows = await listDevices();
             setDevices(rows);
         } catch (err) {
-            console.error('Error registering device:', err);
             setError(err instanceof Error ? err.message : (err as any));
+            reportClientError({ message: String(err), severity: 'error', component: 'SensorDataPage', context: 'registerDevice' }).catch(() => {});
         }
     };
 
@@ -97,8 +98,8 @@ const SensorDataPage: React.FC = () => {
             const updated = await toggleDevice(id);
             setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
         } catch (err) {
-            console.error('Error toggling device:', err);
             setError(err instanceof Error ? err.message : (err as any));
+            reportClientError({ message: String(err), severity: 'error', component: 'SensorDataPage', context: 'toggleDevice' }).catch(() => {});
         }
     };
 
@@ -107,8 +108,8 @@ const SensorDataPage: React.FC = () => {
             await deleteDevice(id);
             setDevices((prev) => prev.filter((d) => d.id !== id));
         } catch (err) {
-            console.error('Error deleting device:', err);
             setError(err instanceof Error ? err.message : (err as any));
+            reportClientError({ message: String(err), severity: 'error', component: 'SensorDataPage', context: 'deleteDevice' }).catch(() => {});
         }
     };
 

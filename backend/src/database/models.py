@@ -146,3 +146,35 @@ class Device(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class ClientError(Base):
+    """Client-side error/event reported from the frontend."""
+    __tablename__ = "client_errors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message = Column(Text, nullable=False)
+    stack = Column(Text, nullable=True)
+    url = Column(Text, nullable=True)
+    component = Column(String(255), nullable=True)
+    context = Column(String(255), nullable=True)
+    severity = Column(String(32), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    session_id = Column(String(128), nullable=True)
+    extra = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "message": self.message,
+            "stack": self.stack,
+            "url": self.url,
+            "component": self.component,
+            "context": self.context,
+            "severity": self.severity,
+            "user_agent": self.user_agent,
+            "session_id": self.session_id,
+            "extra": self.extra,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

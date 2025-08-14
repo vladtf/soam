@@ -6,6 +6,7 @@ import {
   SparkMasterStatus 
 } from '../api/backendRequests';
 import { useError } from '../context/ErrorContext';
+import { reportClientError } from '../errors';
 
 interface TemperatureData {
   time_start: string;
@@ -53,8 +54,8 @@ export const useDashboardData = () => {
           setAverageTemperature(formattedData);
         }
       } catch (error: unknown) {
-        console.error("Error fetching average temperature:", error);
         setError(error instanceof Error ? error.message : error);
+        reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchTemperature' }).catch(() => {});
       } finally {
         if (loading) setLoading(false);
         setLastUpdated(new Date());
@@ -75,8 +76,8 @@ export const useDashboardData = () => {
         const data = await fetchSparkMasterStatus();
         setSparkMasterStatus(data);
       } catch (error: unknown) {
-        console.error("Error fetching Spark master status:", error);
         setError(error instanceof Error ? error.message : error);
+        reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchSparkStatusNow' }).catch(() => {});
       } finally {
         setLoadingSparkStatus(false);
       }
@@ -95,8 +96,8 @@ export const useDashboardData = () => {
         const data = await fetchTemperatureAlerts();
         setTemperatureAlerts(data as TemperatureAlert[]);
       } catch (error: unknown) {
-        console.error("Error fetching temperature alerts:", error);
         setError(error instanceof Error ? error.message : error);
+        reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchAlertsNow' }).catch(() => {});
       } finally {
         setLoadingAlerts(false);
       }
