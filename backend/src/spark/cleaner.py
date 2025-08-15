@@ -62,13 +62,35 @@ class DataCleaner:
             cols.append(F.col(c).alias(lc))
         return df.select(cols)
 
-    def _load_dynamic_rules(self) -> Dict[str, str]:
-        """Load enabled normalization rules from the database (raw->canonical)."""
+    def _load_dynamic_rules(self, ingestion_id: Optional[str] = None) -> Dict[str, str]:
+        """Load enabled normalization rules from the database (raw->canonical).
+        
+        Priority order:
+        1. Rules specific to the ingestion_id
+        2. Global rules (ingestion_id is NULL) as fallback
+        """
         try:
             db: Session = SessionLocal()
-            rules = db.query(NormalizationRule).filter(NormalizationRule.enabled == True).all()
-            dynamic_map = {r.raw_key.lower(): r.canonical_key for r in rules}
-            logger.debug("Loaded %d normalization rules from DB", len(dynamic_map))
+            # Use a single query to fetch all enabled rules for the given ingestion_id or global
+            dynamic_map = {}
+            query = db.query(NormalizationRule).filter(NormalizationRule.enabled == True)
+            if ingestion_id:
+                query = query.filter(
+                    (NormalizationRule.ingestion_id == ingestion_id) |
+                    (NormalizationRule.ingestion_id.is_(None))
+                )
+            else:
+                query = query.filter(NormalizationRule.ingestion_id.is_(None))
+            rules = query.all()
+
+            # Apply precedence: ingestion-specific rules override global rules
+            for r in rules:
+                raw_key_lower = r.raw_key.lower()
+                # Only override if not already set, or if this rule is ingestion-specific
+                if (r.ingestion_id == ingestion_id) or (raw_key_lower not in dynamic_map):
+                    dynamic_map[raw_key_lower] = r.canonical_key
+
+            logger.debug("Total normalization rules loaded: %d", len(dynamic_map))
             return dynamic_map
         except Exception as e:
             logger.warning("Failed to load normalization rules from DB: %s", e)
@@ -79,21 +101,26 @@ class DataCleaner:
             except Exception:
                 pass
 
-    def normalize_sensor_columns(self, df: DataFrame) -> DataFrame:
+    def normalize_sensor_columns(self, df: DataFrame, ingestion_id: Optional[str] = None) -> DataFrame:
         """Lower-case all columns, then alias known keys to canonical names.
 
+        Args:
+            df: Input DataFrame with raw sensor data
+            ingestion_id: Source identifier for loading specific normalization rules
+
         Unknown columns are preserved (kept lower-case) to avoid data loss.
-        DB rules override static map when a raw key is present in both.
+        Ingestion-specific rules override global rules when both exist.
         """
         lowered = self.lower_columns(df)
-        # Load rules from DB only (DB is the source of truth).
-        dynamic_map = self._load_dynamic_rules()
-        effective_map = dynamic_map
+        # Load rules from DB with ingestion_id specificity
+        effective_map = self._load_dynamic_rules(ingestion_id)
         matched_keys = [c for c in lowered.columns if c in effective_map]
-        if dynamic_map:
-            logger.info("Applying %d normalization rules from DB (matched %d keys)", len(dynamic_map), len(matched_keys))
+        
+        if effective_map:
+            logger.info("Applying %d normalization rules for ingestion_id='%s' (matched %d keys)", 
+                       len(effective_map), ingestion_id or "global", len(matched_keys))
         else:
-            logger.info("No normalization rules found in DB; leaving columns as-is (lower-cased)")
+            logger.info("No normalization rules found; leaving columns as-is (lower-cased)")
 
         # Buffer usage for matched rules (non-blocking, aggregated)
         if matched_keys:

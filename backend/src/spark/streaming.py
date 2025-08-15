@@ -249,8 +249,8 @@ class StreamingManager:
             .parquet(f"{self.sensors_path}ingestion_id=*/date=*/hour=*")
         )
 
-        # Normalize/cleanup: lower-case columns and rename known variants
-        normalized = cleaner.normalize_sensor_columns(raw_stream)
+        # Apply normalization first to ensure consistent column names
+        normalized = cleaner.normalize_sensor_columns(raw_stream, ingestion_id=None)
 
         # Helper for optional column casting
         def get_optional_column(df, col_name, data_type):
@@ -271,17 +271,20 @@ class StreamingManager:
         )
         temp_expr = get_optional_column(normalized, "temperature", "double")
         hum_expr = get_optional_column(normalized, "humidity", "double")
+        
+        # Use safe column access for sensorId (might not exist after normalization)
+        sensor_id_expr = get_optional_column(normalized, "sensorId", "string")
+        
         typed = (
             normalized
-            .withColumn("sensorId", F.col("sensorId").cast("string"))
+            .withColumn("sensorId", sensor_id_expr)
             .withColumn("temperature", temp_expr)
             .withColumn("humidity", hum_expr)
             .withColumn("timestamp", ts_col)
             .withColumn("event_time", event_time)
         )
 
-        # Example enrichment: add ingest_date, hour, static metadata; ensure ingestion_id present & casted once
-        ingestion_expr = F.col("ingestion_id").cast("string") if "ingestion_id" in typed.columns else F.lit(None).cast("string")
+        # Example enrichment: add ingest_date, hour, static metadata; use existing ingestion_id
         base_cols = (
             typed
             .withColumn("ingest_ts", F.current_timestamp())
@@ -299,7 +302,7 @@ class StreamingManager:
                 "ingest_hour",
                 "source",
                 "site",
-                ingestion_expr.alias("ingestion_id"),
+                "ingestion_id",  # Use existing column directly
             )
         )
 
@@ -366,8 +369,15 @@ class StreamingManager:
 
                 # Normalize fields (sensor normalized for consistency, but filtering only on ingestion id)
                 from pyspark.sql.functions import lower, trim, when
+                
+                # Safely handle sensorId column (might not exist or might be null after normalization)
+                if "sensorId" in batch_df.columns:
+                    sensor_col_expr = lower(trim(F.col("sensorId")))
+                else:
+                    sensor_col_expr = F.lit(None).cast("string")
+                    
                 filt_df = batch_df \
-                    .withColumn("sensor_norm", lower(trim(F.col("sensorId")))) \
+                    .withColumn("sensor_norm", sensor_col_expr) \
                     .withColumn(
                         "ing_norm",
                         when(lower(trim(F.col("ingestion_id"))).isin("", "unknown"), F.lit(None))
@@ -397,6 +407,8 @@ class StreamingManager:
                     kept = filtered.count()
                 except Exception:
                     kept = -1
+
+                # Data is already normalized at stream level, just write it
                 (
                     filtered.drop("sensor_norm", "ing_norm").write
                     .format("delta")

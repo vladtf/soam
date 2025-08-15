@@ -30,6 +30,7 @@ class NormalizationRule(Base):
     __tablename__ = "normalization_rules"
 
     id = Column(Integer, primary_key=True, index=True)
+    ingestion_id = Column(String(255), nullable=True, index=True)  # NULL = global rule
     raw_key = Column(String(255), nullable=False, index=True)  # incoming raw column/key (case-insensitive)
     canonical_key = Column(String(255), nullable=False)         # target canonical column name
     enabled = Column(Boolean, nullable=False, default=True)
@@ -41,6 +42,7 @@ class NormalizationRule(Base):
     def to_dict(self):
         return {
             "id": self.id,
+            "ingestion_id": self.ingestion_id,
             "raw_key": self.raw_key,
             "canonical_key": self.canonical_key,
             "enabled": self.enabled,

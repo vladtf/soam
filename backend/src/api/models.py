@@ -110,18 +110,21 @@ class DeviceResponse(BaseModel):
 # ===============================
 
 class NormalizationRuleCreate(BaseModel):
+    ingestion_id: Optional[str] = Field(None, description="Specific ingestion source (null = global rule)")
     raw_key: str = Field(..., description="Incoming raw field/column name")
     canonical_key: str = Field(..., description="Canonical field/column name")
     enabled: bool = Field(default=True)
 
 
 class NormalizationRuleUpdate(BaseModel):
+    ingestion_id: Optional[str] = Field(None)
     canonical_key: Optional[str] = Field(None)
     enabled: Optional[bool] = Field(None)
 
 
 class NormalizationRuleResponse(BaseModel):
     id: int
+    ingestion_id: Optional[str] = None
     raw_key: str
     canonical_key: str
     enabled: bool

@@ -302,6 +302,7 @@ export const minioDeletePrefix = (prefix: string): Promise<{ deleted: number; er
 // Normalization Rules API
 export interface NormalizationRule {
   id: number;
+  ingestion_id?: string | null;
   raw_key: string;
   canonical_key: string;
   enabled: boolean;
@@ -312,12 +313,14 @@ export interface NormalizationRule {
 }
 
 export interface NormalizationRuleCreatePayload {
+  ingestion_id?: string | null;
   raw_key: string;
   canonical_key: string;
   enabled?: boolean;
 }
 
 export interface NormalizationRuleUpdatePayload {
+  ingestion_id?: string | null;
   canonical_key?: string;
   enabled?: boolean;
 }

@@ -6,20 +6,22 @@ import {
   createNormalizationRule,
   updateNormalizationRule,
   deleteNormalizationRule,
+  fetchPartitions,
 } from '../api/backendRequests';
 import { useError } from '../context/ErrorContext';
 import ThemedTable from '../components/ThemedTable';
 
-const emptyForm = { raw_key: '', canonical_key: '', enabled: true };
+const emptyForm = { ingestion_id: '', raw_key: '', canonical_key: '', enabled: true };
 
 const NormalizationRulesPage: React.FC = () => {
   const { setError } = useError();
   const [rules, setRules] = useState<NormalizationRule[]>([]);
+  const [partitions, setPartitions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filter, setFilter] = useState('');
-  const [errors, setErrors] = useState<{ raw_key?: string; canonical_key?: string }>({});
+  const [errors, setErrors] = useState<{ ingestion_id?: string; raw_key?: string; canonical_key?: string }>({});
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -54,12 +56,22 @@ const NormalizationRulesPage: React.FC = () => {
     return undefined;
   };
 
+  const validateIngestionId = (value: string) => {
+    const v = value.trim();
+    if (!v) return 'Ingestion ID is required';
+    return undefined;
+  };
+
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listNormalizationRules();
-      setRules(data);
-  setLastRefreshed(new Date());
+      const [rulesData, partitionsData] = await Promise.all([
+        listNormalizationRules(),
+        fetchPartitions()
+      ]);
+      setRules(rulesData);
+      setPartitions(partitionsData);
+      setLastRefreshed(new Date());
     } catch (e) {
       setError(e);
     } finally {
@@ -119,23 +131,26 @@ const NormalizationRulesPage: React.FC = () => {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-  // Validate
-  const newErrors: { raw_key?: string; canonical_key?: string } = {};
-  if (!editingId) newErrors.raw_key = validateRawKey(form.raw_key);
-  newErrors.canonical_key = validateCanonicalKey(form.canonical_key);
-  setErrors(newErrors);
-  if (newErrors.raw_key || newErrors.canonical_key) return;
+    // Validate
+    const newErrors: { ingestion_id?: string; raw_key?: string; canonical_key?: string } = {};
+    newErrors.ingestion_id = validateIngestionId(form.ingestion_id);
+    if (!editingId) newErrors.raw_key = validateRawKey(form.raw_key);
+    newErrors.canonical_key = validateCanonicalKey(form.canonical_key);
+    setErrors(newErrors);
+    if (newErrors.ingestion_id || newErrors.raw_key || newErrors.canonical_key) return;
 
-  try {
+    try {
       if (editingId) {
         const updated = await updateNormalizationRule(editingId, {
+          ingestion_id: form.ingestion_id.trim(),
           canonical_key: form.canonical_key,
           enabled: form.enabled,
         });
         setRules((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
       } else {
         const created = await createNormalizationRule({
-      raw_key: form.raw_key.trim().toLowerCase(),
+          ingestion_id: form.ingestion_id.trim(),
+          raw_key: form.raw_key.trim().toLowerCase(),
           canonical_key: form.canonical_key,
           enabled: form.enabled,
         });
@@ -151,7 +166,7 @@ const NormalizationRulesPage: React.FC = () => {
 
   const onEdit = (rule: NormalizationRule) => {
     setEditingId(rule.id);
-    setForm({ raw_key: rule.raw_key, canonical_key: rule.canonical_key, enabled: rule.enabled });
+    setForm({ ingestion_id: rule.ingestion_id || '', raw_key: rule.raw_key, canonical_key: rule.canonical_key, enabled: rule.enabled });
   };
 
   const onDelete = async (id: number) => {
@@ -170,6 +185,15 @@ const NormalizationRulesPage: React.FC = () => {
     setErrors({});
   };
 
+  // Helper to check if form has validation errors
+  const hasValidationErrors = () => {
+    if (loading) return true;
+    if (editingId) {
+      return !!validateIngestionId(form.ingestion_id) || !!validateCanonicalKey(form.canonical_key);
+    }
+    return !!validateIngestionId(form.ingestion_id) || !!validateRawKey(form.raw_key) || !!validateCanonicalKey(form.canonical_key);
+  };
+
   return (
     <div className="container pt-3 pb-4">
       <Row className="g-2 mb-2">
@@ -185,6 +209,31 @@ const NormalizationRulesPage: React.FC = () => {
             <Card.Header className="bg-body-tertiary">{editingId ? 'Edit Rule' : 'Add Rule'}</Card.Header>
             <Card.Body className="bg-body-tertiary">
               <Form onSubmit={onSubmit}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Ingestion ID</Form.Label>
+                  <Form.Control
+                    as="select"
+                    value={form.ingestion_id}
+                    isInvalid={!!errors.ingestion_id}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setForm((f) => ({ ...f, ingestion_id: val }));
+                      if (errors.ingestion_id) setErrors((er) => ({ ...er, ingestion_id: undefined }));
+                    }}
+                    required
+                  >
+                    <option value="">Select Partition...</option>
+                    {partitions.map((partition) => (
+                      <option key={partition} value={partition}>
+                        {partition}
+                      </option>
+                    ))}
+                  </Form.Control>
+                  <Form.Text className="text-body-secondary">
+                    Select the data partition this rule applies to.
+                  </Form.Text>
+                  <Form.Control.Feedback type="invalid">{errors.ingestion_id}</Form.Control.Feedback>
+                </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Raw Key</Form.Label>
                   <Form.Control
@@ -245,9 +294,7 @@ const NormalizationRulesPage: React.FC = () => {
                 <div className="d-flex gap-2">
                   <Button
                     type="submit"
-                    disabled={
-                      loading || (editingId ? Boolean(validateCanonicalKey(form.canonical_key)) : Boolean(validateRawKey(form.raw_key) || validateCanonicalKey(form.canonical_key)))
-                    }
+                    disabled={hasValidationErrors()}
                   >
                     {editingId ? 'Save' : 'Create'}
                   </Button>
@@ -318,6 +365,7 @@ const NormalizationRulesPage: React.FC = () => {
                 <thead>
                   <tr>
                     <th style={{ whiteSpace: 'nowrap' }}>ID</th>
+                    <th>Ingestion ID</th>
                     <th role="button" onClick={() => setSort('raw_key')}>Raw Key {sortKey==='raw_key' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
                     <th role="button" onClick={() => setSort('canonical_key')}>Canonical Key {sortKey==='canonical_key' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
                     <th role="button" onClick={() => setSort('enabled')}>Enabled {sortKey==='enabled' ? (sortDir==='asc' ? '▲' : '▼') : ''}</th>
@@ -331,6 +379,7 @@ const NormalizationRulesPage: React.FC = () => {
                   {paged.map((r) => (
                     <tr key={r.id} style={{ opacity: r.enabled ? 1 : 0.7 }}>
                       <td>{r.id}</td>
+                      <td>{r.ingestion_id || 'N/A'}</td>
                       <td>{r.raw_key}</td>
                       <td>{r.canonical_key}</td>
                       <td>
