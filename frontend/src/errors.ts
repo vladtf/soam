@@ -1,5 +1,11 @@
 import { getConfig } from './config';
 
+declare global {
+  interface Window {
+    __soam_lastReported?: Map<string, number>;
+  }
+}
+
 export type ClientErrorPayload = {
   message: string;
   stack?: string;
@@ -16,6 +22,28 @@ const STORAGE_KEY = 'soam_error_queue_v2';
 const LAST_FLUSH_KEY = 'soam_error_last_flush_ts';
 const FLUSH_INTERVAL_MS = 5000; // throttle to at most once every 5s
 const MAX_BATCH = 25; // safety cap per flush
+
+// Feature flag (persisted) controlling whether client error reporting is active.
+// Default is disabled (false) until the user opts in via UI.
+const REPORTING_FLAG_KEY = 'soam_error_reporting_enabled';
+
+export function isErrorReportingEnabled(): boolean {
+  try {
+    const v = localStorage.getItem(REPORTING_FLAG_KEY);
+    return v === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setErrorReportingEnabled(enabled: boolean): void {
+  try { localStorage.setItem(REPORTING_FLAG_KEY, enabled ? '1' : '0'); } catch { /* ignore */ }
+  try { window.dispatchEvent(new CustomEvent('soam:error-reporting-changed', { detail: { enabled } })); } catch { /* ignore */ }
+  if (enabled) {
+    // Kick off flusher if just enabled
+    try { startErrorQueueFlusher(); } catch { /* ignore */ }
+  }
+}
 
 function loadQueue(): ClientErrorPayload[] {
   try {
@@ -35,6 +63,7 @@ function saveQueue(queue: ClientErrorPayload[]): void {
 }
 
 export async function flushErrorQueue(force = false): Promise<void> {
+  if (!isErrorReportingEnabled()) return; // skip entirely when disabled
   const now = Date.now();
   const last = Number(localStorage.getItem(LAST_FLUSH_KEY) || '0');
   if (!force && now - last < FLUSH_INTERVAL_MS) return; // respect throttle
@@ -101,19 +130,18 @@ export async function flushErrorQueue(force = false): Promise<void> {
 }
 
 export async function reportClientError(payload: ClientErrorPayload): Promise<void> {
+  if (!isErrorReportingEnabled()) return; // feature disabled
   // Suppress noisy repeats (in-memory) for a cooldown window
   const SUPPRESS_WINDOW_MS = 60000; // 1 minute per unique key
   const key = [payload.message, payload.component, payload.context, payload.severity].join('|');
   const now = Date.now();
-  // @ts-ignore attach on window to persist across HMR
-  const lr: Map<string, number> = (window as any).__soam_lastReported || new Map<string, number>();
-  // @ts-ignore
-  if (!(window as any).__soam_lastReported) { (window as any).__soam_lastReported = lr; }
-  const lastTs = lr.get(key) || 0;
+  const lastReportedMap: Map<string, number> = window.__soam_lastReported || new Map<string, number>();
+  if (!window.__soam_lastReported) { window.__soam_lastReported = lastReportedMap; }
+  const lastTs = lastReportedMap.get(key) || 0;
   if (now - lastTs < SUPPRESS_WINDOW_MS) {
     return; // skip enqueue; already recently reported
   }
-  lr.set(key, now);
+  lastReportedMap.set(key, now);
 
   // Always enqueue; rely on batch flusher + dedup for consolidation
   const q = loadQueue();
@@ -126,6 +154,7 @@ export async function reportClientError(payload: ClientErrorPayload): Promise<vo
 let started = false;
 export function startErrorQueueFlusher(): void {
   if (started) return;
+  if (!isErrorReportingEnabled()) return; // don't start if disabled (will be retried on enable)
   started = true;
   const tick = () => { try { flushErrorQueue(); } catch { /* ignore */ } };
   document.addEventListener('visibilitychange', () => {

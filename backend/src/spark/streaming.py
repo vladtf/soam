@@ -252,53 +252,43 @@ class StreamingManager:
         # Normalize/cleanup: lower-case columns and rename known variants
         normalized = cleaner.normalize_sensor_columns(raw_stream)
 
-        # Cast to expected schema types (safe casts) and derive event time
-        # Be robust to multiple timestamp formats: ISO-8601 with T and timezone
+        # Helper for optional column casting
+        def get_optional_column(df, col_name, data_type):
+            return F.col(col_name).cast(data_type) if col_name in df.columns else F.lit(None).cast(data_type)
+
+        # Cast to expected schema types (safe casts) and derive event time.
+        # Some raw feeds may not provide temperature/humidity; represent them as nulls instead of failing.
         ts_col = F.col("timestamp").cast("string")
         event_time = F.coalesce(
-            # Common flexible parser may handle some forms
             F.to_timestamp(ts_col),
-            # ISO with timezone and millis
             F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
-            # ISO with microseconds (no TZ)
             F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"),
-            # ISO without fraction, with TZ
             F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-            # ISO without fraction or TZ
             F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ss"),
-            # Space-separated variants
             F.to_timestamp(F.regexp_replace(ts_col, 'T', ' '), "yyyy-MM-dd HH:mm:ss.SSSSSS"),
             F.to_timestamp(F.regexp_replace(ts_col, 'T', ' '), "yyyy-MM-dd HH:mm:ss.SSS"),
             F.to_timestamp(F.regexp_replace(ts_col, 'T', ' '), "yyyy-MM-dd HH:mm:ss")
         )
+        temp_expr = get_optional_column(normalized, "temperature", "double")
+        hum_expr = get_optional_column(normalized, "humidity", "double")
         typed = (
             normalized
             .withColumn("sensorId", F.col("sensorId").cast("string"))
-            .withColumn("temperature", F.col("temperature").cast("double"))
-            .withColumn("humidity", F.col("humidity").cast("double"))
+            .withColumn("temperature", temp_expr)
+            .withColumn("humidity", hum_expr)
             .withColumn("timestamp", ts_col)
             .withColumn("event_time", event_time)
         )
 
-        # Example enrichment: add ingest_date, hour, and static metadata fields
-        # Ensure ingestion_id column always exists; default to null if missing in raw
-        ingestion_col = F.lit(None).cast("string")
-        try:
-            if "ingestion_id" in typed.columns:
-                ingestion_col = F.col("ingestion_id").cast("string")
-        except Exception:
-            # In rare cases, accessing columns might fail before schema is materialized; keep null default
-            pass
-
+        # Example enrichment: add ingest_date, hour, static metadata; ensure ingestion_id present & casted once
+        ingestion_expr = F.col("ingestion_id").cast("string") if "ingestion_id" in typed.columns else F.lit(None).cast("string")
         base_cols = (
             typed
             .withColumn("ingest_ts", F.current_timestamp())
             .withColumn("ingest_date", F.to_date(F.col("event_time")))
             .withColumn("ingest_hour", F.date_format(F.col("event_time"), "HH"))
-            # Add example metadata; replace with real lookups if needed
             .withColumn("source", F.lit("mqtt"))
             .withColumn("site", F.lit("default"))
-            .withColumn("ingestion_id", ingestion_col)
             .select(
                 "sensorId",
                 "temperature",
@@ -309,7 +299,7 @@ class StreamingManager:
                 "ingest_hour",
                 "source",
                 "site",
-                "ingestion_id",
+                ingestion_expr.alias("ingestion_id"),
             )
         )
 

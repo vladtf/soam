@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useError } from '../context/ErrorContext';
 import { getConfig } from '../config';
 import { fetchConnections } from '../api/backendRequests';
+import { isErrorReportingEnabled, setErrorReportingEnabled } from '../errors';
 
 const AppNavbar: React.FC = () => {
   const { theme, mode, toggleMode } = useTheme();
@@ -49,6 +50,27 @@ const AppNavbar: React.FC = () => {
   
   const initials = useMemo(() => (username ? username.trim().slice(0, 2).toUpperCase() : ''), [username]);
   const { openCenter } = useError();
+  const [errorReporting, setErrorReporting] = useState<boolean>(false);
+
+  // Initialize error reporting flag from storage
+  useEffect(() => {
+    setErrorReporting(isErrorReportingEnabled());
+    const handler = (e: CustomEvent<{ enabled: boolean }>) => {
+      if (e.detail && typeof e.detail.enabled === 'boolean') {
+        setErrorReporting(e.detail.enabled);
+      } else {
+        setErrorReporting(isErrorReportingEnabled());
+      }
+    };
+    window.addEventListener('soam:error-reporting-changed', handler as EventListener);
+    return () => window.removeEventListener('soam:error-reporting-changed', handler as EventListener);
+  }, []);
+
+  const toggleErrorReporting = () => {
+    const next = !errorReporting;
+    setErrorReporting(next);
+    setErrorReportingEnabled(next);
+  };
 
   const StatusDot = (
     <span
@@ -110,6 +132,23 @@ const AppNavbar: React.FC = () => {
                   <>
                     <Dropdown.Header>Signed in as @{username}</Dropdown.Header>
                     <Dropdown.Item onClick={promptLogin}>Change user…</Dropdown.Item>
+                    <Dropdown.Divider />
+                    <Dropdown.Item
+                      as="button"
+                      className="d-flex align-items-center justify-content-between"
+                      onClick={toggleErrorReporting}
+                      aria-pressed={errorReporting}
+                      aria-label={errorReporting ? 'Disable error reporting' : 'Enable error reporting'}
+                      style={{ minWidth: 70 }}
+                    >
+                      <span>Error reporting</span>
+                      <span
+                        className={`btn btn-sm ${errorReporting ? 'btn-success' : 'btn-outline-secondary'}`}
+                        style={{ minWidth: 70, pointerEvents: 'none' }}
+                      >
+                        {errorReporting ? 'On' : 'Off'}
+                      </span>
+                    </Dropdown.Item>
                     <Dropdown.Divider />
                     <Dropdown.Item onClick={logout}>Sign out</Dropdown.Item>
                   </>
