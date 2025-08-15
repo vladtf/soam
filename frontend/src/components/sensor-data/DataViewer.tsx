@@ -1,8 +1,7 @@
 import React from 'react';
 import { Card, Spinner } from 'react-bootstrap';
-// @ts-ignore - optional types
-import ReactJson from 'react-json-view';
 import ThemedTable from '../ThemedTable';
+import ThemedReactJson from '../ThemedReactJson';
 
 export interface DataViewerProps {
     data: any[];
@@ -49,7 +48,7 @@ const DataViewer: React.FC<DataViewerProps> = ({ data, viewMode, tableColumns, r
                 ) : (
                     <div className="p-2" style={{ maxHeight: '70vh', overflow: 'auto' }}>
                         {data && data.length > 0 ? (
-                            <ReactJson src={data} theme="tomorrow" collapsed={false} />
+                            <ThemedReactJson src={data} collapsed={false} />
                         ) : (
                             <div className="d-flex align-items-center justify-content-center py-5">
                                 <Spinner animation="border" role="status" className="me-2" />

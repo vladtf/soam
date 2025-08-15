@@ -3,7 +3,7 @@ import { Container, Row, Col, ListGroup, Button, Breadcrumb, Spinner, Form, Card
 import PageHeader from '../components/PageHeader';
 import { minioList, minioPreviewParquet, MinioListResponse, ParquetPreview, minioDeleteObjects, minioDeletePrefix } from '../api/backendRequests';
 import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy } from 'react-icons/fa';
-import ThemedTable from '../components/ThemedTable';
+import ThemedReactJson from '../components/ThemedReactJson';
 
 const MinioBrowserPage: React.FC = () => {
   const [prefix, setPrefix] = useState<string>('');
@@ -18,8 +18,8 @@ const MinioBrowserPage: React.FC = () => {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [foldersPage, setFoldersPage] = useState<number>(1);
   const [filesPage, setFilesPage] = useState<number>(1);
-  const [foldersPageSize, setFoldersPageSize] = useState<number>(50);
-  const [filesPageSize, setFilesPageSize] = useState<number>(50);
+  const [foldersPageSize, setFoldersPageSize] = useState<number>(10);
+  const [filesPageSize, setFilesPageSize] = useState<number>(10);
 
   const load = async (p: string) => {
     setLoading(true);
@@ -327,8 +327,13 @@ const MinioBrowserPage: React.FC = () => {
                 {visibleFiles.map((f) => {
                   const name = f.split('/').pop() || f;
                   const isParquet = name.toLowerCase().endsWith('.parquet');
+                  const isPreviewedFile = previewKey === f;
                   return (
-                    <ListGroup.Item action key={f} className="d-flex align-items-center justify-content-between">
+                    <ListGroup.Item 
+                      action 
+                      key={f} 
+                      className={`d-flex align-items-center justify-content-between ${isPreviewedFile ? 'bg-primary-subtle border-primary' : ''}`}
+                    >
                       <div className="d-flex align-items-center flex-grow-1" style={{ minWidth: 0 }} onClick={() => previewParquet(f)}>
                         <Form.Check className="me-2" checked={!!selected[f]} onChange={(e)=> toggleSelect(f, e.target.checked)} onClick={(e)=> e.stopPropagation()} />
                         <FaFileAlt className="me-2" />
@@ -394,25 +399,26 @@ const MinioBrowserPage: React.FC = () => {
                 <div className="text-body-secondary">Select a Parquet file to preview.</div>
               )}
               {preview && (
-                <div style={{ overflowX: 'auto', maxHeight: 520 }}>
-                  <ThemedTable striped bordered hover size="sm" responsive>
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Size</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.rows.map((row, idx) => (
-                        <tr key={idx}>
-                          {Object.keys(preview.schema).map((col) => {
-                            const value = (row as Record<string, unknown>)[col];
-                            return <td key={col}>{String(value)}</td>;
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </ThemedTable>
+                <div style={{ maxHeight: 800, overflowY: 'auto' }}>
+                  <div className="mb-3">
+                    <h6 className="mb-2">Schema:</h6>
+                    <ThemedReactJson 
+                      src={preview.schema} 
+                      collapsed={false}
+                      name="schema"
+                    />
+                  </div>
+                  <div>
+                    <h6 className="mb-2">Data ({preview.rows.length} rows):</h6>
+                    <div style={{ maxHeight: 650, overflowY: 'auto' }}>
+                      <ThemedReactJson 
+                        src={preview.rows} 
+                        collapsed={2}
+                        name="data"
+                        collapseStringsAfterLength={80}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </Card.Body>
