@@ -75,7 +75,11 @@ const AppNavbar: React.FC = () => {
   const StatusDot = (
     <span
       className="d-inline-block rounded-circle me-2"
-      style={{ width: 10, height: 10, backgroundColor: status === 'green' ? '#28a745' : status === 'yellow' ? '#ffc107' : '#dc3545' }}
+      style={{ 
+        width: 'clamp(8px, 2vw, 12px)', 
+        height: 'clamp(8px, 2vw, 12px)', 
+        backgroundColor: status === 'green' ? '#28a745' : status === 'yellow' ? '#ffc107' : '#dc3545' 
+      }}
       aria-label={`Status: ${status}`}
     />
   );
@@ -119,7 +123,11 @@ const AppNavbar: React.FC = () => {
             <Dropdown align="end">
               <Dropdown.Toggle size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} className="d-flex align-items-center" aria-label={username ? `User menu for ${username}` : 'User menu'}>
                 {username ? (
-                  <span className="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary text-white" style={{ width: 28, height: 28, fontSize: 12 }}>
+                  <span className="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary text-white" style={{ 
+                    width: 'clamp(24px, 4vw, 32px)', 
+                    height: 'clamp(24px, 4vw, 32px)', 
+                    fontSize: 'clamp(10px, 2vw, 14px)' 
+                  }}>
                     {initials}
                   </span>
                 ) : 'Sign in'}
@@ -139,12 +147,12 @@ const AppNavbar: React.FC = () => {
                       onClick={toggleErrorReporting}
                       aria-pressed={errorReporting}
                       aria-label={errorReporting ? 'Disable error reporting' : 'Enable error reporting'}
-                      style={{ minWidth: 70 }}
+                      style={{ minWidth: 'max-content' }}
                     >
                       <span>Error reporting</span>
                       <span
                         className={`btn btn-sm ${errorReporting ? 'btn-success' : 'btn-outline-secondary'}`}
-                        style={{ minWidth: 70, pointerEvents: 'none' }}
+                        style={{ minWidth: '4.5rem', pointerEvents: 'none' }}
                       >
                         {errorReporting ? 'On' : 'Off'}
                       </span>

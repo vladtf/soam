@@ -193,7 +193,7 @@ const MapPage: React.FC = () => {
           </ButtonGroup>
         }
       />
-      <MapContainer center={[44.436170, 26.102765]} zoom={13} style={{ height: '80vh', width: '100%' }}>
+      <MapContainer center={[44.436170, 26.102765]} zoom={13} style={{ height: 'min(80vh, 600px)', width: '100%' }}>
         <TileLayer attribution={tile.attribution} url={tile.url} />
         {buildings.map((b, i) => (
           <Marker

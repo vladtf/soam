@@ -43,7 +43,7 @@ const MinioBrowserPage: React.FC = () => {
     setPreviewKey(null);
     setPreview(null);
     setPrefix(p);
-  setSelected({});
+    setSelected({});
   };
 
   const enterPrefix = (folder: string) => {
@@ -199,7 +199,7 @@ const MinioBrowserPage: React.FC = () => {
             <Button variant="outline-primary" onClick={refresh} title="Refresh">
               <FaSync className="me-1" /> Refresh
             </Button>
-            <Button variant="outline-danger" onClick={deleteSelected} disabled={Object.keys(selected).filter((k)=>selected[k]).length===0} title="Delete selected files">
+            <Button variant="outline-danger" onClick={deleteSelected} disabled={Object.keys(selected).filter((k) => selected[k]).length === 0} title="Delete selected files">
               Delete selected
             </Button>
             <Button variant="danger" onClick={deleteAllInFolder} disabled={!prefix} title="Delete all files in this folder">
@@ -265,13 +265,13 @@ const MinioBrowserPage: React.FC = () => {
               />
 
               <div className="mb-2 fw-semibold d-flex align-items-center justify-content-between">
-                <span>Folders</span>
-                <InputGroup size="sm" style={{ width: 320 }}>
+                <span>Folders:</span>
+                <InputGroup size="sm" className="flex-shrink-0" style={{ maxWidth: 'min(320px, 100%)' }}>
                   <Button variant="outline-secondary" size="sm" onClick={() => setFoldersPage((p) => Math.max(1, p - 1))} disabled={foldersPage <= 1}>Prev</Button>
                   <InputGroup.Text>Page {foldersPage}/{foldersPages}</InputGroup.Text>
                   <Button variant="outline-secondary" size="sm" onClick={() => setFoldersPage((p) => Math.min(foldersPages, p + 1))} disabled={foldersPage >= foldersPages}>Next</Button>
                   <InputGroup.Text>Per page</InputGroup.Text>
-                  <Form.Select size="sm" value={foldersPageSize} onChange={(e) => setFoldersPageSize(Number(e.target.value))} style={{ maxWidth: 90 }}>
+                  <Form.Select size="sm" value={foldersPageSize} onChange={(e) => setFoldersPageSize(Number(e.target.value))} style={{ minWidth: '5rem', maxWidth: '6rem' }}>
                     <option value={10}>10</option>
                     <option value={25}>25</option>
                     <option value={50}>50</option>
@@ -297,28 +297,28 @@ const MinioBrowserPage: React.FC = () => {
               </ListGroup>
 
               <div className="mb-2 fw-semibold d-flex align-items-center justify-content-between">
-                <div className="d-flex align-items-center gap-3">
-                  <span>Files</span>
-                  <Form.Check
-                    type="checkbox"
-                    id="selectAll"
-                    label="Select all"
-                    checked={allSelected}
-                    onChange={(e) => toggleSelectAll(e.target.checked)}
-                  />
-                </div>
-                <InputGroup size="sm" style={{ width: 360 }}>
+                <span>Files:</span>
+                <InputGroup size="sm" className="flex-shrink-0" style={{ maxWidth: 'min(320px, 100%)' }}>
                   <Button variant="outline-secondary" size="sm" onClick={() => setFilesPage((p) => Math.max(1, p - 1))} disabled={filesPage <= 1}>Prev</Button>
                   <InputGroup.Text>Page {filesPage}/{filesPages}</InputGroup.Text>
                   <Button variant="outline-secondary" size="sm" onClick={() => setFilesPage((p) => Math.min(filesPages, p + 1))} disabled={filesPage >= filesPages}>Next</Button>
                   <InputGroup.Text>Per page</InputGroup.Text>
-                  <Form.Select size="sm" value={filesPageSize} onChange={(e) => setFilesPageSize(Number(e.target.value))} style={{ maxWidth: 90 }}>
+                  <Form.Select size="sm" value={filesPageSize} onChange={(e) => setFilesPageSize(Number(e.target.value))} style={{ minWidth: '5rem', maxWidth: '6rem' }}>
                     <option value={10}>10</option>
                     <option value={25}>25</option>
                     <option value={50}>50</option>
                     <option value={100}>100</option>
                   </Form.Select>
                 </InputGroup>
+              </div>
+              <div className="mb-2 d-flex align-items-center">
+                <Form.Check
+                  type="checkbox"
+                  id="selectAll"
+                  label="Select all"
+                  checked={allSelected}
+                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                />
               </div>
               <ListGroup variant="flush">
                 {visibleFiles.length === 0 && (
@@ -329,13 +329,13 @@ const MinioBrowserPage: React.FC = () => {
                   const isParquet = name.toLowerCase().endsWith('.parquet');
                   const isPreviewedFile = previewKey === f;
                   return (
-                    <ListGroup.Item 
-                      action 
-                      key={f} 
+                    <ListGroup.Item
+                      action
+                      key={f}
                       className={`d-flex align-items-center justify-content-between ${isPreviewedFile ? 'bg-primary-subtle border-primary' : ''}`}
                     >
                       <div className="d-flex align-items-center flex-grow-1" style={{ minWidth: 0 }} onClick={() => previewParquet(f)}>
-                        <Form.Check className="me-2" checked={!!selected[f]} onChange={(e)=> toggleSelect(f, e.target.checked)} onClick={(e)=> e.stopPropagation()} />
+                        <Form.Check className="me-2" checked={!!selected[f]} onChange={(e) => toggleSelect(f, e.target.checked)} onClick={(e) => e.stopPropagation()} />
                         <FaFileAlt className="me-2" />
                         <OverlayTrigger placement="top" overlay={<Tooltip>{name}</Tooltip>}>
                           <span className="text-truncate" style={{ minWidth: 0, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{name}</span>
@@ -357,9 +357,9 @@ const MinioBrowserPage: React.FC = () => {
             <Card.Header className="d-flex align-items-center justify-content-between">
               <div>
                 Preview {previewKey && (
-                  <span className="align-middle ms-2 d-inline-flex align-items-center" style={{ maxWidth: 480 }}>
+                  <span className="align-middle ms-2 d-inline-flex align-items-center" style={{ maxWidth: 'min(30vw, 480px)' }}>
                     <OverlayTrigger placement="top" overlay={<Tooltip>{previewKey}</Tooltip>}>
-                      <Badge bg="light" text="dark" className="text-truncate" style={{ maxWidth: 420, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{previewKey}</Badge>
+                      <Badge bg="light" text="dark" className="text-truncate" style={{ maxWidth: 'min(26vw, 420px)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{previewKey}</Badge>
                     </OverlayTrigger>
                     <OverlayTrigger placement="top" overlay={<Tooltip>Copy object key</Tooltip>}>
                       <Button size="sm" variant="outline-secondary" className="ms-2" aria-label="Copy object key" onClick={() => { if (previewKey) navigator.clipboard?.writeText(previewKey); }}>
@@ -370,7 +370,7 @@ const MinioBrowserPage: React.FC = () => {
                 )}
               </div>
               <div className="d-flex align-items-center gap-2">
-                <InputGroup size="sm" style={{ width: 140 }}>
+                <InputGroup size="sm" style={{ minWidth: '8rem', maxWidth: '10rem' }}>
                   <InputGroup.Text id="rows-label">Rows</InputGroup.Text>
                   <Form.Control
                     size="sm"
@@ -399,20 +399,20 @@ const MinioBrowserPage: React.FC = () => {
                 <div className="text-body-secondary">Select a Parquet file to preview.</div>
               )}
               {preview && (
-                <div style={{ maxHeight: 800, overflowY: 'auto' }}>
+                <div style={{ maxHeight: 'min(80vh, 800px)', overflowY: 'auto' }}>
                   <div className="mb-3">
                     <h6 className="mb-2">Schema:</h6>
-                    <ThemedReactJson 
-                      src={preview.schema} 
+                    <ThemedReactJson
+                      src={preview.schema}
                       collapsed={false}
                       name="schema"
                     />
                   </div>
                   <div>
                     <h6 className="mb-2">Data ({preview.rows.length} rows):</h6>
-                    <div style={{ maxHeight: 650, overflowY: 'auto' }}>
-                      <ThemedReactJson 
-                        src={preview.rows} 
+                    <div style={{ maxHeight: 'min(65vh, 650px)', overflowY: 'auto' }}>
+                      <ThemedReactJson
+                        src={preview.rows}
                         collapsed={2}
                         name="data"
                         collapseStringsAfterLength={80}

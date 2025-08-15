@@ -22,7 +22,7 @@ const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, 
                 <strong>Registered Devices</strong>
             </Card.Header>
             <Card.Body className="p-0">
-                <div style={{ maxHeight: '40vh', overflow: 'auto' }}>
+                <div style={{ maxHeight: 'min(40vh, 400px)', overflow: 'auto' }}>
                     <ThemedTable size="sm" responsive hover className="mb-0">
                         <thead>
                             <tr>

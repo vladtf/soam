@@ -18,7 +18,7 @@ const DataViewer: React.FC<DataViewerProps> = ({ data, viewMode, tableColumns, r
             </Card.Header>
             <Card.Body className="p-0">
                 {viewMode === 'table' ? (
-                    <div style={{ maxHeight: '70vh', overflow: 'auto' }}>
+                    <div style={{ maxHeight: 'min(70vh, 600px)', overflow: 'auto' }}>
                         {data && data.length > 0 ? (
                             <ThemedTable size="sm" responsive hover className="mb-0">
                                 <thead>
@@ -46,9 +46,9 @@ const DataViewer: React.FC<DataViewerProps> = ({ data, viewMode, tableColumns, r
                         )}
                     </div>
                 ) : (
-                    <div className="p-2" style={{ maxHeight: '70vh', overflow: 'auto' }}>
+                    <div className="p-2" style={{ maxHeight: 'min(70vh, 600px)', overflow: 'auto' }}>
                         {data && data.length > 0 ? (
-                            <ThemedReactJson src={data} collapsed={false} />
+                            <ThemedReactJson src={data} collapsed={2} />
                         ) : (
                             <div className="d-flex align-items-center justify-content-center py-5">
                                 <Spinner animation="border" role="status" className="me-2" />

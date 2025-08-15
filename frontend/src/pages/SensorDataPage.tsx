@@ -132,7 +132,14 @@ const SensorDataPage: React.FC = () => {
             <TopControlsBar
                 partitions={partitions}
                 activePartition={activePartition}
-                setActivePartition={setActivePartition}
+                setActivePartition={(partition) => {
+                    setActivePartition(partition);
+                    // Auto-fill ingestion ID and name when selecting a partition
+                    if (partition) {
+                        setIngestionId(partition);
+                        setName(partition);
+                    }
+                }}
                 bufferSize={bufferSize}
                 setBufferSize={setBufferSize}
                 applyBufferSize={applyBufferSize}

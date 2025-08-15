@@ -275,7 +275,7 @@ const NormalizationRulesPage: React.FC = () => {
                 <div className="d-flex align-items-center gap-2">
                   <Form.Select
                     size="sm"
-                    style={{ width: 90 }}
+                    style={{ minWidth: '5rem', maxWidth: '7rem' }}
                     value={pageSize}
                     onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
                     aria-label="Rows per page"

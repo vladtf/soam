@@ -60,11 +60,11 @@ const ConnectionStatus: React.FC = () => {
                                         <strong>ID:</strong> {info.id || 'N/A'} | <strong>Status:</strong>{" "}
                                         <span style={{
                                             display: "inline-block",
-                                            width: "10px",
-                                            height: "10px",
+                                            width: "clamp(8px, 1.5vw, 12px)",
+                                            height: "clamp(8px, 1.5vw, 12px)",
                                             borderRadius: "50%",
                                             backgroundColor: isActive ? "green" : "red",
-                                            marginRight: "5px"
+                                            marginRight: "clamp(4px, 1vw, 8px)"
                                         }}></span>
                                         {isActive ? "Active" : "Inactive"}
                                     </div>

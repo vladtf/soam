@@ -85,8 +85,8 @@ const TroubleshootingPage: React.FC = () => {
                   </td>
                   <td>{r.component || '-'}</td>
                   <td>{r.context || '-'}</td>
-                  <td style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.message}>{r.message}</td>
-                  <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.url || ''}>{r.url || '-'}</td>
+                  <td style={{ maxWidth: 'min(26vw, 420px)', overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.message}>{r.message}</td>
+                  <td style={{ maxWidth: 'min(15vw, 220px)', overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.url || ''}>{r.url || '-'}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

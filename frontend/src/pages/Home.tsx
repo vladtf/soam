@@ -11,12 +11,12 @@ const Home: React.FC = () => {
         style={{
           background: "url('/assets/city-skyline.png') no-repeat center center",
           backgroundSize: "cover",
-          height: "400px",
+          height: "min(60vh, 400px)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: "white",
-          textShadow: "2px 2px 4px rgba(0,0,0,0.7)"
+          textShadow: "clamp(1px, 0.5vw, 3px) clamp(1px, 0.5vw, 3px) clamp(2px, 1vw, 5px) rgba(0,0,0,0.7)"
         }}
       >
         <h1>Welcome to Smart City Middleware</h1>
