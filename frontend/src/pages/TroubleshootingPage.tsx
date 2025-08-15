@@ -49,7 +49,13 @@ const TroubleshootingPage: React.FC = () => {
       <div className="d-flex align-items-center justify-content-between mb-3">
         <h3 className="m-0">Troubleshooting</h3>
         <div className="d-flex gap-2">
-          <Button variant="outline-secondary" size="sm" onClick={flushErrorQueue}>Flush local queue</Button>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => { flushErrorQueue(true).catch(() => {}); }}
+          >
+            Flush local queue
+          </Button>
           <Button variant="primary" size="sm" onClick={load} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</Button>
         </div>
       </div>

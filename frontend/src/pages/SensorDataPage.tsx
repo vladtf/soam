@@ -13,13 +13,9 @@ const SensorDataPage: React.FC = () => {
     const { setError } = useError();
     const [data, setData] = useState<SensorData[]>([]);
     const [devices, setDevices] = useState<Device[]>([]);
-    const [sensorId, setSensorId] = useState('');
     const [ingestionId, setIngestionId] = useState<string>('');
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [knownIds, setKnownIds] = useState<string[]>([]);
-    const [manualId, setManualId] = useState('');
-    const [useManual, setUseManual] = useState(false);
     const [partitions, setPartitions] = useState<string[]>([]);
     const [activePartition, setActivePartition] = useState<string>('');
     const [bufferSize, setBufferSize] = useState<number>(100);
@@ -30,9 +26,6 @@ const SensorDataPage: React.FC = () => {
             try {
                 const sensorData = await fetchSensorData(activePartition || undefined);
                 setData(sensorData);
-                const ids = Array.from(new Set((sensorData || []).map((r: any) => (r?.sensorId ?? r?.['sensor-id'] ?? r?.sensor_id)).filter(Boolean)));
-                setKnownIds(ids);
-                if (!useManual && ids.length && !sensorId) setSensorId(ids[0]);
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : (err as any));
                 reportClientError({ message: String(err), severity: 'error', component: 'SensorDataPage', context: 'fetchSensorData' }).catch(() => {});
@@ -52,7 +45,7 @@ const SensorDataPage: React.FC = () => {
         fetchDataNow();
         const interval = setInterval(fetchDataNow, 5000);
         return () => clearInterval(interval);
-    }, [setError, activePartition, useManual, sensorId]);
+    }, [setError, activePartition]);
 
     useEffect(() => {
         const loadDevices = async () => {
@@ -67,24 +60,13 @@ const SensorDataPage: React.FC = () => {
         loadDevices();
     }, [setError]);
 
-    useEffect(() => {
-        if (useManual) return;
-        const deviceIds = devices.map((d) => d.sensor_id).filter(Boolean) as string[];
-        const available = Array.from(new Set([...(knownIds || []), ...deviceIds]));
-        if (!sensorId && available.length > 0) setSensorId(available[0]);
-    }, [devices, knownIds, useManual, sensorId]);
-
     const onRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const chosenId = (useManual ? manualId : sensorId).trim();
-            await registerDevice({ sensor_id: chosenId, name: name.trim() || undefined, description: description.trim() || undefined, enabled: true, ingestion_id: ingestionId || undefined });
-            setSensorId('');
+            await registerDevice({ ingestion_id: ingestionId.trim(), name: name.trim() || undefined, description: description.trim() || undefined, enabled: true });
             setIngestionId('');
             setName('');
             setDescription('');
-            setManualId('');
-            setUseManual(false);
             const rows = await listDevices();
             setDevices(rows);
         } catch (err) {
@@ -165,17 +147,8 @@ const SensorDataPage: React.FC = () => {
                 <Col lg={5}>
                     <RegisterDeviceCard
                         activePartition={activePartition}
-                        data={data}
                         ingestionId={ingestionId}
                         setIngestionId={setIngestionId}
-                        sensorId={sensorId}
-                        setSensorId={setSensorId}
-                        knownIds={knownIds}
-                        devices={devices}
-                        useManual={useManual}
-                        setUseManual={setUseManual}
-                        manualId={manualId}
-                        setManualId={setManualId}
                         name={name}
                         setName={setName}
                         description={description}

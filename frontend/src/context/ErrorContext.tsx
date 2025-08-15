@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { reportClientError, startErrorQueueFlusher } from '../errors';
+import { startErrorQueueFlusher } from '../errors';
 import ErrorCenter, { ErrorRecord } from '../components/ErrorCenter';
 
 type BackendError = { detail?: string };
@@ -34,8 +34,7 @@ export const ErrorProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       msg = JSON.stringify(err);
     }
     setErrorState(msg);
-    // best-effort reporting
-    reportClientError({ message: msg, severity: 'error' }).catch(() => {});
+  // Don't auto-report here; callers should explicitly report to avoid duplicates.
     setRecords((prev: ErrorRecord[]): ErrorRecord[] => [{ id: seq, message: msg, time: new Date(), severity: 'error' as const }, ...prev].slice(0, 100));
     setSeq((n) => n + 1);
   };

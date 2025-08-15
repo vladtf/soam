@@ -1,6 +1,6 @@
 import { getConfig } from './config';
 
-type ClientErrorPayload = {
+export type ClientErrorPayload = {
   message: string;
   stack?: string;
   url?: string;
@@ -12,7 +12,10 @@ type ClientErrorPayload = {
   extra?: Record<string, unknown>;
 };
 
-const STORAGE_KEY = 'soam_error_queue_v1';
+const STORAGE_KEY = 'soam_error_queue_v2';
+const LAST_FLUSH_KEY = 'soam_error_last_flush_ts';
+const FLUSH_INTERVAL_MS = 5000; // throttle to at most once every 5s
+const MAX_BATCH = 25; // safety cap per flush
 
 function loadQueue(): ClientErrorPayload[] {
   try {
@@ -31,42 +34,92 @@ function saveQueue(queue: ClientErrorPayload[]): void {
   }
 }
 
-export async function flushErrorQueue(): Promise<void> {
+export async function flushErrorQueue(force = false): Promise<void> {
+  const now = Date.now();
+  const last = Number(localStorage.getItem(LAST_FLUSH_KEY) || '0');
+  if (!force && now - last < FLUSH_INTERVAL_MS) return; // respect throttle
   const queue = loadQueue();
   if (queue.length === 0) return;
-  const { backendUrl } = getConfig();
-  const remaining: ClientErrorPayload[] = [];
+
+  // Collapse identical messages (message+component+context+severity) keeping earliest extra data
+  const dedupMap = new Map<string, ClientErrorPayload & { count: number }>();
   for (const item of queue) {
-    try {
-      const res = await fetch(`${backendUrl}/errors/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...item, user_agent: navigator.userAgent }),
-      });
-      if (!res.ok) remaining.push(item);
-    } catch {
-      remaining.push(item);
+    const key = [item.message, item.component, item.context, item.severity].join('|');
+    if (dedupMap.has(key)) {
+      dedupMap.get(key)!.count += 1;
+    } else {
+      dedupMap.set(key, { ...item, count: 1 });
     }
   }
-  if (remaining.length !== queue.length) {
-    saveQueue(remaining);
+  // Prepare batch (limited)
+  const batch = Array.from(dedupMap.values()).slice(0, MAX_BATCH).map(it => ({
+    ...it,
+    extra: { ...(it.extra || {}), occurrences: it.count },
+  }));
+
+  const { backendUrl } = getConfig();
+  let successKeys = new Set<string>();
+  try {
+    // Send batch sequentially (could be parallel but keep simple & ordered)
+    for (const entry of batch) {
+      try {
+        const res = await fetch(`${backendUrl}/errors/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...entry, user_agent: navigator.userAgent }),
+        });
+        if (res.ok) {
+          const k = [entry.message, entry.component, entry.context, entry.severity].join('|');
+          successKeys.add(k);
+        }
+      } catch {
+        // leave in queue
+      }
+    }
+  } finally {
+    // Rebuild remaining queue excluding successes (only one occurrence per success key removed per original count)
+    const newQueue: ClientErrorPayload[] = [];
+    const countsConsumed: Record<string, number> = {};
+    for (const item of queue) {
+      const key = [item.message, item.component, item.context, item.severity].join('|');
+      if (successKeys.has(key)) {
+        countsConsumed[key] = (countsConsumed[key] || 0) + 1;
+        const total = dedupMap.get(key)?.count || 0;
+        // Remove all occurrences if at least one success (since batch included aggregated count)
+        if (countsConsumed[key] >= total) {
+          continue;
+        } else {
+          continue; // we aggregated; drop duplicates
+        }
+      } else {
+        newQueue.push(item);
+      }
+    }
+    saveQueue(newQueue);
+    localStorage.setItem(LAST_FLUSH_KEY, String(Date.now()));
   }
 }
 
 export async function reportClientError(payload: ClientErrorPayload): Promise<void> {
-  const { backendUrl } = getConfig();
-  try {
-    const res = await fetch(`${backendUrl}/errors/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, user_agent: navigator.userAgent }),
-    });
-    if (!res.ok) throw new Error('Failed to send');
-  } catch {
-    const q = loadQueue();
-    q.push(payload);
-    saveQueue(q);
+  // Suppress noisy repeats (in-memory) for a cooldown window
+  const SUPPRESS_WINDOW_MS = 60000; // 1 minute per unique key
+  const key = [payload.message, payload.component, payload.context, payload.severity].join('|');
+  const now = Date.now();
+  // @ts-ignore attach on window to persist across HMR
+  const lr: Map<string, number> = (window as any).__soam_lastReported || new Map<string, number>();
+  // @ts-ignore
+  if (!(window as any).__soam_lastReported) { (window as any).__soam_lastReported = lr; }
+  const lastTs = lr.get(key) || 0;
+  if (now - lastTs < SUPPRESS_WINDOW_MS) {
+    return; // skip enqueue; already recently reported
   }
+  lr.set(key, now);
+
+  // Always enqueue; rely on batch flusher + dedup for consolidation
+  const q = loadQueue();
+  q.push(payload);
+  saveQueue(q);
+  flushErrorQueue(false).catch(() => {}); // throttled inside
 }
 
 // Try to flush on visibility changes and on interval
@@ -74,14 +127,13 @@ let started = false;
 export function startErrorQueueFlusher(): void {
   if (started) return;
   started = true;
-  const tick = () => {
-    try { flushErrorQueue(); } catch { /* ignore */ }
-  };
+  const tick = () => { try { flushErrorQueue(); } catch { /* ignore */ } };
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') tick();
   });
-  window.addEventListener('online', tick);
-  setInterval(tick, 15000);
+  window.addEventListener('online', () => flushErrorQueue(true));
+  // Frequent lightweight check; throttling inside flush prevents overposting
+  setInterval(tick, 1000);
 }
 
 

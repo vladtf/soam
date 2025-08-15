@@ -1,5 +1,4 @@
 import { getConfig } from '../config';
-import { reportClientError } from '../errors';
 import { Building } from '../models/Building';
 
 export interface SensorData {
@@ -45,23 +44,11 @@ async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
     } else {
       detailMsg = result.detail ?? response.statusText;
     }
-    const error = new Error(detailMsg);
-    try {
-      await reportClientError({
-        message: detailMsg,
-        url,
-        severity: 'error',
-        extra: { status: response.status, statusText: response.statusText },
-      });
-    } catch {}
-    throw error;
+    throw new Error(detailMsg);
   }
 
   if (result.status && result.status !== 'success') {
     const errMsg = result.detail ?? `Error on ${url}`;
-    try {
-      await reportClientError({ message: errMsg, url, severity: 'warn' });
-    } catch {}
     throw new Error(errMsg);
   }
 
@@ -527,7 +514,7 @@ export const listDevices = (): Promise<Device[]> => {
   return doFetch<Device[]>(`${backendUrl}/devices/`);
 };
 
-export const registerDevice = (payload: { sensor_id: string; ingestion_id?: string; name?: string; description?: string; enabled?: boolean }): Promise<Device> => {
+export const registerDevice = (payload: { ingestion_id: string; sensor_id?: string; name?: string; description?: string; enabled?: boolean }): Promise<Device> => {
   const { backendUrl } = getConfig();
   return doFetch<Device>(`${backendUrl}/devices/`, {
     method: 'POST',
