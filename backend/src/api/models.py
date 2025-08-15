@@ -92,24 +92,19 @@ class ApiResponse(BaseModel):
 # ===============================
 
 class DeviceCreate(BaseModel):
-    sensor_id: str
     ingestion_id: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
     enabled: bool = True
 
-
 class DeviceResponse(BaseModel):
     id: int
-    sensor_id: str
     ingestion_id: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
     enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-
-
 # ===============================
 # Normalization Rules
 # ===============================

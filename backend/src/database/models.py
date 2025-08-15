@@ -123,11 +123,10 @@ class Device(Base):
     """Registered device allowed for enrichment and downstream processing."""
     __tablename__ = "devices"
     __table_args__ = (
-        UniqueConstraint('sensor_id', 'ingestion_id', name='uq_device_sensor_ingestion'),
+        UniqueConstraint('ingestion_id', name='uq_device_ingestion'),
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    sensor_id = Column(String(255), nullable=False)
     ingestion_id = Column(String(255), nullable=True)
     name = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
@@ -138,7 +137,6 @@ class Device(Base):
     def to_dict(self):
         return {
             "id": self.id,
-            "sensor_id": self.sensor_id,
             "ingestion_id": self.ingestion_id,
             "name": self.name,
             "description": self.description,

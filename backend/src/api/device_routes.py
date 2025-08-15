@@ -28,22 +28,23 @@ def list_devices(db: Session = Depends(get_db)):
 @router.post("/", response_model=DeviceResponse)
 def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
     try:
-        q = db.query(Device).filter(Device.sensor_id == payload.sensor_id)
-        if payload.ingestion_id:
-            q = q.filter(Device.ingestion_id == payload.ingestion_id)
-        existing = q.one_or_none()
+        # Initial registration should only require ingestion_id.
+        # If a device with the same ingestion_id exists, update its metadata; otherwise create it.
+        existing = db.query(Device).filter(Device.ingestion_id == payload.ingestion_id).one_or_none()
         if existing:
-            # Update existing with new fields
             existing.name = payload.name
             existing.description = payload.description
             existing.enabled = payload.enabled
-            if payload.ingestion_id:
-                existing.ingestion_id = payload.ingestion_id
             db.add(existing)
             db.commit()
             db.refresh(existing)
             return existing.to_dict()
-        row = Device(sensor_id=payload.sensor_id, ingestion_id=payload.ingestion_id, name=payload.name, description=payload.description, enabled=payload.enabled)
+        row = Device(
+            ingestion_id=payload.ingestion_id,
+            name=payload.name,
+            description=payload.description,
+            enabled=payload.enabled,
+        )
         db.add(row)
         db.commit()
         db.refresh(row)

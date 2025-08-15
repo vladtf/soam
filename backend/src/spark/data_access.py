@@ -170,12 +170,12 @@ class DataAccessManager:
             SessionLocal = sessionmaker(bind=engine)
             db = SessionLocal()
             try:
-                rows = db.query(Device.sensor_id, Device.ingestion_id).filter(Device.enabled == True).all()
-                registered_total = len(rows)
-                any_part = len([1 for (_sid, iid) in rows if iid is None])
-                specific = [(sid, iid) for (sid, iid) in rows if iid is not None]
+                device_rows = db.query(Device.ingestion_id).filter(Device.enabled == True).all()  # list of (ingestion_id,)
+                registered_total = len(device_rows)
+                any_part = any(iid is None for (iid,) in device_rows)
+                specific_ids = [iid for (iid,) in device_rows if iid is not None]
                 by_partition: dict[str, int] = {}
-                for _sid, iid in specific:
+                for iid in specific_ids:
                     by_partition[str(iid)] = by_partition.get(str(iid), 0) + 1
             finally:
                 db.close()
@@ -184,7 +184,7 @@ class DataAccessManager:
             registered_total = 0
             any_part = 0
             by_partition = {}
-            rows = []
+            device_rows = []
 
         result: Dict[str, Any] = {
             "registered_total": registered_total,
@@ -211,32 +211,28 @@ class DataAccessManager:
                 .load(self.enriched_path)
                 .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {minutes} MINUTES"))
             )
+
             recent_rows = df.count()
             sensors_df = df.select("sensorId").distinct()
             recent_sensors = sensors_df.count()
             sample = [r[0] for r in sensors_df.limit(10).collect()]
 
-            # Matched sensors with registration
+            # Matched sensors with registration (simplified: only ingestion_id registrations exist)
+            matched = 0
             try:
-                allowed_pairs = rows  # from registration above
-                matched = 0
-                if allowed_pairs:
-                    specific_pairs = [(sid, iid) for (sid, iid) in allowed_pairs if iid is not None]
-                    ids_any = list({sid for (sid, iid) in allowed_pairs if iid is None})
-                    matched_any = df.select("sensorId").where(F.col("sensorId").isin(ids_any)).distinct() if ids_any else None
-                    matched_spec = None
-                    if specific_pairs and "ingestion_id" in df.columns:
-                        allowed_df = self.session_manager.spark.createDataFrame(specific_pairs, ["sensorId", "ingestion_id"]).dropDuplicates()
-                        matched_spec = df.select("sensorId", "ingestion_id").join(allowed_df, ["sensorId", "ingestion_id"], "inner").select("sensorId").distinct()
-                    elif specific_pairs:
-                        ids_spec = list({sid for (sid, _iid) in specific_pairs})
-                        matched_spec = df.select("sensorId").where(F.col("sensorId").isin(ids_spec)).distinct()
-                    if matched_any is not None and matched_spec is not None:
-                        matched = matched_any.unionByName(matched_spec).distinct().count()
-                    elif matched_any is not None:
-                        matched = matched_any.count()
-                    elif matched_spec is not None:
-                        matched = matched_spec.count()
+                registered_ingestion_ids = [iid for (iid,) in device_rows if iid is not None]
+                wildcard = any(iid is None for (iid,) in device_rows)
+                if wildcard:
+                    # At least one wildcard device => all recent sensors count as matched
+                    matched = recent_sensors
+                elif registered_ingestion_ids and "ingestion_id" in df.columns:
+                    matched = (
+                        df.select("sensorId", "ingestion_id")
+                        .where(F.col("ingestion_id").isin([str(x) for x in registered_ingestion_ids]))
+                        .select("sensorId")
+                        .distinct()
+                        .count()
+                    )
             except Exception:
                 matched = 0
 

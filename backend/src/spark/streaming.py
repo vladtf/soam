@@ -251,17 +251,6 @@ class StreamingManager:
 
         # Normalize/cleanup: lower-case columns and rename known variants
         normalized = cleaner.normalize_sensor_columns(raw_stream)
-        # Extra safety: coalesce sensorId from common variants if DB rules didn't map.
-        # Only reference columns that actually exist to avoid unresolved column errors.
-        sensor_candidates = [c for c in ["sensorId", "sensor_id", "sensor-id", "sensorid"] if c in normalized.columns]
-        if sensor_candidates:
-            try:
-                # If more than one candidate exists or the only one isn't the canonical name, coalesce into sensorId
-                if len(sensor_candidates) > 1 or sensor_candidates[0] != "sensorId":
-                    normalized = normalized.withColumn("sensorId", F.coalesce(*[F.col(c) for c in sensor_candidates]))
-            except Exception:
-                # Best-effort; skip if analyzer complains during planning
-                pass
 
         # Cast to expected schema types (safe casts) and derive event time
         # Be robust to multiple timestamp formats: ISO-8601 with T and timezone
@@ -366,21 +355,27 @@ class StreamingManager:
                 SessionLocal = sessionmaker(bind=engine)
                 session = SessionLocal()
                 try:
-                    allowed = session.query(Device.sensor_id, Device.ingestion_id).filter(Device.enabled == True).all()
-                    allowed_pairs = [(sid, iid) for (sid, iid) in allowed]
+                    # Only consider ingestion IDs from registered devices
+                    rows = session.query(Device.ingestion_id).filter(Device.enabled == True).all()
+                    allowed_ing = [r[0] for r in rows]
                 finally:
                     session.close()
-                if not allowed_pairs:
-                    # Nothing registered; skip writing this batch
+                # Build normalized set of allowed ingestion IDs
+                norm_allowed = {
+                    str(iid).strip().lower()
+                    for iid in allowed_ing
+                    if iid is not None and str(iid).strip().lower() not in ("", "unknown")
+                }
+                if not norm_allowed:
                     try:
                         input_count = batch_df.count()
                     except Exception:
                         input_count = -1
-                    logger.info("Enrichment foreachBatch: no allowed devices; skipping (input=%s)", input_count)
+                    logger.info("Enrichment foreachBatch: no allowed ingestion IDs; skipping (input=%s)", input_count)
                     return
-                # Filter by (sensorId, ingestion_id) with normalization and null-handling
+
+                # Normalize fields (sensor normalized for consistency, but filtering only on ingestion id)
                 from pyspark.sql.functions import lower, trim, when
-                # Normalize batch identifiers
                 filt_df = batch_df \
                     .withColumn("sensor_norm", lower(trim(F.col("sensorId")))) \
                     .withColumn(
@@ -389,63 +384,23 @@ class StreamingManager:
                         .otherwise(lower(trim(F.col("ingestion_id"))))
                     )
 
-                # Normalize allowed pairs
-                norm_pairs = [
-                    (
-                        (sid or "").strip().lower(),
-                        (None if (iid is None or str(iid).strip().lower() in ("", "unknown")) else str(iid).strip().lower())
-                    )
-                    for (sid, iid) in allowed_pairs
-                ]
-                allowed_ids_any = list({sid for (sid, iid) in norm_pairs if iid is None and sid})
-                specific_pairs = [(sid, iid) for (sid, iid) in norm_pairs if iid is not None and sid]
-
-                # Debug: log distinct ids in batch
                 try:
-                    batch_ids = [r[0] for r in filt_df.select("sensor_norm").distinct().limit(20).collect()]
                     batch_ing = [r[0] for r in filt_df.select("ing_norm").distinct().limit(20).collect()]
-                    logger.info("Enrichment foreachBatch: batch sensors=%s; batch ingestions=%s; allowed_any=%s; allowed_pairs=%s",
-                                batch_ids, batch_ing, allowed_ids_any, specific_pairs[:10])
+                    logger.info("Enrichment foreachBatch: batch ingestions=%s; allowed_ing_count=%d",
+                                batch_ing, len(norm_allowed))
                 except Exception:
                     pass
 
-                filtered_any = None
-                if allowed_ids_any:
-                    filtered_any = filt_df.where(F.col("sensor_norm").isin(allowed_ids_any))
-
-                filtered_specific = None
-                if specific_pairs:
-                    allowed_df = batch_df.sparkSession.createDataFrame(specific_pairs, ["sensor_norm", "ing_norm"]).dropDuplicates()
-                    filtered_specific = filt_df.join(allowed_df, on=["sensor_norm", "ing_norm"], how="inner")
-
-                # If ingestion_id is null in batch, allow sensor-only match against specific pairs
-                sensor_only = None
-                if specific_pairs:
-                    specific_ids = list({sid for (sid, _iid) in specific_pairs})
-                    sensor_only = filt_df.where((F.col("ing_norm").isNull()) & (F.col("sensor_norm").isin(specific_ids)))
-
-                parts = [p for p in [filtered_any, filtered_specific, sensor_only] if p is not None]
-                if parts:
-                    filtered = parts[0]
-                    for p in parts[1:]:
-                        filtered = filtered.unionByName(p)
-                    filtered = filtered.dropDuplicates(["sensor_norm", "event_time"])  # dedupe if overlap
-                else:
-                    try:
-                        input_count = batch_df.count()
-                    except Exception:
-                        input_count = -1
-                    logger.info("Enrichment foreachBatch: nothing matched after normalization (input=%s)", input_count)
-                    return
+                filtered = filt_df.where(F.col("ing_norm").isin(list(norm_allowed)))
                 if filtered.rdd.isEmpty():
                     try:
                         input_count = batch_df.count()
                     except Exception:
                         input_count = -1
                     logger.info(
-                        "Enrichment foreachBatch: no rows after filtering (input=%s, allowed=%d)",
+                        "Enrichment foreachBatch: no rows after filtering by ingestion_id (input=%s, allowed_ing=%d)",
                         input_count,
-                        len(allowed_pairs),
+                        len(norm_allowed),
                     )
                     return
                 try:
