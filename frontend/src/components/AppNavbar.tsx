@@ -92,9 +92,7 @@ const AppNavbar: React.FC = () => {
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
             <Nav.Link href="/dashboard">Dashboard</Nav.Link>
-            <Nav.Link href="/sensor-data">Sensor Data</Nav.Link>
-            <Nav.Link href="/computations">Computations</Nav.Link>
-            <Nav.Link href="/normalization">Normalization</Nav.Link>
+            <Nav.Link href="/pipeline">Data Pipeline</Nav.Link>
             <NavDropdown title="More" id="nav-more">
               <NavDropdown.Item href="/map">Map</NavDropdown.Item>
               <NavDropdown.Item href="/minio">Data Browser</NavDropdown.Item>
