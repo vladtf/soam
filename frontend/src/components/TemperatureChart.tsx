@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from 'react-bootstrap';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FaThermometerHalf } from 'react-icons/fa';
+import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
 
 interface TemperatureData {
   time_start: string;
@@ -14,20 +15,31 @@ interface TemperatureChartProps {
   loading: boolean;
   timeRange: number;
   onTimeRangeChange: (range: number) => void;
+  lastUpdated?: Date | null;
+  refreshInterval?: number; // Add refreshInterval prop
 }
 
 const TemperatureChart: React.FC<TemperatureChartProps> = ({ 
   data, 
   loading, 
   timeRange, 
-  onTimeRangeChange 
+  onTimeRangeChange,
+  lastUpdated,
+  refreshInterval = 15000 // Default to 15000ms if not provided
 }) => {
   return (
     <Card className="mb-3 shadow-sm border-body">
       <Card.Body className="bg-body-tertiary">
-        <Card.Title>
-          <FaThermometerHalf className="me-2" /> Hourly Average Temperature
-        </Card.Title>
+        <div className="d-flex justify-content-between align-items-start mb-3">
+          <Card.Title className="mb-0">
+            <FaThermometerHalf className="me-2" /> Hourly Average Temperature
+          </Card.Title>
+          {lastUpdated && (
+            <div className="small text-body-secondary">
+              {formatRelativeTime(lastUpdated)} • {formatRefreshPeriod(refreshInterval)}
+            </div>
+          )}
+        </div>
         {/* Updated select for time range with more options */}
         <div className="mb-3">
           <label htmlFor="tempRangeSelect" className="form-label text-body-secondary">Select Time Range:</label>

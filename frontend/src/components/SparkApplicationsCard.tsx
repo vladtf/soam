@@ -4,15 +4,20 @@ import { FaTasks, FaServer, FaCog, FaMemory, FaUsers, FaClock } from 'react-icon
 import { SparkMasterStatus, SparkApplication } from '../api/backendRequests';
 import { useTheme } from '../context/ThemeContext';
 import ThemedTable from './ThemedTable';
+import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
 
 interface SparkApplicationsCardProps {
   sparkMasterStatus: SparkMasterStatus | null;
   loading: boolean;
+  lastUpdated?: Date | null;
+  refreshInterval?: number; // in milliseconds
 }
 
 const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({ 
   sparkMasterStatus, 
-  loading 
+  loading,
+  lastUpdated,
+  refreshInterval = 15000 // default to 15 seconds if not provided
 }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -54,9 +59,16 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
 
   return (
     <Card className="mb-3 shadow-sm">
-      <Card.Header className="bg-primary text-white d-flex align-items-center">
-        <FaTasks className="me-2" />
-        <strong>Spark Applications & Cluster Status</strong>
+      <Card.Header className="bg-primary text-white d-flex align-items-center justify-content-between">
+        <div className="d-flex align-items-center">
+          <FaTasks className="me-2" />
+          <strong>Spark Applications & Cluster Status</strong>
+        </div>
+        {lastUpdated && (
+          <div className="small">
+            {formatRelativeTime(lastUpdated)} • {formatRefreshPeriod(refreshInterval)}
+          </div>
+        )}
       </Card.Header>
       <Card.Body>
         {loading ? (

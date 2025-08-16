@@ -14,6 +14,10 @@ import { DashboardTile } from '../components/DashboardTile';
 import { DashboardTileDef, fetchDashboardTileExamples, listDashboardTiles, createDashboardTile, listComputations, previewDashboardTile, deleteDashboardTile, updateDashboardTile } from '../api/backendRequests';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import WithTooltip from '../components/WithTooltip';
+import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
+
+// Default refresh interval in milliseconds
+const DEFAULT_REFRESH_INTERVAL_MS = 30000;
 
 const DashboardPage: React.FC = () => {
   const {
@@ -105,7 +109,16 @@ const DashboardPage: React.FC = () => {
   useEffect(() => { loadTiles(); }, []);
 
   const openNewTile = () => {
-    const base: DashboardTileDef = { name: '', computation_id: 0, viz_type: 'table', config: {}, enabled: true };
+    const base: DashboardTileDef = { 
+      name: '', 
+      computation_id: 0, 
+      viz_type: 'table', 
+      config: { 
+        refreshInterval: DEFAULT_REFRESH_INTERVAL_MS, // use constant
+        autoRefresh: true 
+      }, 
+      enabled: true 
+    };
     setEditing(base);
     setConfigText(JSON.stringify(base.config, null, 2));
     setConfigValid(true);
@@ -191,6 +204,7 @@ const DashboardPage: React.FC = () => {
           <SparkApplicationsCard
             sparkMasterStatus={sparkMasterStatus}
             loading={loadingSparkStatus}
+            lastUpdated={lastUpdated}
           />
         </Col>
       </Row>
@@ -198,7 +212,11 @@ const DashboardPage: React.FC = () => {
       {/* Temperature Chart */}
       <Row className="g-3 mt-1">
         <Col md={12}>
-          <EnrichmentStatusCard minutes={1} />
+          <EnrichmentStatusCard 
+            minutes={10} 
+            autoRefresh={autoRefresh}
+            refreshInterval={30000}
+          />
         </Col>
       </Row>
 
@@ -212,12 +230,14 @@ const DashboardPage: React.FC = () => {
             loading={loading}
             timeRange={timeRange}
             onTimeRangeChange={setTimeRange}
+            lastUpdated={lastUpdated}
           />
         </Col>
         <Col md={4}>
           <TemperatureAlertsCard
             alerts={temperatureAlerts}
             loading={loadingAlerts}
+            lastUpdated={lastUpdated}
           />
         </Col>
       </Row>
@@ -311,6 +331,44 @@ const DashboardPage: React.FC = () => {
             <Col md={6} className="d-flex align-items-end">
               <Form.Check type="switch" id="tile-enabled" label="Enabled" checked={!!editing?.enabled} onChange={(e) => setEditing(s => ({ ...(s as DashboardTileDef), enabled: e.target.checked }))} />
             </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Refresh Interval (seconds)</Form.Label>
+                <Form.Control 
+                  type="number" 
+                  min="5" 
+                  max="3600" 
+                  value={Number((editing?.config as any)?.refreshInterval ?? DEFAULT_REFRESH_INTERVAL_MS) / 1000} 
+                  onChange={(e) => {
+                    const seconds = Number(e.target.value);
+                    const ms = seconds * 1000;
+                    setEditing(s => ({ 
+                      ...(s as DashboardTileDef), 
+                      config: { ...(s?.config || {}), refreshInterval: ms }
+                    }));
+                    setConfigText(JSON.stringify({ ...(editing?.config || {}), refreshInterval: ms }, null, 2));
+                  }} 
+                />
+                <Form.Text className="text-muted">
+                  How often to automatically refresh tile data (5-3600 seconds)
+                </Form.Text>
+              </Form.Group>
+            </Col>
+            <Col md={6} className="d-flex align-items-end">
+              <Form.Check 
+                type="switch" 
+                id="tile-auto-refresh" 
+                label="Auto-refresh" 
+                checked={(editing?.config as any)?.autoRefresh !== false} 
+                onChange={(e) => {
+                  setEditing(s => ({ 
+                    ...(s as DashboardTileDef), 
+                    config: { ...(s?.config || {}), autoRefresh: e.target.checked }
+                  }));
+                  setConfigText(JSON.stringify({ ...(editing?.config || {}), autoRefresh: e.target.checked }, null, 2));
+                }} 
+              />
+            </Col>
             <Col md={12}>
               <Form.Group>
                 <Form.Label>Config (JSON)</Form.Label>
@@ -327,6 +385,16 @@ const DashboardPage: React.FC = () => {
                   }}
                 />
                 <Form.Control.Feedback type="invalid">Invalid JSON</Form.Control.Feedback>
+                <Form.Text className="text-muted">
+                  Additional configuration options in JSON format. Common settings:
+                  <br />• <code>refreshInterval</code>: Refresh interval in milliseconds (default: 30000)
+                  <br />• <code>autoRefresh</code>: Enable automatic refresh (default: true)
+                  <br />• <code>cacheSec</code>: Cache duration in seconds
+                  <br />• <code>columns</code>: Array of column names for table visualization
+                  <br />• <code>valueField</code>: Field name for stat visualization
+                  <br />• <code>timeField</code>: Time field for timeseries (default: 'time_start')
+                  <br />• <code>chartHeight</code>: Height in pixels for timeseries charts
+                </Form.Text>
                 {configErrors.length > 0 && configValid && (
                   <Alert variant="danger" className="mt-2 mb-0 py-2">
                     <div className="fw-bold small mb-1">Issues:</div>
@@ -354,18 +422,30 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
   const [loading, setLoading] = useState<boolean>(true);
   const [tsKey, setTsKey] = useState<number>(0);
   const [cache, setCache] = useState<{ rows: unknown[]; at: number } | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+
+  // Get refresh interval from config, default to 30 seconds
+  const refreshIntervalMs = Number((tile.config as any)?.refreshInterval ?? DEFAULT_REFRESH_INTERVAL_MS);
+  const autoRefreshEnabled = (tile.config as any)?.autoRefresh !== false;
+
   useEffect(() => {
     let mounted = true;
     setLoading(true);
     (async () => {
       try {
         const cacheSec = Number((tile.config as any)?.cacheSec ?? 0);
-        if (cache && (Date.now() - cache.at) / 1000 < cacheSec) { setRows(cache.rows); return; }
+        if (cache && (Date.now() - cache.at) / 1000 < cacheSec) { 
+          setRows(cache.rows); 
+          setLastRefreshed(new Date(cache.at));
+          return; 
+        }
         const data = await previewDashboardTile(tile.id!);
         if (!mounted) return;
         const arr = Array.isArray(data) ? data : [];
         setRows(arr);
-        setCache({ rows: arr, at: Date.now() });
+        const now = Date.now();
+        setCache({ rows: arr, at: now });
+        setLastRefreshed(new Date(now));
       } catch {
         if (!mounted) return;
         setRows([]);
@@ -375,6 +455,25 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
     })();
     return () => { mounted = false; };
   }, [tile.id, tsKey]);
+
+  // Auto-refresh timer
+  useEffect(() => {
+    if (!autoRefreshEnabled || refreshIntervalMs <= 0) return;
+    
+    const interval = setInterval(() => {
+      setTsKey(k => k + 1);
+      setCache(null);
+    }, refreshIntervalMs);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [autoRefreshEnabled, refreshIntervalMs, tile.id]);
+
+  const handleManualRefresh = () => {
+    setTsKey(k => k + 1);
+    setCache(null);
+  };
 
   return (
     <div className="h-100 d-flex flex-column">
@@ -391,7 +490,7 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
         </div>
         <ButtonGroup size="sm" className="tile-controls" onMouseDown={(e) => e.stopPropagation()}>
           <WithTooltip tip="Reload the data for this tile">
-            <Button variant="outline-secondary" onClick={(e) => { e.stopPropagation(); setTsKey(k => k + 1); setCache(null); }}>Refresh</Button>
+            <Button variant="outline-secondary" onClick={(e) => { e.stopPropagation(); handleManualRefresh(); }}>Refresh</Button>
           </WithTooltip>
           <WithTooltip tip="Edit tile settings (computation, visualization, config)">
             <Button variant="outline-secondary" onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>Edit</Button>
@@ -401,6 +500,17 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
           </WithTooltip>
         </ButtonGroup>
       </div>
+      
+      {/* Refresh status info */}
+      <div className="small text-body-secondary mb-2 d-flex justify-content-between align-items-center">
+        <span>
+          {lastRefreshed ? `Updated ${formatRelativeTime(lastRefreshed)}` : 'Not refreshed yet'}
+        </span>
+        <span>
+          {autoRefreshEnabled ? formatRefreshPeriod(refreshIntervalMs) : 'Manual refresh only'}
+        </span>
+      </div>
+
       <div className="flex-grow-1 border rounded p-2 bg-body-tertiary">
         {loading ? (
           <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2" />Loading…</div>

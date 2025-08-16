@@ -1,10 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Spinner, Badge, ListGroup } from 'react-bootstrap';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Card, Spinner, Badge, ListGroup, Button } from 'react-bootstrap';
 import ThemedTable from './ThemedTable';
 import { EnrichmentSummary, fetchEnrichmentSummary } from '../api/backendRequests';
+import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
+import WithTooltip from './WithTooltip';
 
 interface Props {
   minutes?: number;
+  autoRefresh?: boolean;
+  refreshInterval?: number;
 }
 
 function getAnyPartitionText(value: unknown): string {
@@ -14,34 +18,83 @@ function getAnyPartitionText(value: unknown): string {
   return value ? 'Yes' : 'No';
 }
 
-const EnrichmentStatusCard: React.FC<Props> = ({ minutes = 10 }) => {
+const DEFAULT_REFRESH_INTERVAL = 30000; // 30 seconds
+
+const EnrichmentStatusCard: React.FC<Props> = ({ 
+  minutes = 10, 
+  autoRefresh = true, 
+  refreshInterval = DEFAULT_REFRESH_INTERVAL
+}) => {
   const [summary, setSummary] = useState<EnrichmentSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [refreshKey, setRefreshKey] = useState<number>(0);
 
-  useEffect(() => {
-    let mounted = true;
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    try {
+      const s = await fetchEnrichmentSummary(minutes);
+      setSummary(s);
+      setLastRefreshed(new Date());
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [minutes]);
+
+  // Initial fetch and dependency updates
+  useEffect(() => {
+    let mounted = true;
     (async () => {
-      try {
-        const s = await fetchEnrichmentSummary(minutes);
-        if (!mounted) return;
-        setSummary(s);
-      } catch (e: unknown) {
-        if (!mounted) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        setError(msg);
-      } finally {
-        if (mounted) setLoading(false);
-      }
+      if (!mounted) return;
+      await fetchData();
     })();
     return () => { mounted = false; };
-  }, [minutes]);
+  }, [fetchData, refreshKey]);
+
+  // Auto-refresh timer
+  useEffect(() => {
+    if (!autoRefresh || refreshInterval <= 0) return;
+    
+    const interval = setInterval(() => {
+      setRefreshKey(k => k + 1);
+    }, refreshInterval);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [autoRefresh, refreshInterval]);
+
+  const handleManualRefresh = () => {
+    setRefreshKey(k => k + 1);
+  };
 
   return (
     <Card className="shadow-sm border-body">
-      <Card.Header>Enrichment Status</Card.Header>
+      <Card.Header className="d-flex justify-content-between align-items-center">
+        <span>Enrichment Status</span>
+        <div className="d-flex align-items-center gap-2">
+          {lastRefreshed && (
+            <div className="small text-body-secondary">
+              {formatRelativeTime(lastRefreshed)} • {autoRefresh ? formatRefreshPeriod(refreshInterval) : 'Manual refresh'}
+            </div>
+          )}
+          <WithTooltip tip="Refresh enrichment status data">
+            <Button 
+              size="sm" 
+              variant="outline-secondary" 
+              onClick={handleManualRefresh}
+              disabled={loading}
+            >
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </WithTooltip>
+        </div>
+      </Card.Header>
       <Card.Body>
         {loading ? (
           <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2"/>Loading…</div>
