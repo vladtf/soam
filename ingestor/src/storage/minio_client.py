@@ -4,7 +4,7 @@ import uuid
 import threading
 import io
 import json
-import datetime
+from datetime import datetime, timezone
 import sys
 import logging
 import pandas as pd
@@ -30,6 +30,8 @@ class MinioClient:
 
     FLUSH_INTERVAL = 10          # seconds – tune for file cadence
     MAX_BYTES = 5 * 1024**2  # 5 MiB  – tune for file size
+
+    BRONZE_PATH = "bronze"
 
     # ------------------------------------------------------------------ #
     # constructor
@@ -169,10 +171,19 @@ class MinioClient:
             self._upload_ingestion_group(group_rows, ingestion_id)
 
     def _upload_ingestion_group(self, rows: list[dict], ingestion_id: str) -> None:
-        """Upload a group of rows that all have the same ingestion_id."""
+        """Upload a group of rows that all have the same ingestion_id to bronze layer.
+        
+        Writes to bronze/ingestion_id=<id>/date=YYYY-MM-DD/hour=HH/part-uuid.parquet
+        Following medallion architecture: bronze (raw) -> silver (processed) -> gold (aggregated)
+        """
         df = pd.DataFrame(rows)
 
-        # partition path: sensors/ingestion_id=<id>/date=YYYY-MM-DD/hour=HH/part-uuid.parquet
+        # Get current partition values
+        now = datetime.now(timezone.utc)
+        date = now.strftime("%Y-%m-%d")
+        hour = now.hour
+
+        # Try to get more accurate timestamp from the data
         try:
             ts = pd.to_datetime(df["timestamp"].iloc[0], utc=True)
             date = ts.strftime("%Y-%m-%d")
@@ -180,11 +191,11 @@ class MinioClient:
         except Exception as e:
             logger.warning("MinIO ▶ Error parsing timestamp for ingestion_id %s: %s", ingestion_id, e)
             # Use current time as fallback
-            now = datetime.datetime.utcnow()
+            now = datetime.now(timezone.utc)
             date = now.strftime("%Y-%m-%d")
             hour = now.strftime("%H")
 
-        key_prefix = f"sensors/ingestion_id={ingestion_id}/date={date}/hour={hour}/"
+        key_prefix = f"{self.BRONZE_PATH}/ingestion_id={ingestion_id}/date={date}/hour={hour}/"
         object_key = key_prefix + f"part-{uuid.uuid4().hex}.parquet"
 
         # write to an in-memory Parquet buffer

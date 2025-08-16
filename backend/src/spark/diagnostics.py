@@ -4,6 +4,8 @@ Testing and diagnostic utilities for Spark operations.
 import logging
 from typing import Dict, Any
 
+from src.spark.config import SparkConfig
+
 from .session import SparkSessionManager
 
 logger = logging.getLogger(__name__)
@@ -16,7 +18,7 @@ class SparkDiagnostics:
         """Initialize SparkDiagnostics."""
         self.session_manager = session_manager
         self.minio_bucket = minio_bucket
-        self.sensors_path = f"s3a://{minio_bucket}/sensors/"
+        self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}/"
     
     def test_spark_basic_computation(self) -> Dict[str, Any]:
         """Test basic Spark functionality."""
@@ -69,7 +71,7 @@ class SparkDiagnostics:
             
             try:
                 # Attempt to read sensor data
-                df = self.session_manager.spark.read.option("basePath", self.sensors_path).parquet(f"{self.sensors_path}date=*/hour=*")
+                df = self.session_manager.spark.read.option("basePath", self.bronze_path).parquet(f"{self.bronze_path}date=*/hour=*")
                 count = df.count()
                 
                 if count > 0:
@@ -90,7 +92,7 @@ class SparkDiagnostics:
                         "results": {
                             "total_sensor_records": count,
                             "sample_data": sample_data,
-                            "data_path": self.sensors_path
+                            "data_path": self.bronze_path
                         }
                     }
                 else:
@@ -104,7 +106,7 @@ class SparkDiagnostics:
                 return {
                     "status": "warning", 
                     "message": f"Cannot access sensor data: {str(data_error)}",
-                    "results": {"data_path": self.sensors_path}
+                    "results": {"data_path": self.bronze_path}
                 }
                 
         except Exception as e:

@@ -27,7 +27,7 @@ class DataAccessManager:
         # Build paths
         self.silver_path = f"s3a://{minio_bucket}/{SparkConfig.SILVER_PATH}"
         self.alerts_path = f"s3a://{minio_bucket}/{SparkConfig.ALERT_PATH}"
-        self.sensors_path = f"s3a://{minio_bucket}/{SparkConfig.SENSORS_PATH}"
+        self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}"
         self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}"
     
     def _handle_table_not_found_error(self, error: Exception) -> bool:

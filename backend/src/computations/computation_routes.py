@@ -95,8 +95,8 @@ def _detect_available_sources(config: ConfigDep, client: MinioClientDep) -> list
             sources.append("silver")
         if _has_any_objects(client, config.minio_bucket, SparkConfig.ALERT_PATH):
             sources.append("alerts")
-        if _has_any_objects(client, config.minio_bucket, SparkConfig.SENSORS_PATH):
-            sources.append("sensors")
+        if _has_any_objects(client, config.minio_bucket, SparkConfig.BRONZE_PATH):
+            sources.append("bronze")
     except Exception:
         # On error, return empty to let frontend decide any fallback
         return []
@@ -146,7 +146,7 @@ def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager =
                 path = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.ALERT_PATH}"
                 df = session.spark.read.format("delta").load(path)
             else:  # sensors
-                base = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.SENSORS_PATH}"
+                base = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.BRONZE_PATH}"
                 # Use partitioned pattern if present; fallback to base path
                 try:
                     df = session.spark.read.option("basePath", base).parquet(f"{base}date=*/hour=*")
@@ -269,7 +269,7 @@ def _execute_definition(defn: Dict[str, Any], dataset: str, spark: SparkManager)
         path = f"s3a://{bucket}/{SparkConfig.ALERT_PATH}"
         df = session.spark.read.format("delta").load(path)
     else:
-        base = f"s3a://{bucket}/{SparkConfig.SENSORS_PATH}"
+        base = f"s3a://{bucket}/{SparkConfig.BRONZE_PATH}"
         try:
             df = session.spark.read.option("basePath", base).parquet(f"{base}date=*/hour=*")
         except Exception:

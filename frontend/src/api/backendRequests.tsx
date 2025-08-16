@@ -609,7 +609,7 @@ export interface SystemConfig {
   };
   storage: {
     minio_bucket: string;
-    sensors_path: string;
+    bronze_path: string;
     silver_path: string;
     enriched_path: string;
     alerts_path: string;

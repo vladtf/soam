@@ -12,6 +12,60 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
+@router.get("/ready")
+async def get_readiness_status(
+    spark_manager: SparkManagerDep,
+    neo4j_manager: Neo4jManagerDep
+):
+    """Readiness check endpoint - indicates if the service is ready to serve traffic."""
+    try:
+        # For readiness, we need minimal functionality to be working
+        ready_status = {
+            "ready": True,
+            "checks": {
+                "neo4j": False,
+                "spark_session": False,
+                "database": False
+            }
+        }
+        
+        # Check Neo4j (critical for basic functionality)
+        try:
+            neo4j_health = neo4j_manager.health_check()
+            ready_status["checks"]["neo4j"] = neo4j_health["status"] == "healthy"
+        except Exception:
+            ready_status["checks"]["neo4j"] = False
+            ready_status["ready"] = False
+        
+        # Check Spark session (not streams, just session)
+        try:
+            if hasattr(spark_manager, 'session_manager'):
+                ready_status["checks"]["spark_session"] = spark_manager.session_manager.is_connected()
+            else:
+                ready_status["checks"]["spark_session"] = False
+                ready_status["ready"] = False
+        except Exception:
+            ready_status["checks"]["spark_session"] = False
+            ready_status["ready"] = False
+        
+        # Check database (basic functionality)
+        try:
+            # Simple database check - this will be implemented based on your database setup
+            ready_status["checks"]["database"] = True  # Assume database is ready for now
+        except Exception:
+            ready_status["checks"]["database"] = False
+            ready_status["ready"] = False
+        
+        return ready_status
+        
+    except Exception as e:
+        logger.error(f"Error in readiness check: {str(e)}")
+        return {
+            "ready": False,
+            "error": str(e)
+        }
+
+
 @router.get("/health", response_model=HealthStatus)
 async def get_health_status(
     spark_manager: SparkManagerDep,

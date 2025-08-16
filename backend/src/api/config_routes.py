@@ -3,8 +3,10 @@ Configuration API routes for runtime settings.
 """
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
+
+from src.spark.config import SparkConfig
 
 from .dependencies import SparkManagerDep
 
@@ -67,10 +69,10 @@ async def get_system_config(spark_manager: SparkManagerDep) -> Dict[str, Any]:
             },
             "storage": {
                 "minio_bucket": spark_manager.minio_bucket,
-                "sensors_path": f"s3a://{spark_manager.minio_bucket}/sensors/",
-                "silver_path": f"s3a://{spark_manager.minio_bucket}/silver/five_min_avg",
-                "enriched_path": f"s3a://{spark_manager.minio_bucket}/silver/enriched",
-                "alerts_path": f"s3a://{spark_manager.minio_bucket}/silver/temperature_alerts"
+                "bronze_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.BRONZE_PATH}/",  # Updated to bronze layer
+                "silver_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.SILVER_PATH}/",
+                "enriched_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.ENRICHED_PATH}/",
+                "alerts_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.ALERT_PATH}/"
             },
             "spark": {
                 "status": spark_status.get("status", "unknown"),

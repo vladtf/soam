@@ -33,7 +33,7 @@ class BaseSimulator(ABC):
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect = self.on_connect
 
-    def on_connect(self, client, userdata, flags, rc):
+    def on_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
             logging.info(f"[{self.sensor_id}] Connected to MQTT Broker at {self.broker}:{self.port}")
         else:

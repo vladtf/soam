@@ -18,7 +18,7 @@ class StreamingManager:
 
     def __init__(self, session_manager: SparkSessionManager, minio_bucket: str):
         """Initialize StreamingManager.
-        
+
         Args:
             session_manager: Spark session manager
             minio_bucket: MinIO bucket name
@@ -27,11 +27,11 @@ class StreamingManager:
         self.minio_bucket = minio_bucket
 
         # Build paths
-        self.sensors_path = f"s3a://{minio_bucket}/{SparkConfig.SENSORS_PATH}"
-        self.silver_path = f"s3a://{minio_bucket}/{SparkConfig.SILVER_PATH}"
-        self.alerts_path = f"s3a://{minio_bucket}/{SparkConfig.ALERT_PATH}"
+        self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}/"
+        self.silver_path = f"s3a://{minio_bucket}/{SparkConfig.SILVER_PATH}/"
+        self.alerts_path = f"s3a://{minio_bucket}/{SparkConfig.ALERT_PATH}/"
         # New: enriched target path
-        self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}"
+        self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}/"
 
         # Streaming queries
         self.avg_query: Optional[StreamingQuery] = None
@@ -58,14 +58,19 @@ class StreamingManager:
         return None
 
     def is_data_directory_ready(self) -> bool:
-        """Check if the sensors data directory exists and is accessible."""
+        """Check if the bronze data directory exists and is accessible."""
         try:
-            # Try to access the sensors directory
-            self.session_manager.spark.read.option("basePath", self.sensors_path).parquet(self.sensors_path)
+            # Try to access the bronze directory - even if empty, this will work
+            self.session_manager.spark.read.option("basePath", self.bronze_path).option("recursiveFileLookup", "true").option("pathGlobFilter", "*.parquet").parquet(self.bronze_path)
             return True
         except Exception as e:
-            logger.debug(f"Data directory not ready: {e}")
-            return False
+            # Check if it's just an empty directory (which is fine)
+            if "Path does not exist" in str(e) or "Unable to infer schema" in str(e):
+                logger.info(f"Bronze directory empty or doesn't exist yet - this is normal for initial startup: {e}")
+                return False
+            else:
+                logger.debug(f"Data directory not ready: {e}")
+                return False
 
     def start_streams_safely(self) -> None:
         """Start streaming jobs with error handling."""
@@ -137,14 +142,14 @@ class StreamingManager:
 
         # Extract temperature from union schema and filter valid values
         from .union_schema import UnionSchemaTransformer
-        
+
         temp_stream = UnionSchemaTransformer.extract_column_from_union(
             enriched_stream, "temperature", prefer_normalized=True
         )
-        
+
         # Extract sensorId from sensor_data map
         temp_stream = temp_stream.withColumn(
-            "sensorId", 
+            "sensorId",
             F.coalesce(
                 temp_stream.sensor_data.getItem("sensorId"),
                 temp_stream.sensor_data.getItem("sensorid"),
@@ -224,13 +229,13 @@ class StreamingManager:
 
         # Extract temperature and sensorId from union schema
         from .union_schema import UnionSchemaTransformer
-        
+
         alert_stream = UnionSchemaTransformer.extract_column_from_union(
             enriched_stream, "temperature", prefer_normalized=True
         )
-        
+
         alert_stream = alert_stream.withColumn(
-            "sensorId", 
+            "sensorId",
             F.coalesce(
                 alert_stream.sensor_data.getItem("sensorId"),
                 alert_stream.sensor_data.getItem("sensorid"),
@@ -385,7 +390,7 @@ class StreamingManager:
             # Wait a moment for cleanup
             import time
             time.sleep(2)
-        
+
         spark = self.session_manager.spark
         cleaner = DataCleaner()
 
@@ -394,8 +399,8 @@ class StreamingManager:
             # Try to infer schema from existing parquet files first
             static_df = (
                 spark.read
-                .option("basePath", self.sensors_path)
-                .parquet(f"{self.sensors_path}ingestion_id=*/date=*/hour=*")
+                .option("basePath", self.bronze_path)
+                .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
             )
             inferred_schema = static_df.schema
             logger.info("Inferred raw sensors schema from existing files for union streaming")
@@ -406,19 +411,19 @@ class StreamingManager:
                 logger.warning("Inferred schema missing temperature field - using comprehensive schema")
                 from .config import SparkSchemas
                 inferred_schema = SparkSchemas.get_comprehensive_raw_schema()
-            
-        except Exception:
+
+        except Exception as e:
             from .config import SparkSchemas
             inferred_schema = SparkSchemas.get_comprehensive_raw_schema()
-            logger.info("Using comprehensive raw schema for streaming read")
+            logger.info(f"Using comprehensive raw schema for streaming read (reason: {e})")
 
         # Read raw parquet with schema
         raw_stream = (
             spark.readStream
             .schema(inferred_schema)
-            .option("basePath", self.sensors_path)
+            .option("basePath", self.bronze_path)
             .option("maxFilesPerTrigger", SparkConfig.MAX_FILES_PER_TRIGGER)
-            .parquet(f"{self.sensors_path}ingestion_id=*/date=*/hour=*")
+            .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
         )
 
         # Add debug logging to see what's in the raw stream before any processing
@@ -472,7 +477,7 @@ class StreamingManager:
         def write_union_if_registered(batch_df, batch_id: int):
             try:
                 logger.info("Union enrichment batch started: batch_id=%s", batch_id)
-                
+
                 # Debug: Log sample raw data BEFORE any processing
                 if not batch_df.rdd.isEmpty():
                     logger.info("=== RAW BATCH DATA SAMPLE ===")
@@ -484,13 +489,13 @@ class StreamingManager:
                         if 'temperature' in row_dict:
                             logger.info(f"Raw data sample {i+1}: temperature = '{row_dict['temperature']}' (type: {type(row_dict['temperature'])})")
                     logger.info("=== END RAW BATCH DATA SAMPLE ===")
-                
+
                 from sqlalchemy.orm import sessionmaker
                 from src.database.database import engine
                 from src.database.models import Device
                 SessionLocal = sessionmaker(bind=engine)
                 session = SessionLocal()
-                
+
                 try:
                     # Get allowed ingestion IDs
                     rows = session.query(Device.ingestion_id).filter(Device.enabled == True).all()
@@ -501,7 +506,7 @@ class StreamingManager:
 
                 # Check for wildcard registration (None ingestion_id means accept all)
                 has_wildcard = any(iid is None for iid in allowed_ing)
-                
+
                 # Filter by allowed ingestion IDs
                 norm_allowed = {
                     str(iid).strip().lower()
@@ -539,7 +544,7 @@ class StreamingManager:
                 total_before = batch_df.count()
                 total_after = filtered.count()
                 logger.info("Union enrichment: %d rows before filter, %d rows after filter", total_before, total_after)
-                
+
                 # Log normalized field information for debugging
                 if total_after > 0:
                     try:
@@ -549,9 +554,9 @@ class StreamingManager:
                             ingestion_id = row["ingestion_id"]
                             normalized_data = row["normalized_data"]
                             sensor_data = row["sensor_data"]
-                            
+
                             logger.info("Union enrichment sample %d: ingestion_id=%s", i+1, ingestion_id)
-                            
+
                             # Log normalized fields and values
                             if normalized_data:
                                 # normalized_data is already a dict, not a Row object
@@ -559,7 +564,7 @@ class StreamingManager:
                                 logger.info("Union enrichment sample %d: normalized fields: %s", i+1, norm_fields)
                             else:
                                 logger.info("Union enrichment sample %d: no normalized data", i+1)
-                                
+
                             # Log sensor data keys for context
                             if sensor_data:
                                 # sensor_data is already a dict, not a Row object
@@ -570,10 +575,10 @@ class StreamingManager:
                                 logger.info("Union enrichment sample %d: sensor_data sample: %s", i+1, sensor_sample)
                             else:
                                 logger.info("Union enrichment sample %d: no sensor data", i+1)
-                                
+
                     except Exception as e:
                         logger.warning(f"Union enrichment: Could not log sample normalized data: {e}")
-                
+
                 # If we expected filtering but nothing was filtered out, there might be a data mismatch
                 if not has_wildcard and norm_allowed and total_before > 0 and total_after == total_before:
                     logger.warning("Union enrichment: Expected filtering but no rows were filtered out - possible ingestion_id mismatch")
@@ -589,10 +594,10 @@ class StreamingManager:
                     .option("mergeSchema", "true")
                     .save()
                 )
-                
+
                 kept = filtered.count()
                 logger.info("Union enrichment: wrote %d rows to enriched", kept)
-                
+
             except Exception as e:
                 logger.error(f"Error in union enrichment foreachBatch: {e}")
 

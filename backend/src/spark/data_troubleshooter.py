@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from pyspark.sql import DataFrame, functions as F
 from pyspark.sql.types import StructType
 
+from src.spark.config import SparkConfig
+
 from .session import SparkSessionManager
 from .cleaner import DataCleaner
 from .union_schema import UnionSchemaTransformer
@@ -22,9 +24,9 @@ class DataTroubleshooter:
         self.minio_bucket = minio_bucket
         
         # Build paths
-        self.sensors_path = f"s3a://{minio_bucket}/sensors"
-        self.enriched_path = f"s3a://{minio_bucket}/enriched"
-        self.silver_path = f"s3a://{minio_bucket}/silver"
+        self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}/"
+        self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}/"
+        self.silver_path = f"s3a://{minio_bucket}/{SparkConfig.SILVER_PATH}/"
 
     def diagnose_field_transformation(
         self, 
@@ -115,12 +117,12 @@ class DataTroubleshooter:
             time_filter = F.current_timestamp() - F.expr(f"INTERVAL {minutes_back} MINUTES")
             
             # Read raw data
-            base_query = spark.read.option("basePath", self.sensors_path)
+            base_query = spark.read.option("basePath", self.bronze_path)
             
             if ingestion_id:
-                raw_df = base_query.parquet(f"{self.sensors_path}/ingestion_id={ingestion_id}/date=*/hour=*")
+                raw_df = base_query.parquet(f"{self.bronze_path}/ingestion_id={ingestion_id}/date=*/hour=*")
             else:
-                raw_df = base_query.parquet(f"{self.sensors_path}/ingestion_id=*/date=*/hour=*")
+                raw_df = base_query.parquet(f"{self.bronze_path}/ingestion_id=*/date=*/hour=*")
             
             # Remove duplicate ingestion_id column if it exists in both partition and data
             columns_to_select = [col for col in raw_df.columns if col != "ingestion_id" or raw_df.columns.count("ingestion_id") == 1]
@@ -249,11 +251,11 @@ class DataTroubleshooter:
                 spark = self.session_manager.spark
                 time_filter = F.current_timestamp() - F.expr(f"INTERVAL {minutes_back} MINUTES")
                 
-                base_query = spark.read.option("basePath", self.sensors_path)
+                base_query = spark.read.option("basePath", self.bronze_path)
                 if ingestion_id:
-                    raw_df = base_query.parquet(f"{self.sensors_path}/ingestion_id={ingestion_id}/date=*/hour=*")
+                    raw_df = base_query.parquet(f"{self.bronze_path}/ingestion_id={ingestion_id}/date=*/hour=*")
                 else:
-                    raw_df = base_query.parquet(f"{self.sensors_path}/ingestion_id=*/date=*/hour=*")
+                    raw_df = base_query.parquet(f"{self.bronze_path}/ingestion_id=*/date=*/hour=*")
                 
                 # Handle sensor ID column variations and time filter
                 columns = raw_df.columns
@@ -623,8 +625,8 @@ class DataTroubleshooter:
             # Stage 1: Raw Data
             try:
                 raw_df = (
-                    spark.read.option("basePath", self.sensors_path)
-                    .parquet(f"{self.sensors_path}/ingestion_id=*/date=*/hour=*")
+                    spark.read.option("basePath", self.bronze_path)
+                    .parquet(f"{self.bronze_path}/ingestion_id=*/date=*/hour=*")
                 )
                 
                 # Handle both sensor ID column variations

@@ -14,6 +14,54 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
+@router.get("/ready")
+async def get_readiness_status(
+    state: IngestorStateDep,
+    minio_client: MinioClientDep
+):
+    """Readiness check endpoint - indicates if the ingestor is ready to receive data."""
+    try:
+        ready_status = {
+            "ready": True,
+            "checks": {
+                "minio": False,
+                "mqtt": False
+            }
+        }
+        
+        # Check MinIO connection (critical for data storage)
+        try:
+            minio_client.client.list_buckets()
+            ready_status["checks"]["minio"] = True
+        except Exception:
+            ready_status["checks"]["minio"] = False
+            ready_status["ready"] = False
+        
+        # Check MQTT connection (critical for data ingestion)
+        try:
+            if state.mqtt_handler and hasattr(state.mqtt_handler, 'client'):
+                if state.mqtt_handler.client and state.mqtt_handler.client.is_connected():
+                    ready_status["checks"]["mqtt"] = True
+                else:
+                    ready_status["checks"]["mqtt"] = False
+                    ready_status["ready"] = False
+            else:
+                ready_status["checks"]["mqtt"] = False
+                ready_status["ready"] = False
+        except Exception:
+            ready_status["checks"]["mqtt"] = False
+            ready_status["ready"] = False
+        
+        return ready_status
+        
+    except Exception as e:
+        logger.error(f"Error in readiness check: {str(e)}")
+        return {
+            "ready": False,
+            "error": str(e)
+        }
+
+
 @router.get("/health", response_model=HealthStatus)
 async def get_health_status(
     state: IngestorStateDep,

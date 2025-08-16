@@ -3,17 +3,16 @@ Configuration constants and schemas for Spark operations.
 """
 from pyspark.sql import types as T
 
-
 class SparkConfig:
     """Configuration constants for Spark operations."""
 
     # Temperature thresholds
     TEMP_THRESHOLD = 30.0  # °C - Temperature threshold for alerts
 
-    # Storage paths (relative to bucket)
+    # Storage paths (relative to bucket) - using medallion architecture
     ALERT_PATH = "silver/temperature_alerts"
     SILVER_PATH = "silver/five_min_avg"
-    SENSORS_PATH = "sensors/"
+    BRONZE_PATH = "bronze"
     # New: enriched data written by backend enrichment stream
     ENRICHED_PATH = "silver/enriched"
 
