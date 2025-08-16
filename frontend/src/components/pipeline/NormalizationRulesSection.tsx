@@ -222,25 +222,47 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
             {!editingId && sampleData.length > 0 && (
               <Row>
                 <Col>
-                  <div className="bg-body-secondary p-3 rounded mb-3">
-                    <h6 className="small mb-2">💡 Available Columns in Your Data:</h6>
-                    <div className="d-flex flex-wrap gap-1">
+                  <div className="border border-info bg-info bg-opacity-10 p-3 rounded mb-3">
+                    <div className="d-flex align-items-center mb-2">
+                      <span className="me-2" style={{ fontSize: '1.2em' }}>💡</span>
+                      <h6 className="mb-0 text-info-emphasis fw-semibold">Available Columns in Your Data</h6>
+                    </div>
+                    <div className="d-flex flex-wrap gap-2 mb-2">
                       {Array.from(new Set(
                         sampleData.flatMap(row => Object.keys(row as Record<string, unknown>))
                       )).map(col => (
                         <Badge
                           key={col}
-                          bg="outline-primary"
-                          className="cursor-pointer"
-                          style={{ cursor: 'pointer' }}
+                          bg="primary"
+                          className="user-select-none"
+                          style={{ 
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
+                          tabIndex={0}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
                           onClick={() => setForm({ ...form, raw_key: col })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              setForm({ ...form, raw_key: col });
+                              e.preventDefault();
+                            }
+                          }}
+                          aria-label={`Set raw key to ${col}`}
                         >
                           {col}
                         </Badge>
                       ))}
                     </div>
-                    <small className="text-muted mt-1 d-block">
-                      Click a column name to use it as the raw key
+                    <small className="text-info-emphasis fst-italic">
+                      💡 Click any column name above to use it as the raw key
                     </small>
                   </div>
                 </Col>
