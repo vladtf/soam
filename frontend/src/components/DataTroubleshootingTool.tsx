@@ -84,7 +84,6 @@ interface PipelineTraceResult {
   error?: string;
   pipeline_stages: {
     [stage: string]: {
-      const response = await fetchAvailableSensorIds(SENSOR_ID_FETCH_LIMIT, SENSOR_ID_FETCH_MINUTES_BACK); // Last 1440 minutes, max 100 sensors
       record_count?: number;
       columns?: string[];
       sample_records?: any[];
@@ -112,27 +111,93 @@ async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
   return resultRaw as T;
 }
 
+// Storage key for persisting troubleshooting state
+const TROUBLESHOOTING_STATE_KEY = 'troubleshooting_tool_state';
+
+// Interface for persisted state
+interface TroubleshootingState {
+  sensorId: string;
+  fieldName: string;
+  minutesBack: number;
+  ingestionId: string;
+  showCustomSensorInput: boolean;
+  activeTab: 'field' | 'pipeline';
+}
+
+// Helper functions for localStorage
+const saveState = (state: TroubleshootingState) => {
+  try {
+    localStorage.setItem(TROUBLESHOOTING_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('Failed to save troubleshooting state:', error);
+  }
+};
+
+const loadState = (): Partial<TroubleshootingState> => {
+  try {
+    const stored = localStorage.getItem(TROUBLESHOOTING_STATE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch (error) {
+    console.warn('Failed to load troubleshooting state:', error);
+    return {};
+  }
+};
+
 const DataTroubleshootingTool: React.FC = () => {
-  const [sensorId, setSensorId] = useState('');
-  const [fieldName, setFieldName] = useState('temperature');
-  const [minutesBack, setMinutesBack] = useState(30);
-  const [ingestionId, setIngestionId] = useState('');
+  // Load initial state from localStorage
+  const initialState = loadState();
+  
+  const [sensorId, setSensorId] = useState(initialState.sensorId || '');
+  const [fieldName, setFieldName] = useState(initialState.fieldName || 'temperature');
+  const [minutesBack, setMinutesBack] = useState(initialState.minutesBack || 30);
+  const [ingestionId, setIngestionId] = useState(initialState.ingestionId || '');
   const [loading, setLoading] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<FieldDiagnosticResult | null>(null);
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'field' | 'pipeline'>('field');
+  const [activeTab, setActiveTab] = useState<'field' | 'pipeline'>(initialState.activeTab || 'field');
   
   // Sensor ID dropdown state
   const [availableSensorIds, setAvailableSensorIds] = useState<string[]>([]);
   const [loadingSensorIds, setLoadingSensorIds] = useState(false);
   const [sensorIdsError, setSensorIdsError] = useState<string | null>(null);
-  const [showCustomSensorInput, setShowCustomSensorInput] = useState(false);
+  const [showCustomSensorInput, setShowCustomSensorInput] = useState(initialState.showCustomSensorInput || false);
+
+  // Auto-save state when form values change
+  useEffect(() => {
+    const state: TroubleshootingState = {
+      sensorId,
+      fieldName,
+      minutesBack,
+      ingestionId,
+      showCustomSensorInput,
+      activeTab
+    };
+    saveState(state);
+  }, [sensorId, fieldName, minutesBack, ingestionId, showCustomSensorInput, activeTab]);
 
   // Fetch available sensor IDs on component mount
   useEffect(() => {
     fetchSensorIds();
   }, []);
+
+  const clearStoredState = () => {
+    try {
+      localStorage.removeItem(TROUBLESHOOTING_STATE_KEY);
+      // Reset to default values
+      setSensorId('');
+      setFieldName('temperature');
+      setMinutesBack(30);
+      setIngestionId('');
+      setShowCustomSensorInput(false);
+      setActiveTab('field');
+      setDiagnosticResult(null);
+      setPipelineTrace(null);
+      setError(null);
+    } catch (error) {
+      console.warn('Failed to clear troubleshooting state:', error);
+    }
+  };
 
   const fetchSensorIds = async () => {
     setLoadingSensorIds(true);
@@ -357,10 +422,28 @@ const DataTroubleshootingTool: React.FC = () => {
     <div className="troubleshooting-tool">
       <Card>
         <Card.Header>
-          <h5 className="mb-0">🔧 Data Troubleshooting Tool</h5>
-          <small className="text-muted">
-            Diagnose data transformation issues across the pipeline
-          </small>
+          <div className="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 className="mb-0">🔧 Data Troubleshooting Tool</h5>
+              <small className="text-muted">
+                Diagnose data transformation issues across the pipeline
+              </small>
+            </div>
+            <div className="d-flex align-items-center gap-2">
+              <Badge bg="info" className="d-flex align-items-center gap-1">
+                <span>💾</span>
+                <span style={{ fontSize: '0.75rem' }}>Auto-saved</span>
+              </Badge>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={clearStoredState}
+                title="Clear saved state and reset form"
+              >
+                🗑️ Reset
+              </Button>
+            </div>
+          </div>
         </Card.Header>
         <Card.Body>
           {/* Configuration Form */}
@@ -529,6 +612,7 @@ const DataTroubleshootingTool: React.FC = () => {
               disabled={!diagnosticResult}
             >
               Field Diagnosis
+              {diagnosticResult && <Badge bg="light" text="dark" className="ms-2">✓</Badge>}
             </Button>
             <Button
               variant={activeTab === 'pipeline' ? 'primary' : 'outline-primary'}
@@ -536,6 +620,7 @@ const DataTroubleshootingTool: React.FC = () => {
               disabled={!pipelineTrace}
             >
               Pipeline Trace
+              {pipelineTrace && <Badge bg="light" text="dark" className="ms-2">✓</Badge>}
             </Button>
           </div>
 

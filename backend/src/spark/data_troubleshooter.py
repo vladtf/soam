@@ -116,19 +116,49 @@ class DataTroubleshooter:
         try:
             spark = self.session_manager.spark
             time_filter = F.current_timestamp() - F.expr(f"INTERVAL {minutes_back} MINUTES")
-            
-            # Read raw data
             base_query = spark.read.option("basePath", self.bronze_path)
             
+            # If ingestion_id is provided, use it directly
             if ingestion_id:
-                raw_df = base_query.parquet(f"{self.bronze_path}/ingestion_id={ingestion_id}/date=*/hour=*")
+                target_ingestion_ids = [ingestion_id]
+                logger.info(f"Using provided ingestion_id: {ingestion_id}")
             else:
-                raw_df = base_query.parquet(f"{self.bronze_path}/ingestion_id=*/date=*/hour=*")
+                # Discover the correct ingestion_id for this sensor by sampling partitions
+                logger.info(f"Discovering ingestion_id for sensor: {sensor_id}")
+                target_ingestion_ids = self._discover_sensor_ingestion_ids(sensor_id, minutes_back)
+                
+                if not target_ingestion_ids:
+                    analysis["error"] = f"No ingestion_id found for sensor '{sensor_id}' in the last {minutes_back} minutes"
+                    logger.warning(f"No ingestion_id found for sensor: {sensor_id}")
+                    return analysis
+                
+                logger.info(f"Found ingestion_ids for sensor {sensor_id}: {target_ingestion_ids}")
             
-            # Remove duplicate ingestion_id column if it exists in both partition and data
-            columns_to_select = [col for col in raw_df.columns if col != "ingestion_id" or raw_df.columns.count("ingestion_id") == 1]
-            if len(columns_to_select) < len(raw_df.columns):
-                raw_df = raw_df.select(*columns_to_select)
+            # Read data from the specific ingestion_id(s) to avoid schema conflicts
+            raw_dfs = []
+            for target_ingestion_id in target_ingestion_ids:
+                try:
+                    partition_df = base_query.parquet(f"{self.bronze_path}/ingestion_id={target_ingestion_id}/date=*/hour=*")
+                    
+                    # Remove duplicate ingestion_id column if it exists in both partition and data
+                    columns_to_select = [col for col in partition_df.columns if col != "ingestion_id" or partition_df.columns.count("ingestion_id") == 1]
+                    if len(columns_to_select) < len(partition_df.columns):
+                        partition_df = partition_df.select(*columns_to_select)
+                    
+                    raw_dfs.append(partition_df)
+                    logger.info(f"Successfully read partition for ingestion_id: {target_ingestion_id}")
+                except Exception as e:
+                    logger.warning(f"Could not read partition for ingestion_id {target_ingestion_id}: {e}")
+                    continue
+            
+            if not raw_dfs:
+                analysis["error"] = f"Could not read any data partitions for sensor '{sensor_id}'"
+                return analysis
+            
+            # Union all dataframes (they should have the same schema now)
+            raw_df = raw_dfs[0]
+            for df in raw_dfs[1:]:
+                raw_df = raw_df.union(df)
             
             # Filter by time and sensor
             # Handle both possible sensor ID column names
@@ -136,21 +166,35 @@ class DataTroubleshooter:
             
             # Check which sensor ID column exists and create appropriate filter
             columns = raw_df.columns
+            logger.info(f"Available columns in raw data: {columns}")
+            
+            sensor_column_found = False
             if "sensor_id" in columns:
                 sensor_filter = sensor_filter & (F.col("sensor_id") == sensor_id)
+                sensor_column_found = True
+                logger.info(f"Using 'sensor_id' column to filter for sensor: {sensor_id}")
             elif "sensorId" in columns:
                 sensor_filter = sensor_filter & (F.col("sensorId") == sensor_id)
-            else:
-                # Try both in case of mixed schemas
-                try:
-                    sensor_filter = sensor_filter & (
-                        (F.col("sensor_id") == sensor_id) | (F.col("sensorId") == sensor_id)
-                    )
-                except Exception:
-                    # If neither column exists, just use timestamp filter
-                    pass
+                sensor_column_found = True
+                logger.info(f"Using 'sensorId' column to filter for sensor: {sensor_id}")
+            
+            if not sensor_column_found:
+                logger.warning(f"No sensor ID column found in partition data. Available columns: {columns}")
+                analysis["error"] = f"No sensor ID column found in partition data. Cannot filter by sensor '{sensor_id}'"
+                return analysis
             
             filtered_df = raw_df.filter(sensor_filter)
+            
+            # Log the actual sensor IDs in the filtered data for debugging
+            if not filtered_df.rdd.isEmpty():
+                sensor_col = "sensor_id" if "sensor_id" in columns else "sensorId"
+                unique_sensors = [row[sensor_col] for row in filtered_df.select(sensor_col).distinct().collect()]
+                logger.info(f"Unique sensor IDs found in filtered partition data: {unique_sensors}")
+                
+                if sensor_id not in unique_sensors:
+                    logger.warning(f"Requested sensor '{sensor_id}' not found in partition data. Found: {unique_sensors}")
+                    analysis["error"] = f"Sensor '{sensor_id}' not found in partition data. Available sensors: {unique_sensors}"
+                    return analysis
             
             if not filtered_df.rdd.isEmpty():
                 analysis["found_data"] = True
@@ -214,6 +258,85 @@ class DataTroubleshooter:
             analysis["error"] = str(e)
             
         return analysis
+
+    def _discover_sensor_ingestion_ids(self, sensor_id: str, minutes_back: int) -> List[str]:
+        """
+        Discover which ingestion_id(s) contain data for the given sensor.
+        This avoids schema conflicts when reading from all partitions.
+        """
+        try:
+            spark = self.session_manager.spark
+            time_filter = F.current_timestamp() - F.expr(f"INTERVAL {minutes_back} MINUTES")
+            
+            # Get list of available ingestion_id partitions
+            try:
+                # Try to read partition info - this is MinIO/S3 specific
+                from pyspark.sql.utils import AnalysisException
+                
+                # Read just the partition metadata to find ingestion_ids
+                df_partitions = spark.read.option("basePath", self.bronze_path).parquet(f"{self.bronze_path}")
+                available_ingestion_ids = [row.ingestion_id for row in df_partitions.select("ingestion_id").distinct().collect()]
+                logger.info(f"Available ingestion_ids: {available_ingestion_ids}")
+                
+            except Exception as e:
+                logger.warning(f"Could not discover partitions automatically: {e}")
+                # Fallback to common known ingestion_ids based on sensor naming
+                if "temp" in sensor_id.lower():
+                    available_ingestion_ids = ["mosquitto_1883_smartcity_sensors_temperature"]
+                elif "air_quality" in sensor_id.lower():
+                    available_ingestion_ids = ["mosquitto_1883_smartcity_sensors_air_quality"] 
+                elif "smart_bin" in sensor_id.lower():
+                    available_ingestion_ids = ["mosquitto_1883_smartcity_sensors_smart_bin"]
+                elif "traffic" in sensor_id.lower():
+                    available_ingestion_ids = ["mosquitto_1883_smartcity_sensors_traffic"]
+                else:
+                    available_ingestion_ids = [
+                        "mosquitto_1883_smartcity_sensors_temperature",
+                        "mosquitto_1883_smartcity_sensors_air_quality",
+                        "mosquitto_1883_smartcity_sensors_smart_bin", 
+                        "mosquitto_1883_smartcity_sensors_traffic"
+                    ]
+                logger.info(f"Using fallback ingestion_ids: {available_ingestion_ids}")
+            
+            # Check each ingestion_id to see if it contains our sensor
+            matching_ingestion_ids = []
+            base_query = spark.read.option("basePath", self.bronze_path)
+            
+            for ingestion_id in available_ingestion_ids:
+                try:
+                    # Read a small sample from this partition
+                    partition_df = base_query.parquet(f"{self.bronze_path}/ingestion_id={ingestion_id}/date=*/hour=*")
+                    
+                    # Remove duplicate ingestion_id column
+                    columns_to_select = [col for col in partition_df.columns if col != "ingestion_id" or partition_df.columns.count("ingestion_id") == 1]
+                    if len(columns_to_select) < len(partition_df.columns):
+                        partition_df = partition_df.select(*columns_to_select)
+                    
+                    # Filter by time and check for sensor
+                    filtered_df = partition_df.filter(F.col("timestamp") >= time_filter)
+                    
+                    # Check if this partition contains our sensor
+                    sensor_col = None
+                    if "sensor_id" in partition_df.columns:
+                        sensor_col = "sensor_id"
+                    elif "sensorId" in partition_df.columns:
+                        sensor_col = "sensorId"
+                    
+                    if sensor_col:
+                        sensor_exists = filtered_df.filter(F.col(sensor_col) == sensor_id).count() > 0
+                        if sensor_exists:
+                            matching_ingestion_ids.append(ingestion_id)
+                            logger.info(f"Found sensor {sensor_id} in ingestion_id: {ingestion_id}")
+                    
+                except Exception as e:
+                    logger.debug(f"Could not check ingestion_id {ingestion_id}: {e}")
+                    continue
+            
+            return matching_ingestion_ids
+            
+        except Exception as e:
+            logger.error(f"Error discovering ingestion_ids for sensor {sensor_id}: {e}")
+            return []
 
     def _analyze_normalization(
         self, 
@@ -454,7 +577,7 @@ class DataTroubleshooter:
         field_name: str, 
         minutes_back: int
     ) -> Dict[str, Any]:
-        """Analyze the silver layer (aggregated data)."""
+        """Analyze the gold layer (aggregated data)."""
         analysis = {
             "found_in_silver": False,
             "record_count": 0,
@@ -537,6 +660,11 @@ class DataTroubleshooter:
         norm_analysis = analysis_result.get("normalization_analysis", {})
         enrich_analysis = analysis_result.get("enrichment_analysis", {})
         silver_analysis = analysis_result.get("silver_analysis", {})
+        
+        # Check for errors in raw data analysis
+        if raw_analysis.get("error"):
+            recommendations.append(f"❌ Raw data analysis error: {raw_analysis['error']}")
+            return recommendations  # Return early if there's a fundamental error
         
         # Raw data recommendations
         if not raw_analysis.get("found_data"):
