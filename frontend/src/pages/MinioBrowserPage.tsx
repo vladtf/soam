@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, ListGroup, Button, Breadcrumb, Spinner, Form, Card, InputGroup, Alert, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import PageHeader from '../components/PageHeader';
 import { minioList, minioPreviewParquet, MinioListResponse, ParquetPreview, minioDeleteObjects, minioDeletePrefix } from '../api/backendRequests';
-import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy } from 'react-icons/fa';
+import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy, FaTable } from 'react-icons/fa';
 import ThemedReactJson from '../components/ThemedReactJson';
 
 const MinioBrowserPage: React.FC = () => {
@@ -400,20 +400,38 @@ const MinioBrowserPage: React.FC = () => {
               )}
               {preview && (
                 <div style={{ maxHeight: 'min(80vh, 800px)', overflowY: 'auto' }}>
-                  <div className="mb-3">
-                    <h6 className="mb-2">Schema:</h6>
-                    <ThemedReactJson
-                      src={preview.schema}
-                      collapsed={false}
-                      name="schema"
-                    />
+                  {/* Schema Section */}
+                  <div className="mb-4 p-3 border rounded bg-light">
+                    <div className="d-flex align-items-center mb-3">
+                      <h5 className="mb-0 text-primary">
+                        <FaCode className="me-2" />
+                        Schema
+                      </h5>
+                    </div>
+                    <div className="bg-white p-2 rounded border">
+                      <ThemedReactJson
+                        src={preview.schema}
+                        collapsed={false}
+                        name="schema"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <h6 className="mb-2">Data ({preview.rows.length} rows):</h6>
-                    <div style={{ maxHeight: 'min(65vh, 650px)', overflowY: 'auto' }}>
+
+                  {/* Data Section */}
+                  <div className="p-3 border rounded bg-light">
+                    <div className="d-flex align-items-center justify-content-between mb-3">
+                      <h5 className="mb-0 text-success">
+                        <FaTable className="me-2" />
+                        Data
+                      </h5>
+                      <Badge bg="secondary" className="fs-6">
+                        {preview.rows.length} rows
+                      </Badge>
+                    </div>
+                    <div className="bg-white p-2 rounded border" style={{ maxHeight: 'min(60vh, 600px)', overflowY: 'auto' }}>
                       <ThemedReactJson
                         src={preview.rows}
-                        collapsed={2}
+                        collapsed={false}
                         name="data"
                         collapseStringsAfterLength={80}
                       />

@@ -355,7 +355,7 @@ class StreamingManager:
             .withColumn("site", F.lit("default"))
         )
 
-        # Ensure target enriched Delta table exists with union schema
+        # Ensure target enriched Delta table exists with union schema and partitioning
         try:
             spark.read.format("delta").load(self.enriched_path).limit(0)
         except Exception:
@@ -367,6 +367,7 @@ class StreamingManager:
                 .format("delta")
                 .mode("ignore")
                 .option("overwriteSchema", "true")
+                .partitionBy("ingestion_id")  # Partition by ingestion_id
                 .save(self.enriched_path)
             )
 
@@ -482,13 +483,14 @@ class StreamingManager:
                 elif not has_wildcard and norm_allowed and total_after == 0:
                     logger.warning("Union enrichment: All rows filtered out - ingestion_id mismatch between registered devices and incoming data")
 
-                # Write to Delta
+                # Write to Delta with partitioning by ingestion_id
                 (
                     filtered.write
                     .format("delta")
                     .mode("append")
                     .option("path", self.enriched_path)
                     .option("mergeSchema", "true")
+                    .partitionBy("ingestion_id")  # Partition by ingestion_id
                     .save()
                 )
 

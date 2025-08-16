@@ -930,7 +930,7 @@ class DataTroubleshooter:
             
             # Get sensor IDs from enriched data
             try:
-                enriched_df = spark.read.parquet(self.enriched_path)
+                enriched_df = spark.read.format("delta").load(self.enriched_path)
                 if "timestamp" in enriched_df.columns:
                     enriched_df = enriched_df.filter(F.col("timestamp") >= cutoff_time)
                 
