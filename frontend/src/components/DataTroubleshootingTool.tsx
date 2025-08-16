@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
-import { Card, Form, Button, Alert, Accordion, Badge, Table, Spinner, Row, Col } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { Card, Form, Button, Alert, Accordion, Badge, Table, Spinner, Row, Col, InputGroup } from 'react-bootstrap';
 import { getConfig } from '../config';
+import { fetchAvailableSensorIds } from '../api/backendRequests';
+
+// Configuration constants
+const SENSOR_ID_FETCH_LIMIT = 100;
+const SENSOR_ID_FETCH_MINUTES_BACK = 1440;
 
 interface FieldDiagnosticResult {
   sensor_id: string;
@@ -63,6 +68,32 @@ const DataTroubleshootingTool: React.FC = () => {
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'field' | 'pipeline'>('field');
+  
+  // Sensor ID dropdown state
+  const [availableSensorIds, setAvailableSensorIds] = useState<string[]>([]);
+  const [loadingSensorIds, setLoadingSensorIds] = useState(false);
+  const [sensorIdsError, setSensorIdsError] = useState<string | null>(null);
+  const [showCustomSensorInput, setShowCustomSensorInput] = useState(false);
+
+  // Fetch available sensor IDs on component mount
+  useEffect(() => {
+    fetchSensorIds();
+  }, []);
+
+  const fetchSensorIds = async () => {
+    setLoadingSensorIds(true);
+    setSensorIdsError(null);
+    try {
+      const response = await fetchAvailableSensorIds(SENSOR_ID_FETCH_LIMIT, SENSOR_ID_FETCH_MINUTES_BACK); // Last {SENSOR_ID_FETCH_MINUTES_BACK} minutes, max {SENSOR_ID_FETCH_LIMIT} sensors
+      setAvailableSensorIds(response.all_sensors || []);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch sensor IDs';
+      setSensorIdsError(errorMsg);
+      console.warn('Failed to fetch sensor IDs:', errorMsg);
+    } finally {
+      setLoadingSensorIds(false);
+    }
+  };
 
   const handleFieldDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,13 +315,83 @@ const DataTroubleshootingTool: React.FC = () => {
               <Col md={6}>
                 <Form.Group className="mb-3">
                   <Form.Label>Sensor ID</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={sensorId}
-                    onChange={(e) => setSensorId(e.target.value)}
-                    placeholder="e.g., sensor_001"
-                    required
-                  />
+                  <div className="d-flex align-items-center gap-2 mb-2">
+                    <Form.Check
+                      type="switch"
+                      id="custom-sensor-switch"
+                      label="Custom input"
+                      checked={showCustomSensorInput}
+                      onChange={(e) => setShowCustomSensorInput(e.target.checked)}
+                    />
+                    {!showCustomSensorInput && (
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={fetchSensorIds}
+                        disabled={loadingSensorIds}
+                        title="Refresh sensor list"
+                      >
+                        🔄
+                      </Button>
+                    )}
+                    {loadingSensorIds && <Spinner size="sm" />}
+                  </div>
+                  
+                  {showCustomSensorInput ? (
+                    <Form.Control
+                      type="text"
+                      value={sensorId}
+                      onChange={(e) => setSensorId(e.target.value)}
+                      placeholder="e.g., sensor_001"
+                      required
+                    />
+                  ) : (
+                    <InputGroup>
+                      <Form.Select
+                        value={sensorId}
+                        onChange={(e) => setSensorId(e.target.value)}
+                        required
+                        disabled={loadingSensorIds}
+                      >
+                        <option value="">
+                          {availableSensorIds.length > 0 
+                            ? `Select from ${availableSensorIds.length} available sensors...` 
+                            : 'No sensors found...'
+                          }
+                        </option>
+                        {availableSensorIds.map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      <Button 
+                        variant="outline-secondary"
+                        onClick={() => setShowCustomSensorInput(true)}
+                        title="Switch to custom input"
+                      >
+                        ✏️
+                      </Button>
+                    </InputGroup>
+                  )}
+                  
+                  {sensorIdsError && (
+                    <Form.Text className="text-warning">
+                      ⚠️ Could not load sensor IDs: {sensorIdsError}. You can still enter manually.
+                    </Form.Text>
+                  )}
+                  
+                  {!showCustomSensorInput && availableSensorIds.length === 0 && !loadingSensorIds && (
+                    <Form.Text className="text-muted">
+                      ℹ️ No recent sensor IDs found. Use custom input to enter manually.
+                    </Form.Text>
+                  )}
+                  
+                  {!showCustomSensorInput && availableSensorIds.length > 0 && (
+                    <Form.Text className="text-success">
+                      ✅ Showing {availableSensorIds.length} sensors from last 24 hours
+                    </Form.Text>
+                  )}
                 </Form.Group>
               </Col>
               <Col md={6}>

@@ -723,3 +723,148 @@ class DataTroubleshooter:
             result["error"] = str(e)
             
         return result
+
+    def get_available_sensor_ids(self, limit: int = 100, minutes_back: int = 1440) -> Dict[str, Any]:
+        """
+        Get a list of available sensor IDs from the most recent data across all pipeline stages.
+        
+        Args:
+            limit: Maximum number of sensor IDs to return
+            minutes_back: How many minutes back to look (default: 24 hours)
+            
+        Returns:
+            Dict with sensor IDs from different pipeline stages
+        """
+        logger.info(f"Getting available sensor IDs (limit: {limit}, minutes_back: {minutes_back})")
+        
+        result = {
+            "bronze_sensors": [],
+            "enriched_sensors": [],
+            "gold_sensors": [],
+            "total_unique_sensors": 0,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        try:
+            spark = self.session_manager.spark
+            cutoff_time = datetime.utcnow() - timedelta(minutes=minutes_back)
+            
+            # Get sensor IDs from bronze (raw) data
+            try:
+                # Apply partition filters for date and hour to limit scan range
+                from datetime import date
+                partition_date = cutoff_time.date().isoformat()
+                start_hour = cutoff_time.hour
+                end_hour = datetime.utcnow().hour
+                partitioned_paths = [
+                    f"{self.bronze_path}/date={partition_date}/hour={hour}"
+                    for hour in range(start_hour, end_hour + 1)
+                ]
+                bronze_df = None
+                for path in partitioned_paths:
+                    try:
+                        df = spark.read.parquet(path)
+                        if bronze_df is None:
+                            bronze_df = df
+                        else:
+                            bronze_df = bronze_df.unionByName(df)
+                    except Exception:
+                        continue
+                if bronze_df is None:
+                    # Fallback to reading the whole path if no partitioned paths are found
+                    bronze_df = spark.read.parquet(self.bronze_path)
+                if "timestamp" in bronze_df.columns:
+                    bronze_df = bronze_df.filter(F.col("timestamp") >= cutoff_time)
+                
+                # Extract sensor IDs directly from raw columns
+                sensor_id_column = None
+                for candidate in ["sensor_id", "sensorId", "sensorid"]:
+                    if candidate in bronze_df.columns:
+                        sensor_id_column = candidate
+                        break
+                if sensor_id_column:
+                    bronze_sensors = (
+                        bronze_df
+                        .select(sensor_id_column)
+                        .filter(F.col(sensor_id_column).isNotNull())
+                        .distinct()
+                        .limit(limit)
+                        .rdd.map(lambda row: getattr(row, sensor_id_column))
+                        .collect()
+                    )
+                    result["bronze_sensors"] = [s for s in bronze_sensors if s]
+                    logger.info(f"Found {len(result['bronze_sensors'])} sensors in bronze data")
+                else:
+                    logger.warning("No sensor ID column found in bronze data.")
+                    
+            except Exception as e:
+                logger.warning(f"Could not read bronze data: {e}")
+            
+            # Get sensor IDs from enriched data
+            try:
+                enriched_df = spark.read.parquet(self.enriched_path)
+                if "timestamp" in enriched_df.columns:
+                    enriched_df = enriched_df.filter(F.col("timestamp") >= cutoff_time)
+                
+                # Handle union schema - extract sensor IDs from sensor_data map
+                if "sensor_data" in enriched_df.columns:
+                    enriched_sensors = (
+                        enriched_df
+                        .select(
+                            F.coalesce(
+                                F.col("sensor_data").getItem("sensorId"),
+                                F.col("sensor_data").getItem("sensorid"),
+                                F.col("sensor_data").getItem("sensor_id"),
+                                F.lit("unknown")
+                            ).alias("sensorId")
+                        )
+                        .filter(F.col("sensorId") != "unknown")
+                        .distinct()
+                        .limit(limit)
+                        .rdd.map(lambda row: row.sensorId)
+                        .collect()
+                    )
+                    result["enriched_sensors"] = [s for s in enriched_sensors if s]
+                    logger.info(f"Found {len(result['enriched_sensors'])} sensors in enriched data")
+                    
+            except Exception as e:
+                logger.warning(f"Could not read enriched data: {e}")
+            
+            # Get sensor IDs from gold temperature data
+            try:
+                gold_df = spark.read.parquet(self.gold_temp_avg_path)
+                if "time_start" in gold_df.columns:
+                    gold_df = gold_df.filter(F.col("time_start") >= cutoff_time)
+                
+                if "sensorId" in gold_df.columns:
+                    gold_sensors = (
+                        gold_df
+                        .select("sensorId")
+                        .filter(F.col("sensorId").isNotNull())
+                        .distinct()
+                        .limit(limit)
+                        .rdd.map(lambda row: row.sensorId)
+                        .collect()
+                    )
+                    result["gold_sensors"] = [s for s in gold_sensors if s]
+                    logger.info(f"Found {len(result['gold_sensors'])} sensors in gold data")
+                    
+            except Exception as e:
+                logger.warning(f"Could not read gold data: {e}")
+            
+            # Combine all unique sensor IDs
+            all_sensors = set()
+            all_sensors.update(result["bronze_sensors"])
+            all_sensors.update(result["enriched_sensors"])
+            all_sensors.update(result["gold_sensors"])
+            
+            result["total_unique_sensors"] = len(all_sensors)
+            result["all_sensors"] = sorted(list(all_sensors))[:limit]
+            
+            logger.info(f"Total unique sensors found: {result['total_unique_sensors']}")
+            
+        except Exception as e:
+            logger.error(f"Error getting sensor IDs: {e}")
+            result["error"] = str(e)
+            
+        return result

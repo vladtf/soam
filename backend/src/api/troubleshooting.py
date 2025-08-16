@@ -139,3 +139,34 @@ async def troubleshooting_health(spark_manager=Depends(get_spark_manager), confi
             "timestamp": datetime.now().isoformat(),
             "error": str(e)
         }
+
+
+@router.get("/sensor-ids")
+async def get_available_sensor_ids(
+    limit: int = Query(default=100, ge=1, le=1000, description="Maximum number of sensor IDs to return"),
+    minutes_back: int = Query(default=1440, ge=1, le=10080, description="How many minutes back to look (max 1 week)"),
+    spark_manager=Depends(get_spark_manager),
+    config=Depends(get_config)
+):
+    """
+    Get a list of available sensor IDs from recent data across all pipeline stages.
+    
+    This endpoint scans bronze, enriched, and gold data layers to find sensor IDs
+    that have been active within the specified time window. Useful for populating
+    dropdowns in troubleshooting tools.
+    
+    Returns sensor IDs found in each pipeline stage plus a combined unique list.
+    """
+    try:
+        troubleshooter = DataTroubleshooter(spark_manager.session_manager, config.minio_bucket)
+        
+        result = troubleshooter.get_available_sensor_ids(
+            limit=limit,
+            minutes_back=minutes_back
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting sensor IDs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get sensor IDs: {str(e)}")

@@ -661,3 +661,23 @@ export const getFeatureFlags = (): Promise<FeatureFlags> => {
   const { backendUrl } = getConfig();
   return doFetch<FeatureFlags>(`${backendUrl}/config/features`);
 };
+
+// Troubleshooting interfaces and functions
+export interface SensorIdsResponse {
+  bronze_sensors: string[];
+  enriched_sensors: string[];
+  gold_sensors: string[];
+  total_unique_sensors: number;
+  all_sensors: string[];
+  timestamp: string;
+  error?: string;
+}
+
+export const fetchAvailableSensorIds = (limit: number = 100, minutesBack: number = 1440): Promise<SensorIdsResponse> => {
+  const { backendUrl } = getConfig();
+  const params = new URLSearchParams({
+    limit: limit.toString(),
+    minutes_back: minutesBack.toString()
+  });
+  return doFetch<SensorIdsResponse>(`${backendUrl}/api/v1/troubleshooting/sensor-ids?${params}`);
+};
