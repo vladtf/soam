@@ -15,7 +15,12 @@ class DataAccessManager:
     """Manages data access operations for temperature and alert data."""
     
     def __init__(self, session_manager: SparkSessionManager, minio_bucket: str):
-        """Initialize DataAccessManager."""
+        """Initialize DataAccessManager.
+        
+        Args:
+            session_manager: Spark session manager
+            minio_bucket: MinIO bucket name
+        """
         self.session_manager = session_manager
         self.minio_bucket = minio_bucket
 
@@ -152,8 +157,162 @@ class DataAccessManager:
             else:
                 raise
 
+    def get_enrichment_summary_union(self, minutes: int = 10) -> Dict[str, Any]:
+        """
+        Get enrichment summary from union schema data.
+        
+        Args:
+            minutes: Time window in minutes to summarize
+            
+        Returns:
+            Dict containing enrichment summary information in the expected frontend format
+        """
+        # Initialize result with the expected structure
+        result: Dict[str, Any] = {
+            "registered_total": 0,
+            "registered_any_partition": False,
+            "registered_by_partition": {},
+            "enriched": {
+                "exists": False,
+                "recent_rows": 0,
+                "recent_sensors": 0,
+                "sample_sensors": [],
+                "matched_sensors": 0,
+            },
+            "silver": {
+                "exists": False,
+                "recent_rows": 0,
+                "recent_sensors": 0,
+            },
+        }
+
+        # Load device registrations (enabled)
+        try:
+            from sqlalchemy.orm import sessionmaker
+            from src.database.database import engine
+            from src.database.models import Device
+            SessionLocal = sessionmaker(bind=engine)
+            db = SessionLocal()
+            try:
+                device_rows = db.query(Device.ingestion_id).filter(Device.enabled == True).all()
+                result["registered_total"] = len(device_rows)
+                result["registered_any_partition"] = any(iid is None for (iid,) in device_rows)
+                specific_ids = [iid for (iid,) in device_rows if iid is not None]
+                by_partition: dict[str, int] = {}
+                for iid in specific_ids:
+                    by_partition[str(iid)] = by_partition.get(str(iid), 0) + 1
+                result["registered_by_partition"] = by_partition
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error("Failed to load devices for enrichment summary: %s", e)
+
+        try:
+            spark = self.session_manager.spark
+            
+            # Calculate time bounds
+            current_time = F.current_timestamp()
+            time_bound = current_time - F.expr(f"INTERVAL {minutes} MINUTES")
+            
+            # Try to read enriched union data
+            try:
+                enriched_df = (
+                    spark.read
+                    .format("delta")
+                    .load(self.enriched_path)
+                    .filter(F.col("ingest_ts") >= time_bound)
+                )
+                
+                result["enriched"]["exists"] = True
+                
+                if not enriched_df.rdd.isEmpty():
+                    # Extract sensorId from union schema
+                    analysis_df = enriched_df.withColumn(
+                        "sensorId",
+                        F.coalesce(
+                            enriched_df.sensor_data.getItem("sensorId"),
+                            enriched_df.sensor_data.getItem("sensorid"), 
+                            enriched_df.sensor_data.getItem("sensor_id"),
+                            enriched_df.ingestion_id
+                        )
+                    )
+                    
+                    # Aggregate metrics
+                    summary = analysis_df.agg(
+                        F.count("*").alias("total_records"),
+                        F.countDistinct("sensorId").alias("unique_sensors")
+                    ).collect()[0]
+                    
+                    # Get sample sensors
+                    sample_sensors = (
+                        analysis_df
+                        .select("sensorId")
+                        .distinct()
+                        .limit(5)
+                        .rdd.map(lambda row: row.sensorId)
+                        .collect()
+                    )
+                    
+                    result["enriched"]["recent_rows"] = summary["total_records"]
+                    result["enriched"]["recent_sensors"] = summary["unique_sensors"]
+                    result["enriched"]["sample_sensors"] = [s for s in sample_sensors if s]
+                    result["enriched"]["matched_sensors"] = summary["unique_sensors"]  # For union schema, assume all are matched
+                    
+            except Exception as e:
+                if self._handle_table_not_found_error(e):
+                    logger.info("Enriched table not found, streaming likely hasn't started yet")
+                else:
+                    logger.error(f"Error reading enriched data: {e}")
+
+            # Try to read silver data (5-minute averages)
+            try:
+                silver_df = (
+                    spark.read
+                    .format("delta")
+                    .load(self.silver_path)
+                    .filter(F.col("window_start") >= time_bound)
+                )
+                
+                result["silver"]["exists"] = True
+                
+                if not silver_df.rdd.isEmpty():
+                    silver_summary = silver_df.agg(
+                        F.count("*").alias("total_records"),
+                        F.countDistinct("sensorId").alias("unique_sensors")
+                    ).collect()[0]
+                    
+                    result["silver"]["recent_rows"] = silver_summary["total_records"]
+                    result["silver"]["recent_sensors"] = silver_summary["unique_sensors"]
+                    
+            except Exception as e:
+                if self._handle_table_not_found_error(e):
+                    logger.info("Silver table not found, streaming likely hasn't started yet")
+                else:
+                    logger.error(f"Error reading silver data: {e}")
+
+            return {
+                "status": "success",
+                "data": result,
+                "message": f"Enrichment summary for last {minutes} minutes"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting union enrichment summary: {e}")
+            return {
+                "status": "error", 
+                "data": result,
+                "message": f"Failed to get enrichment summary: {str(e)}"
+            }
+
     def get_enrichment_summary(self, minutes: int = 10) -> Dict[str, Any]:
         """Summarize enrichment inputs and recent activity to help users verify computation inputs.
+
+        Uses union schema implementation.
+        """
+        return self.get_enrichment_summary_union(minutes)
+
+    def get_enrichment_summary_legacy(self, minutes: int = 10) -> Dict[str, Any]:
+        """Summarize enrichment inputs and recent activity (legacy schema implementation).
 
         Returns a dict with counts of registered devices, recent enriched rows and sensors,
         matched sensors vs registration, and stream/table existence hints.
@@ -217,11 +376,21 @@ class DataAccessManager:
             recent_sensors = sensors_df.count()
             sample = [r[0] for r in sensors_df.limit(10).collect()]
 
+            # Debug: Check what ingestion_id values are actually in the data
+            ingestion_ids_in_data = []
+            if "ingestion_id" in df.columns:
+                ingestion_ids_in_data = [r[0] for r in df.select("ingestion_id").distinct().limit(10).collect()]
+
             # Matched sensors with registration (simplified: only ingestion_id registrations exist)
             matched = 0
             try:
                 registered_ingestion_ids = [iid for (iid,) in device_rows if iid is not None]
                 wildcard = any(iid is None for (iid,) in device_rows)
+                
+                logger.info(f"Enrichment debug - Registered devices: {registered_ingestion_ids}")
+                logger.info(f"Enrichment debug - Ingestion IDs in data: {ingestion_ids_in_data}")
+                logger.info(f"Enrichment debug - Wildcard registration: {wildcard}")
+                
                 if wildcard:
                     # At least one wildcard device => all recent sensors count as matched
                     matched = recent_sensors
@@ -233,7 +402,8 @@ class DataAccessManager:
                         .distinct()
                         .count()
                     )
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error calculating matched sensors: {e}")
                 matched = 0
 
             result["enriched"] = {
@@ -242,7 +412,20 @@ class DataAccessManager:
                 "recent_sensors": int(recent_sensors),
                 "sample_sensors": sample,
                 "matched_sensors": int(matched),
+                "debug_ingestion_ids_in_data": ingestion_ids_in_data,
+                "debug_registered_ingestion_ids": [iid for (iid,) in device_rows if iid is not None],
             }
+            
+            # Add detailed diagnosis if there's a mismatch (more than registered sensors being processed)
+            if recent_sensors > len(device_rows) and len(device_rows) > 0:
+                try:
+                    from .diagnostics_enhanced import diagnose_enrichment_filtering
+                    diagnosis = diagnose_enrichment_filtering(self.session_manager, self.enriched_path)
+                    result["enriched"]["detailed_diagnosis"] = diagnosis
+                    logger.warning(f"Enrichment filtering issue detected: {recent_sensors} sensors processed vs {len(device_rows)} registered devices")
+                except Exception as diag_e:
+                    logger.error(f"Failed to run detailed diagnosis: {diag_e}")
+                    result["enriched"]["diagnosis_error"] = str(diag_e)
         except Exception as e:
             logger.info("Enriched table not available yet: %s", e)
 

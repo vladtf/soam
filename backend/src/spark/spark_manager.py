@@ -28,7 +28,17 @@ class SparkManager:
     def __init__(self, spark_host: str, spark_port: str, minio_endpoint: str, 
                  minio_access_key: str, minio_secret_key: str, minio_bucket: str, 
                  spark_ui_port: str):
-        """Initialize SparkManager with all components."""
+        """Initialize SparkManager with all components.
+        
+        Args:
+            spark_host: Spark master host
+            spark_port: Spark master port
+            minio_endpoint: MinIO endpoint
+            minio_access_key: MinIO access key
+            minio_secret_key: MinIO secret key
+            minio_bucket: MinIO bucket name
+            spark_ui_port: Spark UI port
+        """
         # Store configuration
         self.minio_bucket = minio_bucket
         

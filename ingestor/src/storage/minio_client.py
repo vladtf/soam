@@ -22,6 +22,8 @@ class MinioClient:
     • FLUSH_INTERVAL seconds have passed       (timer-based)   OR
     • the in-memory buffer grows past MAX_BYTES (size-based).
 
+    Rows are now grouped by ingestion_id to ensure proper partitioning.
+
     Call `add_row(payload_dict)` from your MQTT callback and
     `close()` once at program exit.
     """
@@ -56,9 +58,9 @@ class MinioClient:
         else:
             logger.info("MinIO ▶ Using existing bucket: %s", bucket)
 
-        # buffer & accounting
-        self._batch = []
-        self._current_bytes = 0       # approximate buffer size
+        # buffer & accounting - now organized by ingestion_id
+        self._batch_by_ingestion_id = {}  # dict[ingestion_id] -> list[dict]
+        self._bytes_by_ingestion_id = {}  # dict[ingestion_id] -> int
         self._lock = threading.Lock()
 
         # kick off the periodic flush
@@ -68,19 +70,25 @@ class MinioClient:
     # public API
     # ------------------------------------------------------------------ #
     def add_row(self, payload: dict) -> None:
-        """Thread-safe; flushes when the buffer hits MAX_BYTES."""
+        """Thread-safe; flushes when any ingestion_id buffer hits MAX_BYTES."""
         row_size = len(json.dumps(payload).encode())
-        rows_to_upload = None                       # <- always defined
+        ingestion_id = payload.get("ingestion_id", "unknown")
+        rows_to_upload = None
 
         with self._lock:
-            self._batch.append(payload)
-            self._current_bytes += row_size
+            # Initialize ingestion_id buffer and size if needed
+            if ingestion_id not in self._batch_by_ingestion_id:
+                self._batch_by_ingestion_id[ingestion_id] = []
+                self._bytes_by_ingestion_id[ingestion_id] = 0
+            
+            self._batch_by_ingestion_id[ingestion_id].append(payload)
+            self._bytes_by_ingestion_id[ingestion_id] += row_size
 
-            if self._current_bytes >= self.MAX_BYTES:
-                rows_to_upload = self._detach_batch()
+            if self._bytes_by_ingestion_id[ingestion_id] >= self.MAX_BYTES:
+                rows_to_upload = self._detach_batch_for_ingestion_id(ingestion_id)
 
         # flush outside the lock
-        if rows_to_upload:                          # <- only if we detached
+        if rows_to_upload:
             self._upload_rows(rows_to_upload)
 
     # legacy signature (kept for compatibility)
@@ -90,11 +98,22 @@ class MinioClient:
     # ------------------------------------------------------------------ #
     # internal helpers
     # ------------------------------------------------------------------ #
-    def _detach_batch(self) -> list[dict]:
-        """Assumes caller holds the lock. Returns the current batch and clears it."""
-        rows = self._batch
-        self._batch = []
-        self._current_bytes = 0
+    def _detach_all_batches(self) -> list[dict]:
+        """Assumes caller holds the lock. Returns all current batches and clears them."""
+        all_rows = []
+        for ingestion_id, rows in self._batch_by_ingestion_id.items():
+            all_rows.extend(rows)
+        self._batch_by_ingestion_id = {}
+        self._bytes_by_ingestion_id = {}
+        return all_rows
+
+    def _detach_batch_for_ingestion_id(self, ingestion_id: str) -> list[dict]:
+        """Assumes caller holds the lock. Detaches and returns the batch for a specific ingestion_id."""
+        rows = self._batch_by_ingestion_id.get(ingestion_id, [])
+        if ingestion_id in self._batch_by_ingestion_id:
+            del self._batch_by_ingestion_id[ingestion_id]
+        if ingestion_id in self._bytes_by_ingestion_id:
+            del self._bytes_by_ingestion_id[ingestion_id]
         return rows
 
     def _start_timer(self):
@@ -105,8 +124,13 @@ class MinioClient:
     def _timer_flush(self):
         # triggered by the background timer
         with self._lock:
-            rows = self._detach_batch()
-        if rows:
+            ingestion_batches = {}
+            for ingestion_id in list(self._batch_by_ingestion_id.keys()):
+                rows = self._detach_batch_for_ingestion_id(ingestion_id)
+                if rows:
+                    ingestion_batches[ingestion_id] = rows
+        # Upload each ingestion_id's rows separately to preserve partitioning
+        for ingestion_id, rows in ingestion_batches.items():
             self._upload_rows(rows)
         self._start_timer()  # arm the next tick
 
@@ -125,20 +149,41 @@ class MinioClient:
             logger.debug("MinIO ▶ No rows to upload")
             return
 
-        logger.info("MinIO ▶ Preparing to upload %d rows", len(rows))
+        logger.debug("MinIO ▶ Preparing to upload %d rows", len(rows))
         logger.debug("MinIO ▶ Sample row: %s", rows[0] if rows else None)
 
+        # Group rows by ingestion_id to ensure proper partitioning
+        rows_by_ingestion_id = {}
+        for row in rows:
+            ingestion_id = row.get("ingestion_id", "unknown")
+            if ingestion_id not in rows_by_ingestion_id:
+                rows_by_ingestion_id[ingestion_id] = []
+            rows_by_ingestion_id[ingestion_id].append(row)
+
+        logger.info("MinIO ▶ Uploading %d distinct ingestion_ids: %s", 
+                   len(rows_by_ingestion_id), list(rows_by_ingestion_id.keys()))
+
+        # Process each ingestion_id group separately
+        for ingestion_id, group_rows in rows_by_ingestion_id.items():
+            logger.debug("MinIO ▶ Processing %d rows for ingestion_id: %s", len(group_rows), ingestion_id)
+            self._upload_ingestion_group(group_rows, ingestion_id)
+
+    def _upload_ingestion_group(self, rows: list[dict], ingestion_id: str) -> None:
+        """Upload a group of rows that all have the same ingestion_id."""
         df = pd.DataFrame(rows)
 
         # partition path: sensors/ingestion_id=<id>/date=YYYY-MM-DD/hour=HH/part-uuid.parquet
-        ingestion_id = None
         try:
-            ingestion_id = str(df["ingestion_id"].iloc[0])
-        except Exception:
-            ingestion_id = "unknown"
-        ts = pd.to_datetime(df["timestamp"].iloc[0], utc=True)
-        date = ts.strftime("%Y-%m-%d")
-        hour = ts.strftime("%H")
+            ts = pd.to_datetime(df["timestamp"].iloc[0], utc=True)
+            date = ts.strftime("%Y-%m-%d")
+            hour = ts.strftime("%H")
+        except Exception as e:
+            logger.warning("MinIO ▶ Error parsing timestamp for ingestion_id %s: %s", ingestion_id, e)
+            # Use current time as fallback
+            now = datetime.datetime.utcnow()
+            date = now.strftime("%Y-%m-%d")
+            hour = now.strftime("%H")
+
         key_prefix = f"sensors/ingestion_id={ingestion_id}/date={date}/hour={hour}/"
         object_key = key_prefix + f"part-{uuid.uuid4().hex}.parquet"
 
@@ -158,7 +203,7 @@ class MinioClient:
             )
             logger.info("MinIO ▶ wrote %d rows • %s → %s", len(rows), self._get_buf_size_message(buf.getbuffer().nbytes), object_key)
         except S3Error as e:
-            logger.error("MinIO upload error: %s", e)
+            logger.error("MinIO upload error for ingestion_id %s: %s", ingestion_id, e)
 
     # ------------------------------------------------------------------ #
     # graceful shutdown
@@ -166,6 +211,10 @@ class MinioClient:
     def close(self):
         self._timer.cancel()        # stop the periodic trigger
         with self._lock:
-            rows = self._detach_batch()
-        if rows:
-            self._upload_rows(rows)
+            all_rows = []
+            for ingestion_id in list(self._batch_by_ingestion_id.keys()):
+                rows = self._detach_batch_for_ingestion_id(ingestion_id)
+                if rows:
+                    all_rows.extend(rows)
+        if all_rows:
+            self._upload_rows(all_rows)

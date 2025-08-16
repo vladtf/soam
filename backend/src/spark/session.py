@@ -54,6 +54,7 @@ class SparkSessionManager:
             .config("spark.jars", os.getenv("SPARK_JARS", ""))
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.sql.mapKeyDedupPolicy", "LAST_WIN")  # Handle duplicate map keys
             .getOrCreate()
         )
         

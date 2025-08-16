@@ -7,6 +7,13 @@ interface Props {
   minutes?: number;
 }
 
+function getAnyPartitionText(value: unknown): string {
+  if (typeof value === 'number') {
+    return value > 0 ? 'Yes' : 'No';
+  }
+  return value ? 'Yes' : 'No';
+}
+
 const EnrichmentStatusCard: React.FC<Props> = ({ minutes = 10 }) => {
   const [summary, setSummary] = useState<EnrichmentSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -43,11 +50,11 @@ const EnrichmentStatusCard: React.FC<Props> = ({ minutes = 10 }) => {
         ) : summary ? (
           <div className="small">
             <div className="mb-2">
-              <span className="me-3">Registered devices: <Badge bg="secondary">{summary.registered_total}</Badge></span>
-              <span className="me-3">Any partition: <Badge bg="secondary">{summary.registered_any_partition}</Badge></span>
-              <span>Recent sensors (enriched): <Badge bg="info" text="dark">{summary.enriched.recent_sensors}</Badge></span>
+              <span className="me-3">Registered devices: <Badge bg="secondary">{summary.registered_total || 0}</Badge></span>
+              <span className="me-3">Any partition: <Badge bg="secondary">{getAnyPartitionText(summary.registered_any_partition)}</Badge></span>
+              <span>Recent sensors (enriched): <Badge bg="info" text="dark">{summary.enriched?.recent_sensors || 0}</Badge></span>
             </div>
-            {Object.keys(summary.registered_by_partition).length > 0 && (
+            {summary.registered_by_partition && Object.keys(summary.registered_by_partition).length > 0 && (
               <div className="mb-3">
                 <div className="fw-semibold">Registered by partition</div>
                 <ThemedTable size="sm" hover responsive>
@@ -55,7 +62,7 @@ const EnrichmentStatusCard: React.FC<Props> = ({ minutes = 10 }) => {
                     <tr><th>ingestion_id</th><th>count</th></tr>
                   </thead>
                   <tbody>
-                    {Object.entries(summary.registered_by_partition).map(([k, v]) => (
+                    {Object.entries(summary.registered_by_partition || {}).map(([k, v]) => (
                       <tr key={k}><td>{k}</td><td>{v}</td></tr>
                     ))}
                   </tbody>
@@ -66,11 +73,11 @@ const EnrichmentStatusCard: React.FC<Props> = ({ minutes = 10 }) => {
               <div>
                 <div className="fw-semibold mb-1">Enriched (last {minutes}m)</div>
                 <ListGroup variant="flush" className="small">
-                  <ListGroup.Item className="px-0">Exists: {summary.enriched.exists ? 'yes' : 'no'}</ListGroup.Item>
-                  <ListGroup.Item className="px-0">Rows: {summary.enriched.recent_rows}</ListGroup.Item>
-                  <ListGroup.Item className="px-0">Sensors: {summary.enriched.recent_sensors}</ListGroup.Item>
-                  <ListGroup.Item className="px-0">Matched sensors (registered): {summary.enriched.matched_sensors}</ListGroup.Item>
-                  {summary.enriched.sample_sensors.length > 0 && (
+                  <ListGroup.Item className="px-0">Exists: {summary.enriched?.exists ? 'yes' : 'no'}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Rows: {summary.enriched?.recent_rows || 0}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Sensors: {summary.enriched?.recent_sensors || 0}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Matched sensors (registered): {summary.enriched?.matched_sensors || 0}</ListGroup.Item>
+                  {summary.enriched?.sample_sensors && summary.enriched.sample_sensors.length > 0 && (
                     <ListGroup.Item className="px-0">Sample: {summary.enriched.sample_sensors.join(', ')}</ListGroup.Item>
                   )}
                 </ListGroup>
@@ -78,9 +85,9 @@ const EnrichmentStatusCard: React.FC<Props> = ({ minutes = 10 }) => {
               <div>
                 <div className="fw-semibold mb-1">Silver (avg) (last {minutes}m)</div>
                 <ListGroup variant="flush" className="small">
-                  <ListGroup.Item className="px-0">Exists: {summary.silver.exists ? 'yes' : 'no'}</ListGroup.Item>
-                  <ListGroup.Item className="px-0">Rows: {summary.silver.recent_rows}</ListGroup.Item>
-                  <ListGroup.Item className="px-0">Sensors: {summary.silver.recent_sensors}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Exists: {summary.silver?.exists ? 'yes' : 'no'}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Rows: {summary.silver?.recent_rows || 0}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Sensors: {summary.silver?.recent_sensors || 0}</ListGroup.Item>
                 </ListGroup>
               </div>
             </div>

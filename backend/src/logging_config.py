@@ -3,6 +3,7 @@ import os
 import sys
 from logging.handlers import TimedRotatingFileHandler
 from contextvars import ContextVar
+import colorlog
 
 # Context variable for per-request correlation
 _request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
@@ -25,6 +26,7 @@ def setup_logging(service_name: str, log_file: str | None = None) -> None:
     """Configure root logging once with console + rotating file handlers.
 
     Respects LOG_LEVEL env (default INFO). Adds request_id to each record.
+    Uses colored console output for better readability.
     """
     if getattr(setup_logging, "_configured", False):
         return
@@ -39,19 +41,38 @@ def setup_logging(service_name: str, log_file: str | None = None) -> None:
     for h in list(root.handlers):
         root.removeHandler(h)
 
-    fmt = "%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(threadName)s - %(message)s"
+    # Define log format
+    log_format = "%(log_color)s%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(threadName)s - %(message)s%(reset)s"
     datefmt = "%Y-%m-%dT%H:%M:%S%z"
-    formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
+    
+    # Create colored formatter for console
+    console_formatter = colorlog.ColoredFormatter(
+        log_format,
+        datefmt=datefmt,
+        log_colors={
+            'WARNING': 'yellow',
+            'ERROR': 'red',
+            'CRITICAL': 'bold_red',
+            'DEBUG': 'cyan',
+        }
+    )
+    
+    # Create regular formatter for file (no colors)
+    file_format = "%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(threadName)s - %(message)s"
+    file_formatter = logging.Formatter(fmt=file_format, datefmt=datefmt)
+    
     req_filter = RequestIdFilter()
 
+    # Console handler with colors
     console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(formatter)
+    console.setFormatter(console_formatter)
     console.addFilter(req_filter)
     root.addHandler(console)
 
+    # File handler without colors
     if log_file:
         file_handler = TimedRotatingFileHandler(log_file, when="midnight", backupCount=7, encoding="utf-8")
-        file_handler.setFormatter(formatter)
+        file_handler.setFormatter(file_formatter)
         file_handler.addFilter(req_filter)
         root.addHandler(file_handler)
 

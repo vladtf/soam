@@ -93,9 +93,9 @@ const AppNavbar: React.FC = () => {
           <Nav className="me-auto">
             <Nav.Link href="/dashboard">Dashboard</Nav.Link>
             <Nav.Link href="/pipeline">Data Pipeline</Nav.Link>
+            <Nav.Link href="/minio">Data Browser</Nav.Link>
             <NavDropdown title="More" id="nav-more">
               <NavDropdown.Item href="/map">Map</NavDropdown.Item>
-              <NavDropdown.Item href="/minio">Data Browser</NavDropdown.Item>
               <NavDropdown.Item href="/ontology">Ontology</NavDropdown.Item>
               <NavDropdown.Item href="/new-events">New Events</NavDropdown.Item>
               <NavDropdown.Divider />

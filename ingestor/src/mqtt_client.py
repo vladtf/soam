@@ -30,11 +30,16 @@ class MQTTClientHandler:
         return re.sub(r"[^a-zA-Z0-9]+", "_", s.strip())
 
     def _ingestion_id_for(self, topic: str) -> str:
-        """Build a stable, unique ingestion id that includes the sanitized broker, port, and topic."""
+        """Build a stable, unique ingestion id that includes the sanitized broker, port, and topic.
+        
+        This creates topic-specific ingestion_ids to ensure different sensor types get different IDs.
+        """
         broker_str = self._sanitize_string(str(self.broker))
         port_str = self._sanitize_string(str(self.port))
         topic_str = self._sanitize_string(topic)
-        return f"{broker_str}_{port_str}_{topic_str}"
+        result = f"{broker_str}_{port_str}_{topic_str}"
+        logger.debug(f"Generated base ingestion_id '{result}' for topic '{topic}'")
+        return result
 
     def on_connect(self, client, userdata, flags, rc):
         try:
@@ -54,10 +59,17 @@ class MQTTClientHandler:
         with self.processing_latency.time():  # Measure processing time
             try:
                 payload: dict = json.loads(msg.payload.decode("utf-8"))
-                # Attach metadata for downstream processing and storage
+                
+                # Use topic-based ingestion_id (most reliable since simulators use different topics)
                 ingestion_id = self._ingestion_id_for(msg.topic)
+                
                 payload["ingestion_id"] = ingestion_id
                 payload["topic"] = msg.topic
+                
+                # Log for debugging
+                sensor_id = payload.get("sensor_id") or payload.get("sensorId", "unknown")
+                logger.debug(f"Processing sensor '{sensor_id}' from topic '{msg.topic}' -> ingestion_id '{ingestion_id}'")
+                
                 # Append to partitioned buffer
                 self.state.get_partition_buffer(ingestion_id).append(payload)
                 logger.debug("Received message: %s", payload)

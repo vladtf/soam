@@ -17,7 +17,12 @@ class StreamingManager:
     """Manages Spark streaming jobs for temperature data and alerts."""
 
     def __init__(self, session_manager: SparkSessionManager, minio_bucket: str):
-        """Initialize StreamingManager."""
+        """Initialize StreamingManager.
+        
+        Args:
+            session_manager: Spark session manager
+            minio_bucket: MinIO bucket name
+        """
         self.session_manager = session_manager
         self.minio_bucket = minio_bucket
 
@@ -34,7 +39,7 @@ class StreamingManager:
         # New: enrichment query
         self.enrich_query: Optional[StreamingQuery] = None
 
-        # Stable query names to enforce single instance per stream
+        # Query names (union schema is now default)
         self.ENRICH_QUERY_NAME = "enrich_stream"
         self.AVG_QUERY_NAME = "five_min_avg_stream"
         self.ALERT_QUERY_NAME = "alert_stream"
@@ -66,19 +71,19 @@ class StreamingManager:
         """Start streaming jobs with error handling."""
         try:
             self.start_enrichment_stream()
-            logger.info("Enrichment stream started successfully")
+            logger.info("Union enrichment stream started successfully")
         except Exception as e:
             logger.error(f"Failed to start enrichment stream: {e}")
 
         try:
             self.start_temperature_stream()
-            logger.info("Temperature streaming started successfully")
+            logger.info("Union temperature streaming started successfully")
         except Exception as e:
             logger.error(f"Failed to start temperature stream: {e}")
 
         try:
             self.start_alert_stream()
-            logger.info("Alert streaming started successfully")
+            logger.info("Union alert streaming started successfully")
         except Exception as e:
             logger.error(f"Failed to start alert stream: {e}")
 
@@ -116,7 +121,151 @@ class StreamingManager:
             logger.error(f"Error ensuring streams are running: {e}")
 
     def start_temperature_stream(self) -> None:
-        """Start the temperature averaging stream (5-minute windows) from enriched data."""
+        """Start the temperature averaging stream from union schema enriched data."""
+        spark = self.session_manager.spark
+
+        # Read streaming data from enriched union delta
+        try:
+            enriched_stream = (
+                spark.readStream
+                .format("delta")
+                .load(self.enriched_path)
+            )
+        except Exception as e:
+            logger.info("Enriched union delta not available yet, skipping temperature stream start: %s", e)
+            return
+
+        # Extract temperature from union schema and filter valid values
+        from .union_schema import UnionSchemaTransformer
+        
+        temp_stream = UnionSchemaTransformer.extract_column_from_union(
+            enriched_stream, "temperature", prefer_normalized=True
+        )
+        
+        # Extract sensorId from sensor_data map
+        temp_stream = temp_stream.withColumn(
+            "sensorId", 
+            F.coalesce(
+                temp_stream.sensor_data.getItem("sensorId"),
+                temp_stream.sensor_data.getItem("sensorid"),
+                temp_stream.sensor_data.getItem("sensor_id"),
+                temp_stream.ingestion_id  # fallback to ingestion_id
+            )
+        )
+
+        # Filter valid temperature readings
+        valid_temp_stream = (
+            temp_stream
+            .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
+            .withWatermark("event_time", SparkConfig.WATERMARK_DELAY)
+        )
+
+        # Calculate sliding window averages
+        five_min_avg = (
+            valid_temp_stream
+            .groupBy(
+                F.window("event_time", SparkConfig.AVG_WINDOW, SparkConfig.AVG_SLIDE).alias("time_window"),
+                "sensorId"
+            )
+            .agg(F.round(F.avg("temperature"), 2).alias("avg_temp"))
+            .selectExpr(
+                "sensorId",
+                "time_window.start as time_start",
+                "avg_temp"
+            )
+        )
+
+        # Ensure target Delta table exists
+        try:
+            spark.read.format("delta").load(self.silver_path).limit(0)
+        except Exception:
+            from pyspark.sql import types as T
+            empty_schema = T.StructType([
+                T.StructField("sensorId", T.StringType()),
+                T.StructField("time_start", T.TimestampType()),
+                T.StructField("avg_temp", T.DoubleType()),
+            ])
+            empty_df = spark.createDataFrame([], empty_schema)
+            (
+                empty_df.write
+                .format("delta")
+                .mode("ignore")
+                .option("overwriteSchema", "true")
+                .save(self.silver_path)
+            )
+
+        # Write to Delta table
+        self.avg_query = (
+            five_min_avg.writeStream
+            .format("delta")
+            .option("path", self.silver_path)
+            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.FIVE_MIN_AVG_CHECKPOINT}_union")
+            .option("mergeSchema", "true")
+            .outputMode("complete")
+            .queryName(self.AVG_QUERY_NAME)
+            .trigger(processingTime=SparkConfig.TEMPERATURE_STREAM_TRIGGER)
+            .start()
+        )
+
+    def start_alert_stream(self) -> None:
+        """Start the temperature alert stream from union schema enriched data."""
+        spark = self.session_manager.spark
+
+        # Read streaming data from enriched union delta
+        try:
+            enriched_stream = (
+                spark.readStream
+                .format("delta")
+                .load(self.enriched_path)
+            )
+        except Exception as e:
+            logger.info("Enriched union delta not available yet, skipping alert stream start: %s", e)
+            return
+
+        # Extract temperature and sensorId from union schema
+        from .union_schema import UnionSchemaTransformer
+        
+        alert_stream = UnionSchemaTransformer.extract_column_from_union(
+            enriched_stream, "temperature", prefer_normalized=True
+        )
+        
+        alert_stream = alert_stream.withColumn(
+            "sensorId", 
+            F.coalesce(
+                alert_stream.sensor_data.getItem("sensorId"),
+                alert_stream.sensor_data.getItem("sensorid"),
+                alert_stream.sensor_data.getItem("sensor_id"),
+                alert_stream.ingestion_id
+            )
+        )
+
+        # Filter for temperature alerts
+        alerts = (
+            alert_stream
+            .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
+            .filter(F.col("temperature") > SparkConfig.TEMP_THRESHOLD)
+            .withColumn("alert_type", F.lit("TEMP_OVER_LIMIT"))
+            .withColumn("alert_id", F.concat(F.col("sensorId"), F.lit("_"), F.col("event_time")))
+            .withColumn("alert_time", F.current_timestamp())
+            .dropDuplicates(["sensorId"])
+            .select("sensorId", "temperature", "event_time", "alert_type")
+        )
+
+        # Write to Delta table
+        self.alert_query = (
+            alerts.writeStream
+            .format("delta")
+            .option("path", self.alerts_path)
+            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.ALERT_STREAM_CHECKPOINT}_union")
+            .option("mergeSchema", "true")
+            .outputMode("append")
+            .queryName(self.ALERT_QUERY_NAME)
+            .trigger(processingTime=SparkConfig.ALERT_STREAM_TRIGGER)
+            .start()
+        )
+
+    def start_temperature_stream_legacy(self) -> None:
+        """Start the temperature averaging stream (5-minute windows) from enriched data (legacy schema)."""
         spark = self.session_manager.spark
 
         # Read streaming data from enriched silver delta (skip if not ready)
@@ -179,8 +328,8 @@ class StreamingManager:
             .start()
         )
 
-    def start_alert_stream(self) -> None:
-        """Start the temperature alert stream from enriched data."""
+    def start_alert_stream_legacy(self) -> None:
+        """Start the temperature alert stream from enriched data (legacy schema)."""
         spark = self.session_manager.spark
 
         # Read streaming data from enriched silver delta
@@ -220,27 +369,50 @@ class StreamingManager:
         )
 
     def start_enrichment_stream(self) -> None:
-        """Start the enrichment stream: read raw sensors, add metadata, write silver/enriched."""
+        """Start enrichment stream with union schema for flexible data storage.
+
+        This implementation provides:
+        - Flexible sensor data storage as JSON strings
+        - Normalized data as typed values for analytics
+        - Ingestion-specific normalization rules
+        - Raw data preservation for debugging
+        """
+        # Check for existing query and stop it if active
+        existing_query = self._get_query_by_name(self.ENRICH_QUERY_NAME)
+        if existing_query and existing_query.isActive:
+            logger.info(f"Stopping existing enrichment query: {self.ENRICH_QUERY_NAME}")
+            existing_query.stop()
+            # Wait a moment for cleanup
+            import time
+            time.sleep(2)
+        
         spark = self.session_manager.spark
         cleaner = DataCleaner()
 
-        # Try to infer schema from existing parquet files (batch read), fallback to known sensor schema
+        # Use comprehensive schema instead of inferring from possibly incomplete files
         try:
+            # Try to infer schema from existing parquet files first
             static_df = (
                 spark.read
                 .option("basePath", self.sensors_path)
                 .parquet(f"{self.sensors_path}ingestion_id=*/date=*/hour=*")
             )
             inferred_schema = static_df.schema
-            logger.info(
-                "Inferred raw sensors schema from existing files for streaming read at %s",
-                f"{self.sensors_path}ingestion_id=*/date=*/hour=*",
-            )
+            logger.info("Inferred raw sensors schema from existing files for union streaming")
+            
+            # Check if the inferred schema has temperature field
+            has_temperature = any(field.name == "temperature" for field in inferred_schema.fields)
+            if not has_temperature:
+                logger.warning("Inferred schema missing temperature field - using comprehensive schema")
+                from .config import SparkSchemas
+                inferred_schema = SparkSchemas.get_comprehensive_raw_schema()
+            
         except Exception:
-            inferred_schema = SparkSchemas.get_sensor_schema()
-            logger.info("Falling back to predefined sensor schema for streaming read")
+            from .config import SparkSchemas
+            inferred_schema = SparkSchemas.get_comprehensive_raw_schema()
+            logger.info("Using comprehensive raw schema for streaming read")
 
-        # Read raw parquet with schema (required by structured streaming for file sources)
+        # Read raw parquet with schema
         raw_stream = (
             spark.readStream
             .schema(inferred_schema)
@@ -249,81 +421,45 @@ class StreamingManager:
             .parquet(f"{self.sensors_path}ingestion_id=*/date=*/hour=*")
         )
 
-        # Apply normalization first to ensure consistent column names
-        normalized = cleaner.normalize_sensor_columns(raw_stream, ingestion_id=None)
+        # Add debug logging to see what's in the raw stream before any processing
+        logger.info("Raw stream schema before any processing:")
+        try:
+            logger.info(f"Raw stream columns: {raw_stream.columns}")
+            # Check specifically for temperature field
+            has_temp_field = "temperature" in raw_stream.columns
+            logger.info(f"Raw stream has temperature field: {has_temp_field}")
+            logger.info(f"Raw stream schema: {raw_stream.schema}")
+        except Exception as e:
+            logger.warning(f"Could not log raw stream schema: {e}")
 
-        # Helper for optional column casting
-        def get_optional_column(df, col_name, data_type):
-            return F.col(col_name).cast(data_type) if col_name in df.columns else F.lit(None).cast(data_type)
+        # Transform to union schema with normalization
+        union_stream = cleaner.normalize_to_union_schema(raw_stream, ingestion_id=None)
 
-        # Cast to expected schema types (safe casts) and derive event time.
-        # Some raw feeds may not provide temperature/humidity; represent them as nulls instead of failing.
-        ts_col = F.col("timestamp").cast("string")
-        event_time = F.coalesce(
-            F.to_timestamp(ts_col),
-            F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
-            F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"),
-            F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-            F.to_timestamp(ts_col, "yyyy-MM-dd'T'HH:mm:ss"),
-            F.to_timestamp(F.regexp_replace(ts_col, 'T', ' '), "yyyy-MM-dd HH:mm:ss.SSSSSS"),
-            F.to_timestamp(F.regexp_replace(ts_col, 'T', ' '), "yyyy-MM-dd HH:mm:ss.SSS"),
-            F.to_timestamp(F.regexp_replace(ts_col, 'T', ' '), "yyyy-MM-dd HH:mm:ss")
-        )
-        temp_expr = get_optional_column(normalized, "temperature", "double")
-        hum_expr = get_optional_column(normalized, "humidity", "double")
-        
-        # Use safe column access for sensorId (might not exist after normalization)
-        sensor_id_expr = get_optional_column(normalized, "sensorId", "string")
-        
-        typed = (
-            normalized
-            .withColumn("sensorId", sensor_id_expr)
-            .withColumn("temperature", temp_expr)
-            .withColumn("humidity", hum_expr)
-            .withColumn("timestamp", ts_col)
-            .withColumn("event_time", event_time)
-        )
+        # Add debug logging to see what's in the union stream
+        logger.info("Union stream schema after normalization:")
+        try:
+            logger.info(f"Union stream columns: {union_stream.columns}")
+        except Exception as e:
+            logger.warning(f"Could not log union stream columns: {e}")
 
-        # Example enrichment: add ingest_date, hour, static metadata; use existing ingestion_id
-        base_cols = (
-            typed
+        # Add enrichment metadata
+        enriched_union = (
+            union_stream
+            .withColumn("event_time", F.col("timestamp"))
             .withColumn("ingest_ts", F.current_timestamp())
-            .withColumn("ingest_date", F.to_date(F.col("event_time")))
-            .withColumn("ingest_hour", F.date_format(F.col("event_time"), "HH"))
+            .withColumn("ingest_date", F.to_date(F.col("timestamp")))
+            .withColumn("ingest_hour", F.date_format(F.col("timestamp"), "HH"))
             .withColumn("source", F.lit("mqtt"))
             .withColumn("site", F.lit("default"))
-            .select(
-                "sensorId",
-                "temperature",
-                "humidity",
-                "event_time",
-                "ingest_ts",
-                "ingest_date",
-                "ingest_hour",
-                "source",
-                "site",
-                "ingestion_id",  # Use existing column directly
-            )
         )
 
-        # Ensure target enriched Delta table exists with schema to prevent DELTA_SCHEMA_NOT_SET on readers
+        # Ensure target enriched Delta table exists with union schema
         try:
             spark.read.format("delta").load(self.enriched_path).limit(0)
         except Exception:
-            from pyspark.sql import types as T
-            enriched_schema = T.StructType([
-                T.StructField("sensorId", T.StringType()),
-                T.StructField("temperature", T.DoubleType()),
-                T.StructField("humidity", T.DoubleType()),
-                T.StructField("event_time", T.TimestampType()),
-                T.StructField("ingest_ts", T.TimestampType()),
-                T.StructField("ingest_date", T.DateType()),
-                T.StructField("ingest_hour", T.StringType()),
-                T.StructField("source", T.StringType()),
-                T.StructField("site", T.StringType()),
-                T.StructField("ingestion_id", T.StringType()),
-            ])
-            empty_enriched = spark.createDataFrame([], enriched_schema)
+            from .config import SparkSchemas
+            from .union_schema import create_empty_enriched_union_dataframe
+            empty_enriched = create_empty_enriched_union_dataframe(spark)
             (
                 empty_enriched.write
                 .format("delta")
@@ -332,111 +468,153 @@ class StreamingManager:
                 .save(self.enriched_path)
             )
 
-        # Avoid duplicate starts if another session/thread already launched it
-        existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
-        if existing and existing.isActive:
-            self.enrich_query = existing
-            return
-
-        # Filter stream to only registered devices using foreachBatch to load allowed list once per micro-batch
-        def write_if_registered(batch_df, batch_id: int):
+        # Filter and write with device registration check
+        def write_union_if_registered(batch_df, batch_id: int):
             try:
-                logger.info("Enrichment foreachBatch started: batch_id=%s, cols=%s", batch_id, ",".join(batch_df.columns))
+                logger.info("Union enrichment batch started: batch_id=%s", batch_id)
+                
+                # Debug: Log sample raw data BEFORE any processing
+                if not batch_df.rdd.isEmpty():
+                    logger.info("=== RAW BATCH DATA SAMPLE ===")
+                    raw_sample = batch_df.limit(2).collect()
+                    for i, row in enumerate(raw_sample):
+                        row_dict = row.asDict()
+                        logger.info(f"Raw data sample {i+1}: {row_dict}")
+                        # Specifically check temperature field in raw data
+                        if 'temperature' in row_dict:
+                            logger.info(f"Raw data sample {i+1}: temperature = '{row_dict['temperature']}' (type: {type(row_dict['temperature'])})")
+                    logger.info("=== END RAW BATCH DATA SAMPLE ===")
+                
                 from sqlalchemy.orm import sessionmaker
                 from src.database.database import engine
                 from src.database.models import Device
                 SessionLocal = sessionmaker(bind=engine)
                 session = SessionLocal()
+                
                 try:
-                    # Only consider ingestion IDs from registered devices
+                    # Get allowed ingestion IDs
                     rows = session.query(Device.ingestion_id).filter(Device.enabled == True).all()
                     allowed_ing = [r[0] for r in rows]
+                    logger.info("Union enrichment: registered ingestion_ids: %s", allowed_ing)
                 finally:
                     session.close()
-                # Build normalized set of allowed ingestion IDs
+
+                # Check for wildcard registration (None ingestion_id means accept all)
+                has_wildcard = any(iid is None for iid in allowed_ing)
+                
+                # Filter by allowed ingestion IDs
                 norm_allowed = {
                     str(iid).strip().lower()
                     for iid in allowed_ing
                     if iid is not None and str(iid).strip().lower() not in ("", "unknown")
                 }
-                if not norm_allowed:
-                    try:
-                        input_count = batch_df.count()
-                    except Exception:
-                        input_count = -1
-                    logger.info("Enrichment foreachBatch: no allowed ingestion IDs; skipping (input=%s)", input_count)
+
+                logger.info("Union enrichment: normalized allowed IDs: %s", norm_allowed)
+                logger.info("Union enrichment: has wildcard registration: %s", has_wildcard)
+
+                if not norm_allowed and not has_wildcard:
+                    logger.info("Union enrichment: no allowed ingestion IDs and no wildcard; skipping")
                     return
 
-                # Normalize fields (sensor normalized for consistency, but filtering only on ingestion id)
-                from pyspark.sql.functions import lower, trim, when
-                
-                # Safely handle sensorId column (might not exist or might be null after normalization)
-                if "sensorId" in batch_df.columns:
-                    sensor_col_expr = lower(trim(F.col("sensorId")))
+                # If wildcard registration exists, accept all data
+                if has_wildcard:
+                    filtered = batch_df
+                    logger.info("Union enrichment: wildcard registration - accepting all data")
                 else:
-                    sensor_col_expr = F.lit(None).cast("string")
-                    
-                filt_df = batch_df \
-                    .withColumn("sensor_norm", sensor_col_expr) \
-                    .withColumn(
-                        "ing_norm",
-                        when(lower(trim(F.col("ingestion_id"))).isin("", "unknown"), F.lit(None))
-                        .otherwise(lower(trim(F.col("ingestion_id"))))
+                    # Apply filter for specific ingestion IDs
+                    filtered = batch_df.filter(
+                        F.lower(F.trim(F.col("ingestion_id"))).isin(list(norm_allowed))
                     )
 
-                try:
-                    batch_ing = [r[0] for r in filt_df.select("ing_norm").distinct().limit(20).collect()]
-                    logger.info("Enrichment foreachBatch: batch ingestions=%s; allowed_ing_count=%d",
-                                batch_ing, len(norm_allowed))
-                except Exception:
-                    pass
-
-                filtered = filt_df.where(F.col("ing_norm").isin(list(norm_allowed)))
                 if filtered.rdd.isEmpty():
-                    try:
-                        input_count = batch_df.count()
-                    except Exception:
-                        input_count = -1
-                    logger.info(
-                        "Enrichment foreachBatch: no rows after filtering by ingestion_id (input=%s, allowed_ing=%d)",
-                        input_count,
-                        len(norm_allowed),
-                    )
+                    logger.info("Union enrichment: no rows after filtering - skipping write to avoid empty parquet files")
                     return
-                try:
-                    kept = filtered.count()
-                except Exception:
-                    kept = -1
 
-                # Data is already normalized at stream level, just write it
+                # Debug: Log sample of ingestion_ids in the batch
+                if "ingestion_id" in batch_df.columns:
+                    sample_ids = [r[0] for r in batch_df.select("ingestion_id").distinct().limit(5).collect()]
+                    logger.info("Union enrichment: sample ingestion_ids in batch: %s", sample_ids)
+
+                # Additional debug: count before and after filtering
+                total_before = batch_df.count()
+                total_after = filtered.count()
+                logger.info("Union enrichment: %d rows before filter, %d rows after filter", total_before, total_after)
+                
+                # Log normalized field information for debugging
+                if total_after > 0:
+                    try:
+                        # Sample normalized data to show what fields and values are being processed
+                        sample_rows = filtered.select("ingestion_id", "normalized_data", "sensor_data").limit(3).collect()
+                        for i, row in enumerate(sample_rows):
+                            ingestion_id = row["ingestion_id"]
+                            normalized_data = row["normalized_data"]
+                            sensor_data = row["sensor_data"]
+                            
+                            logger.info("Union enrichment sample %d: ingestion_id=%s", i+1, ingestion_id)
+                            
+                            # Log normalized fields and values
+                            if normalized_data:
+                                # normalized_data is already a dict, not a Row object
+                                norm_fields = [f"{k}={v}" for k, v in normalized_data.items() if v is not None]
+                                logger.info("Union enrichment sample %d: normalized fields: %s", i+1, norm_fields)
+                            else:
+                                logger.info("Union enrichment sample %d: no normalized data", i+1)
+                                
+                            # Log sensor data keys for context
+                            if sensor_data:
+                                # sensor_data is already a dict, not a Row object
+                                sensor_keys = list(sensor_data.keys())
+                                # Also show some actual sensor data values
+                                sensor_sample = {k: v for k, v in sensor_data.items() if k in ['sensorId', 'temperature', 'humidity', 'timestamp']}
+                                logger.info("Union enrichment sample %d: sensor_data keys: %s", i+1, sensor_keys)
+                                logger.info("Union enrichment sample %d: sensor_data sample: %s", i+1, sensor_sample)
+                            else:
+                                logger.info("Union enrichment sample %d: no sensor data", i+1)
+                                
+                    except Exception as e:
+                        logger.warning(f"Union enrichment: Could not log sample normalized data: {e}")
+                
+                # If we expected filtering but nothing was filtered out, there might be a data mismatch
+                if not has_wildcard and norm_allowed and total_before > 0 and total_after == total_before:
+                    logger.warning("Union enrichment: Expected filtering but no rows were filtered out - possible ingestion_id mismatch")
+                elif not has_wildcard and norm_allowed and total_after == 0:
+                    logger.warning("Union enrichment: All rows filtered out - ingestion_id mismatch between registered devices and incoming data")
+
+                # Write to Delta
                 (
-                    filtered.drop("sensor_norm", "ing_norm").write
+                    filtered.write
                     .format("delta")
                     .mode("append")
                     .option("path", self.enriched_path)
                     .option("mergeSchema", "true")
                     .save()
                 )
-                logger.info("Enrichment foreachBatch: wrote %s rows to enriched", kept)
+                
+                kept = filtered.count()
+                logger.info("Union enrichment: wrote %d rows to enriched", kept)
+                
             except Exception as e:
-                logger.error(f"Error in foreachBatch write: {e}")
+                logger.error(f"Error in union enrichment foreachBatch: {e}")
 
+        # Start the streaming query with error handling
         try:
             self.enrich_query = (
-                base_cols.writeStream
-                .foreachBatch(write_if_registered)
+                enriched_union.writeStream
+                .foreachBatch(write_union_if_registered)
                 .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.ENRICH_STREAM_CHECKPOINT}")
                 .queryName(self.ENRICH_QUERY_NAME)
                 .trigger(processingTime=SparkConfig.ENRICH_STREAM_TRIGGER)
                 .start()
             )
+            logger.info(f"Started enrichment stream with query name: {self.ENRICH_QUERY_NAME}")
         except Exception as e:
-            # If concurrent start detected, bind to the existing one
-            if "SparkConcurrentModificationException" in str(e) or "CONCURRENT_QUERY" in str(e):
-                logger.warning("Concurrent start detected for enrichment stream; reusing active query")
+            # Handle case where query with same name already exists
+            if "already active" in str(e) or "Cannot start query with name" in str(e):
+                logger.warning(f"Query {self.ENRICH_QUERY_NAME} already exists, attempting to reuse existing query")
                 existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
                 if existing and existing.isActive:
                     self.enrich_query = existing
+                    logger.info(f"Reusing existing enrichment query: {self.ENRICH_QUERY_NAME}")
                     return
             # Re-raise if it's another kind of error
             raise

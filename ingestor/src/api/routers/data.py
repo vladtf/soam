@@ -50,7 +50,82 @@ async def get_data_by_partition(ingestion_id: str, state: IngestorStateDep):
         buf = state.get_partition_buffer(ingestion_id)
         return list(buf)
     except Exception as e:
-        logger.error("Error fetching partition %s: %s", ingestion_id, str(e))
+        logger.error("Error fetching partition data: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/diagnostics/topic-analysis", response_model=ApiResponse)
+async def get_topic_analysis(state: IngestorStateDep):
+    """Analyze what topics and ingestion_ids are being received for debugging."""
+    try:
+        analysis = {
+            "total_partitions": len(state.data_buffers),
+            "partitions": {},
+            "topic_to_ingestion_id_mapping": {},
+            "sensor_types_by_partition": {},
+            "buffer_status": {
+                "max_rows_per_partition": state.buffer_max_rows,
+                "active_connections": 1 if state.active_connection else 0,
+                "mqtt_handler_active": state.mqtt_handler is not None
+            }
+        }
+        
+        total_messages_in_buffers = 0
+        for ingestion_id, buffer in state.data_buffers.items():
+            buffer_length = len(buffer)
+            total_messages_in_buffers += buffer_length
+            
+            if buffer_length > 0:
+                # Analyze this partition
+                recent_msgs = list(buffer)[-10:]  # Last 10 messages
+                topics = set()
+                sensor_ids = set()
+                
+                for msg in recent_msgs:
+                    if "topic" in msg:
+                        topics.add(msg["topic"])
+                    if "sensor_id" in msg:
+                        sensor_ids.add(msg["sensor_id"])
+                    elif "sensorId" in msg:
+                        sensor_ids.add(msg["sensorId"])
+                
+                analysis["partitions"][ingestion_id] = {
+                    "message_count": buffer_length,
+                    "topics_seen": list(topics),
+                    "sensor_ids_seen": list(sensor_ids),
+                    "sample_recent_messages": recent_msgs[-3:]  # Last 3 for debugging
+                }
+                
+                # Build topic mapping
+                for topic in topics:
+                    if topic not in analysis["topic_to_ingestion_id_mapping"]:
+                        analysis["topic_to_ingestion_id_mapping"][topic] = []
+                    if ingestion_id not in analysis["topic_to_ingestion_id_mapping"][topic]:
+                        analysis["topic_to_ingestion_id_mapping"][topic].append(ingestion_id)
+            else:
+                # Include empty partitions for debugging
+                analysis["partitions"][ingestion_id] = {
+                    "message_count": 0,
+                    "topics_seen": [],
+                    "sensor_ids_seen": [],
+                    "sample_recent_messages": [],
+                    "status": "empty_buffer"
+                }
+        
+        analysis["buffer_status"]["total_messages_in_buffers"] = total_messages_in_buffers
+        
+        # Add MQTT connection info if available
+        if state.active_connection:
+            analysis["buffer_status"]["active_broker"] = f"{state.active_connection.broker}:{state.active_connection.port}"
+            analysis["buffer_status"]["subscribed_topic"] = state.active_connection.topic
+        
+        return {
+            "status": "success",
+            "data": analysis,
+            "message": f"Topic analysis completed - {len(state.data_buffers)} partitions analyzed, {total_messages_in_buffers} total messages in buffers"
+        }
+    except Exception as e:
+        logger.error("Error in topic analysis: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

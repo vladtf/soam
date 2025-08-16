@@ -3,6 +3,7 @@ import { Row, Col, Card, Badge } from 'react-bootstrap';
 import { SensorData, Device } from '../../api/backendRequests';
 import RegisterDeviceCard from '../sensor-data/RegisterDeviceCard';
 import DevicesTableCard from '../sensor-data/DevicesTableCard';
+import EnrichmentDiagnosticCard from '../sensor-data/EnrichmentDiagnosticCard';
 
 interface DevicesTabProps {
   devices: Device[];
@@ -78,34 +79,51 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
                     );
                     return (
                       <Col md={6} lg={3} key={device.id} className="mb-3">
-                        <Card className="h-100" style={{ fontSize: '0.85rem' }}>
+                        <Card className="h-100" style={{ fontSize: '0.85rem', minHeight: '200px' }}>
                           <Card.Header className="py-2">
                             <div className="d-flex align-items-center">
                               <Badge 
                                 bg={device.enabled ? 'success' : 'secondary'} 
-                                className="me-2"
+                                className="me-2 flex-shrink-0"
                               >
                                 {device.enabled ? '🟢' : '⚪'}
                               </Badge>
-                              <div>
-                                <div className="fw-bold">{device.name}</div>
-                                <small className="text-muted">{device.ingestion_id}</small>
+                              <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                                <div 
+                                  className="fw-bold text-truncate" 
+                                  title={device.name}
+                                >
+                                  {device.name}
+                                </div>
+                                <small 
+                                  className="text-muted text-truncate d-block" 
+                                  title={device.ingestion_id}
+                                >
+                                  {device.ingestion_id}
+                                </small>
                               </div>
                             </div>
                           </Card.Header>
-                          <Card.Body className="py-2">
+                          <Card.Body className="py-2 d-flex flex-column">
                             {deviceData.length > 0 ? (
-                              <div>
+                              <div className="flex-grow-1">
                                 <small className="text-muted">Latest: {deviceData.length} records</small>
                                 <div className="mt-1">
                                   {Object.entries(deviceData[0] as Record<string, unknown>)
                                     .slice(0, 3)
                                     .map(([key, value]) => (
-                                      <div key={key} className="d-flex justify-content-between">
-                                        <code style={{ fontSize: '0.7rem' }}>{key}:</code>
+                                      <div key={key} className="d-flex justify-content-between align-items-start mb-1">
+                                        <code 
+                                          className="text-truncate me-1" 
+                                          style={{ fontSize: '0.7rem', maxWidth: '40%', flex: '0 0 auto' }}
+                                          title={key}
+                                        >
+                                          {key}:
+                                        </code>
                                         <span 
-                                          className="text-truncate ms-1" 
-                                          style={{ maxWidth: '80px', fontSize: '0.7rem' }}
+                                          className="text-truncate text-end" 
+                                          style={{ fontSize: '0.7rem', maxWidth: '60%', flex: '1 1 auto' }}
+                                          title={renderValue(value)}
                                         >
                                           {renderValue(value)}
                                         </span>
@@ -130,6 +148,12 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
               )}
             </Card.Body>
           </Card>
+        </Col>
+      </Row>
+      
+      <Row className="mt-3">
+        <Col>
+          <EnrichmentDiagnosticCard />
         </Col>
       </Row>
     </>

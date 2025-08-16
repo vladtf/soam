@@ -80,3 +80,28 @@ async def test_sensor_data_access(spark_manager: SparkManagerDep):
     except Exception as e:
         logger.error(f"Error in sensor data access test: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/diagnose/enrichment-filtering", response_model=ApiResponse)
+async def diagnose_enrichment_filtering(spark_manager: SparkManagerDep):
+    """Diagnose enrichment filtering issues - why certain sensors are being processed."""
+    try:
+        from .diagnostics_enhanced import diagnose_enrichment_filtering
+        from .config import SparkConfig
+        
+        # Get the enriched path from spark manager or config
+        enriched_path = f"s3a://{spark_manager.data_access.minio_bucket}/{SparkConfig.ENRICHED_PATH}"
+        
+        diagnosis = diagnose_enrichment_filtering(
+            spark_manager.session_manager, 
+            enriched_path
+        )
+        
+        return {
+            "status": "success",
+            "data": diagnosis,
+            "message": "Enrichment filtering diagnosis completed"
+        }
+    except Exception as e:
+        logger.error(f"Error in enrichment filtering diagnosis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -101,6 +101,31 @@ class DataCleaner:
             except Exception:
                 pass
 
+    def normalize_to_union_schema(self, df: DataFrame, ingestion_id: Optional[str] = None) -> DataFrame:
+        """Transform DataFrame to union schema format with normalization applied.
+        
+        Args:
+            df: Input DataFrame with raw sensor data
+            ingestion_id: Source identifier for loading specific normalization rules
+            
+        Returns:
+            DataFrame with union schema structure (ingestion_id, timestamp, sensor_data, normalized_data)
+        """
+        from .union_schema import UnionSchemaTransformer
+        
+        # First apply legacy normalization to get clean column names
+        normalized_legacy = self.normalize_sensor_columns(df, ingestion_id)
+        
+        # Convert to union schema format
+        union_df = UnionSchemaTransformer.legacy_to_union(normalized_legacy, "ingestion_id")
+        
+        # Apply additional normalization rules specific to union schema
+        normalization_rules = self._load_dynamic_rules(ingestion_id)
+        if normalization_rules:
+            union_df = UnionSchemaTransformer.apply_normalization_to_union(union_df, normalization_rules)
+        
+        return union_df
+
     def normalize_sensor_columns(self, df: DataFrame, ingestion_id: Optional[str] = None) -> DataFrame:
         """Lower-case all columns, then alias known keys to canonical names.
 
@@ -119,6 +144,21 @@ class DataCleaner:
         if effective_map:
             logger.info("Applying %d normalization rules for ingestion_id='%s' (matched %d keys)", 
                        len(effective_map), ingestion_id or "global", len(matched_keys))
+            
+            # Log the specific rules being applied
+            for raw_key in matched_keys:
+                canonical_key = effective_map[raw_key]
+                logger.info(f"Normalization rule: '{raw_key}' -> '{canonical_key}' for ingestion_id='{ingestion_id or 'global'}'")
+                
+            # Special debug for temperature field
+            temp_related = [k for k in lowered.columns if 'temp' in k.lower()]
+            if temp_related:
+                logger.info(f"Temperature-related columns found in raw data: {temp_related}")
+                for temp_col in temp_related:
+                    if temp_col in effective_map:
+                        logger.info(f"Temperature column '{temp_col}' will be normalized to '{effective_map[temp_col]}'")
+                    else:
+                        logger.warning(f"Temperature column '{temp_col}' has no normalization rule!")
         else:
             logger.info("No normalization rules found; leaving columns as-is (lower-cased)")
 
@@ -126,10 +166,27 @@ class DataCleaner:
         if matched_keys:
             self._increment_rule_usage(matched_keys)
 
-        return lowered.select([
-            F.col(c).alias(effective_map.get(c, c))
-            for c in lowered.columns
-        ])
+        # Build column selections, handling potential duplicates from mapping multiple raw keys to same canonical key
+        canonical_to_raw = {}
+        for c in lowered.columns:
+            canonical_name = effective_map.get(c, c)
+            if canonical_name not in canonical_to_raw:
+                canonical_to_raw[canonical_name] = []
+            canonical_to_raw[canonical_name].append(c)
+
+        # Select columns, using coalesce for canonical names that have multiple raw key sources
+        select_cols = []
+        for canonical_name, raw_keys in canonical_to_raw.items():
+            if len(raw_keys) == 1:
+                # Single source, simple alias
+                select_cols.append(F.col(raw_keys[0]).alias(canonical_name))
+            else:
+                # Multiple sources, use coalesce to pick first non-null value
+                coalesce_cols = [F.col(raw_key) for raw_key in raw_keys]
+                select_cols.append(F.coalesce(*coalesce_cols).alias(canonical_name))
+                logger.debug(f"Merged {len(raw_keys)} columns into '{canonical_name}': {raw_keys}")
+
+        return lowered.select(select_cols)
 
     def _increment_rule_usage(self, matched_raw_keys: List[str]) -> None:
         """Buffer usage increments; a background worker flushes to DB.

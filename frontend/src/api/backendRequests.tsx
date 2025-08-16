@@ -156,6 +156,65 @@ export const fetchSparkMasterStatus = (): Promise<SparkMasterStatus> => {
   return doFetch<SparkMasterStatus>(`${backendUrl}/spark/master-status`);
 };
 
+// Enrichment Filtering Diagnostic interfaces
+export interface EnrichmentDiagnosticDevice {
+  id: number;
+  ingestion_id: string | null;
+  name: string | null;
+  enabled: boolean;
+  is_wildcard: boolean;
+}
+
+export interface EnrichmentDiagnosticData {
+  registered_devices: EnrichmentDiagnosticDevice[];
+  enriched_data_ingestion_ids: string[];
+  enriched_sensors_by_ingestion_id: Record<string, string[]>;
+  total_enriched_sensors: number;
+  potential_issues: string[];
+}
+
+export const fetchEnrichmentDiagnostic = (): Promise<EnrichmentDiagnosticData> => {
+  const { backendUrl } = getConfig();
+  return doFetch<EnrichmentDiagnosticData>(`${backendUrl}/spark/diagnose/enrichment-filtering`);
+};
+
+// Ingestor Topic Analysis interfaces
+export interface IngestorTopicAnalysis {
+  total_partitions: number;
+  partitions: Record<string, {
+    message_count: number;
+    topics_seen: string[];
+    sensor_ids_seen: string[];
+    sample_recent_messages: any[];
+    status?: string;
+  }>;
+  topic_to_ingestion_id_mapping: Record<string, string[]>;
+  sensor_types_by_partition: Record<string, any>;
+  buffer_status: {
+    max_rows_per_partition: number;
+    active_connections: number;
+    mqtt_handler_active: boolean;
+    total_messages_in_buffers: number;
+    active_broker?: string;
+    subscribed_topic?: string;
+  };
+}
+
+export const fetchIngestorTopicAnalysis = (): Promise<IngestorTopicAnalysis> => {
+  const { ingestorUrl } = getConfig();
+  console.log('Fetching from URL:', `${ingestorUrl}/diagnostics/topic-analysis`);
+  
+  return doFetch<IngestorTopicAnalysis>(`${ingestorUrl}/diagnostics/topic-analysis`)
+    .then(response => {
+      console.log('Processed API response:', response);
+      return response;
+    })
+    .catch(error => {
+      console.error('API call failed:', error);
+      throw error;
+    });
+};
+
 export const postNewBuilding = (newBuilding: Building): Promise<unknown> => {
   const { backendUrl } = getConfig();
   return doFetch<unknown>(`${backendUrl}/buildings`, {
@@ -534,4 +593,71 @@ export const deleteDevice = (id: number): Promise<{ status?: string; message?: s
 export const toggleDevice = (id: number): Promise<Device> => {
   const { backendUrl } = getConfig();
   return doFetch<Device>(`${backendUrl}/devices/${id}/toggle`, { method: 'POST' });
+};
+
+// Configuration API
+export interface SchemaConfig {
+  use_union_schema: boolean;
+  schema_type: string;
+  message: string;
+}
+
+export interface SystemConfig {
+  schema: {
+    use_union_schema: boolean;
+    schema_type: string;
+  };
+  storage: {
+    minio_bucket: string;
+    sensors_path: string;
+    silver_path: string;
+    enriched_path: string;
+    alerts_path: string;
+  };
+  spark: {
+    status: string;
+    master_host: string;
+    workers: any[];
+  };
+  streaming: {
+    enrichment_active: boolean;
+    temperature_active: boolean;
+    alert_active: boolean;
+  };
+}
+
+export interface FeatureFlags {
+  union_schema: {
+    available: boolean;
+    description: string;
+    benefits: string[];
+  };
+  legacy_schema: {
+    available: boolean;
+    description: string;
+    benefits: string[];
+  };
+  dynamic_normalization: {
+    available: boolean;
+    description: string;
+  };
+  stream_processing: {
+    available: boolean;
+    description: string;
+  };
+}
+
+export const getSchemaConfig = (): Promise<SchemaConfig> => {
+  const { backendUrl } = getConfig();
+  return doFetch<SchemaConfig>(`${backendUrl}/config/schema`);
+};
+
+export const getSystemConfig = (): Promise<SystemConfig> => {
+  const { backendUrl } = getConfig();
+  return doFetch<SystemConfig>(`${backendUrl}/config/`);
+};
+
+export const getFeatureFlags = (): Promise<FeatureFlags> => {
+  const { backendUrl } = getConfig();
+  return doFetch<FeatureFlags>(`${backendUrl}/config/features`);
 };

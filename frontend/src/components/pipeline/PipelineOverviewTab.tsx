@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Row, Col, Badge } from 'react-bootstrap';
 import { SensorData, Device, NormalizationRule, ComputationDef } from '../../api/backendRequests';
+import SchemaConfiguration from './SchemaConfiguration';
 
 interface PipelineOverviewTabProps {
   sensorData: SensorData[];
@@ -24,11 +25,12 @@ const PipelineOverviewTab: React.FC<PipelineOverviewTabProps> = ({
   tableColumns,
 }) => {
   return (
-    <Card>
-      <Card.Header>
-        <h5>📊 Pipeline Overview</h5>
-        <small className="text-muted">Real-time view of your data processing pipeline</small>
-      </Card.Header>
+    <>
+      <Card>
+        <Card.Header>
+          <h5>📊 Pipeline Overview</h5>
+          <small className="text-muted">Real-time view of your data processing pipeline</small>
+        </Card.Header>
       <Card.Body>
         <Row className="mb-4">
           <Col md={3}>
@@ -190,6 +192,39 @@ const PipelineOverviewTab: React.FC<PipelineOverviewTabProps> = ({
         </Row>
       </Card.Body>
     </Card>
+    
+    <Row className="mt-4">
+      <Col md={8}>
+        <SchemaConfiguration />
+      </Col>
+      <Col md={4}>
+        <Card>
+          <Card.Header>
+            <h6 className="mb-0">💡 Schema Benefits</h6>
+          </Card.Header>
+          <Card.Body>
+            <div className="small">
+              <h6 className="small">Union Schema Benefits:</h6>
+              <ul style={{ fontSize: '0.8rem' }}>
+                <li>Store any sensor data format</li>
+                <li>Schema evolution without breaking changes</li>
+                <li>Preserve raw data + typed normalized values</li>
+                <li>Ingestion-specific normalization rules</li>
+              </ul>
+              
+              <h6 className="small mt-3">Legacy Schema Benefits:</h6>
+              <ul style={{ fontSize: '0.8rem' }}>
+                <li>Simple column-based structure</li>
+                <li>Direct SQL queries</li>
+                <li>Backward compatible</li>
+                <li>Predictable performance</li>
+              </ul>
+            </div>
+          </Card.Body>
+        </Card>
+      </Col>
+    </Row>
+    </>
   );
 };
 
