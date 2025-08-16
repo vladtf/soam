@@ -69,10 +69,10 @@ async def get_system_config(spark_manager: SparkManagerDep) -> Dict[str, Any]:
             },
             "storage": {
                 "minio_bucket": spark_manager.minio_bucket,
-                "bronze_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.BRONZE_PATH}/",  # Updated to bronze layer
-                "silver_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.SILVER_PATH}/",
+                "bronze_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.BRONZE_PATH}/",
                 "enriched_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.ENRICHED_PATH}/",
-                "alerts_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.ALERT_PATH}/"
+                "gold_temp_avg_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_PATH}/",
+                "gold_alerts_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.GOLD_ALERTS_PATH}/"
             },
             "spark": {
                 "status": spark_status.get("status", "unknown"),

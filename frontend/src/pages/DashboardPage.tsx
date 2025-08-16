@@ -198,7 +198,7 @@ const DashboardPage: React.FC = () => {
       {/* Temperature Chart */}
       <Row className="g-3 mt-1">
         <Col md={12}>
-          <EnrichmentStatusCard minutes={10} />
+          <EnrichmentStatusCard minutes={1} />
         </Col>
       </Row>
 

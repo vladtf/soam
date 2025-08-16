@@ -83,11 +83,11 @@ const EnrichmentStatusCard: React.FC<Props> = ({ minutes = 10 }) => {
                 </ListGroup>
               </div>
               <div>
-                <div className="fw-semibold mb-1">Silver (avg) (last {minutes}m)</div>
+                <div className="fw-semibold mb-1">Gold (avg) (last {minutes}m)</div>
                 <ListGroup variant="flush" className="small">
-                  <ListGroup.Item className="px-0">Exists: {summary.silver?.exists ? 'yes' : 'no'}</ListGroup.Item>
-                  <ListGroup.Item className="px-0">Rows: {summary.silver?.recent_rows || 0}</ListGroup.Item>
-                  <ListGroup.Item className="px-0">Sensors: {summary.silver?.recent_sensors || 0}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Exists: {summary.gold?.exists ? 'yes' : 'no'}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Rows: {summary.gold?.recent_rows || 0}</ListGroup.Item>
+                  <ListGroup.Item className="px-0">Sensors: {summary.gold?.recent_sensors || 0}</ListGroup.Item>
                 </ListGroup>
               </div>
             </div>

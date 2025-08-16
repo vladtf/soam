@@ -18,7 +18,7 @@ interface ComputationsSectionProps {
 
 const emptyComputation: ComputationDef = {
   name: '',
-  dataset: 'silver',
+  dataset: 'gold',
   definition: {},
   description: '',
   enabled: true,
@@ -235,8 +235,9 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                     value={form.dataset}
                     onChange={(e) => setForm({ ...form, dataset: e.target.value as any })}
                   >
+                    <option value="gold">Gold (Enriched)</option>
                     <option value="silver">Silver (Enriched)</option>
-                    <option value="sensors">Sensors (Raw)</option>
+                    <option value="bronze">Bronze (Raw)</option>
                   </Form.Control>
                 </Form.Group>
               </Col>

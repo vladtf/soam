@@ -28,10 +28,11 @@ class StreamingManager:
 
         # Build paths
         self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}/"
-        self.silver_path = f"s3a://{minio_bucket}/{SparkConfig.SILVER_PATH}/"
-        self.alerts_path = f"s3a://{minio_bucket}/{SparkConfig.ALERT_PATH}/"
-        # New: enriched target path
+        # Silver layer paths
         self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}/"
+        # Gold layer paths
+        self.gold_temp_avg_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_PATH}/"
+        self.gold_alerts_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_ALERTS_PATH}/"
 
         # Streaming queries
         self.avg_query: Optional[StreamingQuery] = None
@@ -180,9 +181,9 @@ class StreamingManager:
             )
         )
 
-        # Ensure target Delta table exists
+        # Ensure target Delta table exists in gold layer
         try:
-            spark.read.format("delta").load(self.silver_path).limit(0)
+            spark.read.format("delta").load(self.gold_temp_avg_path).limit(0)
         except Exception:
             from pyspark.sql import types as T
             empty_schema = T.StructType([
@@ -196,15 +197,15 @@ class StreamingManager:
                 .format("delta")
                 .mode("ignore")
                 .option("overwriteSchema", "true")
-                .save(self.silver_path)
+                .save(self.gold_temp_avg_path)
             )
 
-        # Write to Delta table
+        # Write to Delta table in gold layer
         self.avg_query = (
             five_min_avg.writeStream
             .format("delta")
-            .option("path", self.silver_path)
-            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.FIVE_MIN_AVG_CHECKPOINT}_union")
+            .option("path", self.gold_temp_avg_path)
+            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_CHECKPOINT}_union")
             .option("mergeSchema", "true")
             .outputMode("complete")
             .queryName(self.AVG_QUERY_NAME)
@@ -256,116 +257,12 @@ class StreamingManager:
             .select("sensorId", "temperature", "event_time", "alert_type")
         )
 
-        # Write to Delta table
+        # Write to Delta table in gold layer
         self.alert_query = (
             alerts.writeStream
             .format("delta")
-            .option("path", self.alerts_path)
-            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.ALERT_STREAM_CHECKPOINT}_union")
-            .option("mergeSchema", "true")
-            .outputMode("append")
-            .queryName(self.ALERT_QUERY_NAME)
-            .trigger(processingTime=SparkConfig.ALERT_STREAM_TRIGGER)
-            .start()
-        )
-
-    def start_temperature_stream_legacy(self) -> None:
-        """Start the temperature averaging stream (5-minute windows) from enriched data (legacy schema)."""
-        spark = self.session_manager.spark
-
-        # Read streaming data from enriched silver delta (skip if not ready)
-        try:
-            enriched_stream = (
-                spark.readStream
-                .format("delta")
-                .load(self.enriched_path)
-            )
-        except Exception as e:
-            logger.info("Enriched delta not available yet, skipping temperature stream start: %s", e)
-            return
-
-        # Ensure target Delta table exists with schema to prevent DELTA_SCHEMA_NOT_SET
-        try:
-            spark.read.format("delta").load(self.silver_path).limit(0)
-        except Exception:
-            from pyspark.sql import types as T
-            empty_schema = T.StructType([
-                T.StructField("sensorId", T.StringType()),
-                T.StructField("time_start", T.TimestampType()),
-                T.StructField("avg_temp", T.DoubleType()),
-            ])
-            empty_df = spark.createDataFrame([], empty_schema)
-            (
-                empty_df.write
-                .format("delta")
-                .mode("ignore")
-                .option("overwriteSchema", "true")
-                .save(self.silver_path)
-            )
-
-        # Calculate sliding window averages based on event_time; ignore rows without temperature
-        five_min_avg = (
-            enriched_stream
-            .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
-            .withWatermark("event_time", SparkConfig.WATERMARK_DELAY)
-            .groupBy(
-                F.window("event_time", SparkConfig.AVG_WINDOW, SparkConfig.AVG_SLIDE).alias("time_window"),
-                "sensorId"
-            )
-            .agg(F.round(F.avg("temperature"), 2).alias("avg_temp"))
-            .selectExpr(
-                "sensorId",
-                "time_window.start as time_start",
-                "avg_temp"
-            )
-        )
-
-        # Write to Delta table
-        self.avg_query = (
-            five_min_avg.writeStream
-            .format("delta")
-            .option("path", self.silver_path)
-            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.FIVE_MIN_AVG_CHECKPOINT}")
-            .option("mergeSchema", "true")
-            .outputMode("complete")
-            .queryName(self.AVG_QUERY_NAME)
-            .trigger(processingTime=SparkConfig.TEMPERATURE_STREAM_TRIGGER)
-            .start()
-        )
-
-    def start_alert_stream_legacy(self) -> None:
-        """Start the temperature alert stream from enriched data (legacy schema)."""
-        spark = self.session_manager.spark
-
-        # Read streaming data from enriched silver delta
-        try:
-            enriched_stream = (
-                spark.readStream
-                .format("delta")
-                .load(self.enriched_path)
-            )
-        except Exception as e:
-            logger.info("Enriched delta not available yet, skipping alert stream start: %s", e)
-            return
-
-        # Filter for temperature alerts and deduplicate
-        alerts = (
-            enriched_stream
-            .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
-            .filter(F.col("temperature") > SparkConfig.TEMP_THRESHOLD)
-            .withColumn("alert_type", F.lit("TEMP_OVER_LIMIT"))
-            .withColumn("alert_id", F.concat(F.col("sensorId"), F.lit("_"), F.col("event_time")))
-            .withColumn("alert_time", F.current_timestamp())
-            .dropDuplicates(["sensorId"])  # keep latest per sensor
-            .select("sensorId", "temperature", "event_time", "alert_type")
-        )
-
-        # Write to Delta table
-        self.alert_query = (
-            alerts.writeStream
-            .format("delta")
-            .option("path", self.alerts_path)
-            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.ALERT_STREAM_CHECKPOINT}")
+            .option("path", self.gold_alerts_path)
+            .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.GOLD_ALERT_CHECKPOINT}_union")
             .option("mergeSchema", "true")
             .outputMode("append")
             .queryName(self.ALERT_QUERY_NAME)

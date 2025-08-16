@@ -91,10 +91,12 @@ def _detect_available_sources(config: ConfigDep, client: MinioClientDep) -> list
     from src.spark.config import SparkConfig
     sources: list[str] = []
     try:
-        if _has_any_objects(client, config.minio_bucket, SparkConfig.SILVER_PATH):
-            sources.append("silver")
-        if _has_any_objects(client, config.minio_bucket, SparkConfig.ALERT_PATH):
-            sources.append("alerts")
+        if _has_any_objects(client, config.minio_bucket, SparkConfig.GOLD_TEMP_AVG_PATH):
+            sources.append("gold_temp_avg")
+        if _has_any_objects(client, config.minio_bucket, SparkConfig.GOLD_ALERTS_PATH):
+            sources.append("gold_alerts")
+        if _has_any_objects(client, config.minio_bucket, SparkConfig.ENRICHED_PATH):
+            sources.append("enriched")
         if _has_any_objects(client, config.minio_bucket, SparkConfig.BRONZE_PATH):
             sources.append("bronze")
     except Exception:
@@ -139,13 +141,16 @@ def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager =
 
     for src in sources:
         try:
-            if src == "silver":
-                path = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.SILVER_PATH}"
+            if src == "gold_temp_avg":
+                path = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_PATH}"
                 df = session.spark.read.format("delta").load(path)
-            elif src == "alerts":
-                path = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.ALERT_PATH}"
+            elif src == "gold_alerts":
+                path = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.GOLD_ALERTS_PATH}"
                 df = session.spark.read.format("delta").load(path)
-            else:  # sensors
+            elif src == "enriched":
+                path = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.ENRICHED_PATH}"
+                df = session.spark.read.format("delta").load(path)
+            else:  # bronze
                 base = f"s3a://{spark.streaming_manager.minio_bucket}/{SparkConfig.BRONZE_PATH}"
                 # Use partitioned pattern if present; fallback to base path
                 try:
@@ -262,11 +267,14 @@ def _execute_definition(defn: Dict[str, Any], dataset: str, spark: SparkManager)
 
     bucket = spark.streaming_manager.minio_bucket
     from src.spark.config import SparkConfig
-    if dataset == "silver":
-        path = f"s3a://{bucket}/{SparkConfig.SILVER_PATH}"
+    if dataset == "gold_temp_avg":
+        path = f"s3a://{bucket}/{SparkConfig.GOLD_TEMP_AVG_PATH}"
         df = session.spark.read.format("delta").load(path)
-    elif dataset == "alerts":
-        path = f"s3a://{bucket}/{SparkConfig.ALERT_PATH}"
+    elif dataset == "gold_alerts":
+        path = f"s3a://{bucket}/{SparkConfig.GOLD_ALERTS_PATH}"
+        df = session.spark.read.format("delta").load(path)
+    elif dataset == "enriched":
+        path = f"s3a://{bucket}/{SparkConfig.ENRICHED_PATH}"
         df = session.spark.read.format("delta").load(path)
     else:
         base = f"s3a://{bucket}/{SparkConfig.BRONZE_PATH}"

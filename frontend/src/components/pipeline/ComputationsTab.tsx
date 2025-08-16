@@ -38,7 +38,7 @@ const ComputationsTab: React.FC<ComputationsTabProps> = ({
           <Card.Body style={{ maxHeight: '500px', overflowY: 'auto' }}>
             <div className="mb-3">
               <h6 className="small">Data Sources:</h6>
-              <Badge bg="info" className="me-1">Silver Dataset</Badge>
+              <Badge bg="info" className="me-1">Gold Dataset</Badge>
               <Badge bg="secondary" className="me-1">Sensors Dataset</Badge>
             </div>
             

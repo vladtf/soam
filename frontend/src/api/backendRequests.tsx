@@ -99,7 +99,7 @@ export interface EnrichmentSummary {
     sample_sensors: string[];
     matched_sensors: number;
   };
-  silver: {
+  gold: {
     exists: boolean;
     recent_rows: number;
     recent_sensors: number;
@@ -424,7 +424,7 @@ export interface ComputationDef {
   id?: number;
   name: string;
   description?: string;
-  dataset: string; // 'silver' | 'alerts' | 'sensors'
+  dataset: string; // 'gold' | 'silver' | 'bronze'
   definition: Record<string, unknown>;
   enabled?: boolean;
   created_at?: string;
@@ -610,9 +610,9 @@ export interface SystemConfig {
   storage: {
     minio_bucket: string;
     bronze_path: string;
-    silver_path: string;
     enriched_path: string;
-    alerts_path: string;
+    gold_temp_avg_path: string;
+    gold_alerts_path: string;
   };
   spark: {
     status: string;

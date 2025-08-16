@@ -10,17 +10,22 @@ class SparkConfig:
     TEMP_THRESHOLD = 30.0  # °C - Temperature threshold for alerts
 
     # Storage paths (relative to bucket) - using medallion architecture
-    ALERT_PATH = "silver/temperature_alerts"
-    SILVER_PATH = "silver/five_min_avg"
+    # Bronze: Raw data from ingestor
     BRONZE_PATH = "bronze"
-    # New: enriched data written by backend enrichment stream
+    
+    # Silver: Enriched/processed data
     ENRICHED_PATH = "silver/enriched"
+    
+    # Gold: Final aggregations and computed metrics
+    GOLD_TEMP_AVG_PATH = "gold/temperature_averages"
+    GOLD_ALERTS_PATH = "gold/temperature_alerts"
 
     # Checkpoint paths
     CHECKPOINT_BASE = "_ckpt"
-    FIVE_MIN_AVG_CHECKPOINT = f"{CHECKPOINT_BASE}/five_min_avg"
-    ALERT_STREAM_CHECKPOINT = f"{CHECKPOINT_BASE}/alert_stream"
-    # New: enrichment checkpoint
+    # Gold layer checkpoints
+    GOLD_TEMP_AVG_CHECKPOINT = f"{CHECKPOINT_BASE}/gold_temp_avg"
+    GOLD_ALERT_CHECKPOINT = f"{CHECKPOINT_BASE}/gold_alerts"
+    # Silver layer checkpoints
     ENRICH_STREAM_CHECKPOINT = f"{CHECKPOINT_BASE}/enrich_stream"
 
     # Stream processing settings (tuned for faster feedback)

@@ -122,9 +122,9 @@ const SchemaConfiguration: React.FC<SchemaConfigurationProps> = ({ className }) 
               <h6 className="small mb-1">Storage Paths:</h6>
               <div className="text-muted" style={{ fontSize: '0.75rem' }}>
                 <div>📁 Raw: bronze/</div>
-                <div>🪙 Silver: silver/five_min_avg</div>
-                <div>✨ Enriched: silver/enriched</div>
-                <div>🚨 Alerts: silver/temperature_alerts</div>
+                <div>🪙 Gold: gold/five_min_avg</div>
+                <div>✨ Enriched: gold/enriched</div>
+                <div>🚨 Alerts: gold/temperature_alerts</div>
               </div>
             </Col>
             <Col md={6}>

@@ -13,7 +13,7 @@ interface FieldDiagnosticResult {
   raw_data_analysis: any;
   normalization_analysis: any;
   enrichment_analysis: any;
-  silver_analysis: any;
+  gold_analysis: any;
   recommendations: string[];
 }
 
@@ -516,20 +516,20 @@ const DataTroubleshootingTool: React.FC = () => {
                   </Accordion.Body>
                 </Accordion.Item>
 
-                {/* Silver Analysis */}
+                {/* Gold Analysis */}
                 <Accordion.Item eventKey="3">
                   <Accordion.Header>
-                    🥈 Silver Layer Analysis
-                    <Badge bg={diagnosticResult.silver_analysis.found_in_silver ? 'success' : 'warning'} className="ms-2">
-                      {diagnosticResult.silver_analysis.found_in_silver ? 'Found' : 'Missing'}
+                    🥈 Gold Layer Analysis
+                    <Badge bg={diagnosticResult.gold_analysis.found_in_gold ? 'success' : 'warning'} className="ms-2">
+                      {diagnosticResult.gold_analysis.found_in_gold ? 'Found' : 'Missing'}
                     </Badge>
                   </Accordion.Header>
                   <Accordion.Body>
-                    {diagnosticResult.silver_analysis.found_in_silver ? (
+                    {diagnosticResult.gold_analysis.found_in_gold ? (
                       <>
-                        <p><strong>Records:</strong> {diagnosticResult.silver_analysis.record_count}</p>
-                        
-                        {Object.keys(diagnosticResult.silver_analysis.field_aggregations || {}).length > 0 && (
+                        <p><strong>Records:</strong> {diagnosticResult.gold_analysis.record_count}</p>
+
+                        {Object.keys(diagnosticResult.gold_analysis.field_aggregations || {}).length > 0 && (
                           <div className="mt-3">
                             <strong>Field Statistics:</strong>
                             <Table size="sm" className="mt-2">
@@ -543,7 +543,7 @@ const DataTroubleshootingTool: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {Object.entries(diagnosticResult.silver_analysis.field_aggregations).map(([field, stats], idx) => (
+                                {Object.entries(diagnosticResult.gold_analysis.field_aggregations).map(([field, stats], idx) => (
                                   <tr key={idx}>
                                     <td><code>{field}</code></td>
                                     <td>{(stats as any).count}</td>
@@ -558,7 +558,7 @@ const DataTroubleshootingTool: React.FC = () => {
                         )}
                       </>
                     ) : (
-                      <Alert variant="info">No aggregated data found in silver layer.</Alert>
+                      <Alert variant="info">No aggregated data found in gold layer.</Alert>
                     )}
                   </Accordion.Body>
                 </Accordion.Item>

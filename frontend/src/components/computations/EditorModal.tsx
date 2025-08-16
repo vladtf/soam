@@ -81,7 +81,7 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
             <Form.Group>
               <Form.Label>Dataset</Form.Label>
               <Form.Select
-                value={editing?.dataset ?? 'silver'}
+                value={editing?.dataset ?? 'gold'}
                 onChange={(e) => {
                   const newDs = e.target.value;
                   setEditing((s) => ({ ...(s as ComputationDef), dataset: newDs }));
@@ -93,7 +93,7 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
                   }
                 }}
               >
-                {(sources.length ? sources : ['silver', 'alerts', 'sensors']).map((s) => (
+                {(sources.length ? sources : ['gold', 'alerts', 'bronze']).map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

@@ -26,7 +26,8 @@ class DataTroubleshooter:
         # Build paths
         self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}/"
         self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}/"
-        self.silver_path = f"s3a://{minio_bucket}/{SparkConfig.SILVER_PATH}/"
+        self.gold_temp_avg_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_PATH}/"
+        self.gold_alerts_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_ALERTS_PATH}/"
 
     def diagnose_field_transformation(
         self, 
@@ -467,35 +468,35 @@ class DataTroubleshooter:
             
             # Check if silver path exists
             try:
-                # Read silver data
-                silver_df = (
+                # Read gold temperature averages data
+                gold_df = (
                     spark.read.format("delta")
-                    .load(self.silver_path)
+                    .load(self.gold_temp_avg_path)
                     .filter(
-                        (F.col("window_start") >= time_filter) &
+                        (F.col("time_start") >= time_filter) &
                         (F.col("sensorId") == sensor_id)
                     )
                 )
             except Exception as path_error:
-                logger.warning(f"Silver path not accessible: {path_error}")
+                logger.warning(f"Gold path not accessible: {path_error}")
                 analysis["path_error"] = str(path_error)
                 return analysis
             
-            if not silver_df.rdd.isEmpty():
-                analysis["found_in_silver"] = True
-                analysis["record_count"] = silver_df.count()
+            if not gold_df.rdd.isEmpty():
+                analysis["found_in_gold"] = True
+                analysis["record_count"] = gold_df.count()
                 
                 # Look for aggregated field values
-                silver_columns = silver_df.columns
-                field_columns = [col for col in silver_columns if field_name.lower() in col.lower()]
+                gold_columns = gold_df.columns
+                field_columns = [col for col in gold_columns if field_name.lower() in col.lower()]
                 
                 if field_columns:
-                    sample_data = silver_df.select(["sensorId", "window_start"] + field_columns).limit(10).collect()
+                    sample_data = gold_df.select(["sensorId", "time_start"] + field_columns).limit(10).collect()
                     
                     analysis["aggregated_values"] = [
                         {
                             "sensorId": row.sensorId,
-                            "window_start": str(row.window_start),
+                            "time_start": str(row.time_start),
                             **{col: getattr(row, col) for col in field_columns}
                         }
                         for row in sample_data
@@ -504,7 +505,7 @@ class DataTroubleshooter:
                 # Get field statistics
                 for col in field_columns:
                     try:
-                        stats = silver_df.agg(
+                        stats = gold_df.agg(
                             F.count(col).alias("count"),
                             F.countDistinct(col).alias("distinct_count"),
                             F.min(col).alias("min_val"),
@@ -689,30 +690,30 @@ class DataTroubleshooter:
             except Exception as e:
                 result["pipeline_stages"]["2_enriched_data"] = {"status": "error", "error": str(e)}
             
-            # Stage 3: Silver Data
+            # Stage 3: Gold Data
             try:
-                silver_df = (
+                gold_df = (
                     spark.read.format("delta")
-                    .load(self.silver_path)
+                    .load(self.gold_temp_avg_path)
                     .filter(
-                        (F.col("window_start") >= time_filter) &
+                        (F.col("time_start") >= time_filter) &
                         (F.col("sensorId") == sensor_id)
                     )
                 )
                 
-                if not silver_df.rdd.isEmpty():
-                    sample_silver = silver_df.limit(3).collect()
-                    result["pipeline_stages"]["3_silver_data"] = {
+                if not gold_df.rdd.isEmpty():
+                    sample_gold = gold_df.limit(3).collect()
+                    result["pipeline_stages"]["3_gold_data"] = {
                         "status": "found",
-                        "record_count": silver_df.count(),
-                        "columns": silver_df.columns,
-                        "sample_records": [dict(row.asDict()) for row in sample_silver]
+                        "record_count": gold_df.count(),
+                        "columns": gold_df.columns,
+                        "sample_records": [dict(row.asDict()) for row in sample_gold]
                     }
                 else:
-                    result["pipeline_stages"]["3_silver_data"] = {"status": "no_data"}
+                    result["pipeline_stages"]["3_gold_data"] = {"status": "no_data"}
                     
             except Exception as e:
-                result["pipeline_stages"]["3_silver_data"] = {"status": "error", "error": str(e)}
+                result["pipeline_stages"]["3_gold_data"] = {"status": "error", "error": str(e)}
             
             result["status"] = "success"
             
