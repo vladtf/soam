@@ -36,6 +36,10 @@ class NormalizationRule(Base):
     enabled = Column(Boolean, nullable=False, default=True)
     applied_count = Column(Integer, nullable=False, server_default="0")
     last_applied_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Ownership and audit fields
+    created_by = Column(String(255), nullable=False)  # User who created the rule
+    updated_by = Column(String(255), nullable=True)   # User who last updated the rule
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -48,6 +52,8 @@ class NormalizationRule(Base):
             "enabled": self.enabled,
             "applied_count": getattr(self, "applied_count", 0),
             "last_applied_at": self.last_applied_at.isoformat() if getattr(self, "last_applied_at", None) else None,
+            "created_by": self.created_by,
+            "updated_by": self.updated_by,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

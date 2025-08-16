@@ -7,6 +7,7 @@ import {
   deleteNormalizationRule,
   SensorData,
 } from '../../api/backendRequests';
+import { useAuth } from '../../context/AuthContext';
 
 interface NormalizationRulesSectionProps {
   rules: NormalizationRule[];
@@ -25,16 +26,18 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
   onRulesChange,
   sampleData = [],
 }) => {
+  const { username } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [errors, setErrors] = useState<{ ingestion_id?: string; raw_key?: string; canonical_key?: string }>({});
+  const [errors, setErrors] = useState<{ ingestion_id?: string; raw_key?: string; canonical_key?: string; username?: string }>({});
 
   const validateForm = () => {
     const newErrors: typeof errors = {};
     if (!form.ingestion_id.trim()) newErrors.ingestion_id = 'Ingestion ID is required';
     if (!form.raw_key.trim()) newErrors.raw_key = 'Raw key is required';
     if (!form.canonical_key.trim()) newErrors.canonical_key = 'Canonical key is required';
+    if (!username || !username.trim()) newErrors.username = 'User authentication required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -49,6 +52,7 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
           ingestion_id: form.ingestion_id.trim(),
           canonical_key: form.canonical_key.trim(),
           enabled: form.enabled,
+          updated_by: username,
         });
       } else {
         await createNormalizationRule({
@@ -56,6 +60,7 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
           raw_key: form.raw_key.trim(),
           canonical_key: form.canonical_key.trim(),
           enabled: form.enabled,
+          created_by: username,
         });
       }
       setShowModal(false);
@@ -126,6 +131,8 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
                   <th>Canonical Key</th>
                   <th>Status</th>
                   <th>Applied</th>
+                  <th>Created By</th>
+                  <th>Last Updated</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -143,6 +150,20 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
                       </Badge>
                     </td>
                     <td>{rule.applied_count || 0}x</td>
+                    <td>
+                      <Badge bg="info" className="text-dark">
+                        {rule.created_by}
+                      </Badge>
+                      {rule.updated_by && rule.updated_by !== rule.created_by && (
+                        <div className="small text-muted mt-1">
+                          Updated by: {rule.updated_by}
+                        </div>
+                      )}
+                    </td>
+                    <td className="small text-muted">
+                      {rule.updated_at ? new Date(rule.updated_at).toLocaleString() : 
+                       rule.created_at ? new Date(rule.created_at).toLocaleString() : '-'}
+                    </td>
                     <td>
                       <Button
                         variant="outline-primary"

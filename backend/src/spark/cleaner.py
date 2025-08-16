@@ -225,6 +225,7 @@ class DataCleaner:
                             raw_key=rk,
                             canonical_key=canonical_key,
                             enabled=True,
+                            created_by="system",  # System-created seed rules
                         )
                     )
                     inserted += 1

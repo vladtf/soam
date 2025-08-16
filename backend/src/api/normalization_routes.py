@@ -27,11 +27,14 @@ def list_rules(db: Session = Depends(get_db)):
         return [
             NormalizationRuleResponse(
                 id=r.id,
+                ingestion_id=r.ingestion_id,
                 raw_key=r.raw_key,
                 canonical_key=r.canonical_key,
                 enabled=r.enabled,
                 applied_count=getattr(r, "applied_count", 0),
                 last_applied_at=r.last_applied_at.isoformat() if getattr(r, "last_applied_at", None) else None,
+                created_by=getattr(r, "created_by", "unknown"),
+                updated_by=getattr(r, "updated_by", None),
                 created_at=r.created_at.isoformat() if r.created_at else None,
                 updated_at=r.updated_at.isoformat() if r.updated_at else None,
             )
@@ -46,24 +49,32 @@ def list_rules(db: Session = Depends(get_db)):
 def create_rule(payload: NormalizationRuleCreate, db: Session = Depends(get_db)):
     try:
         rule = NormalizationRule(
+            ingestion_id=payload.ingestion_id,
             raw_key=payload.raw_key.strip().lower(),
             canonical_key=payload.canonical_key.strip(),
             enabled=payload.enabled,
+            created_by=payload.created_by.strip(),
         )
         db.add(rule)
         db.commit()
         db.refresh(rule)
-        logger.info("Normalization rule created: %s -> %s", rule.raw_key, rule.canonical_key)
+        logger.info("Normalization rule created by '%s': %s -> %s", 
+                   payload.created_by, rule.raw_key, rule.canonical_key)
         return NormalizationRuleResponse(
             id=rule.id,
+            ingestion_id=rule.ingestion_id,
             raw_key=rule.raw_key,
             canonical_key=rule.canonical_key,
             enabled=rule.enabled,
             applied_count=getattr(rule, "applied_count", 0),
             last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
+            created_by=rule.created_by,
+            updated_by=rule.updated_by,
             created_at=rule.created_at.isoformat() if rule.created_at else None,
             updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error("Error creating normalization rule: %s", e)
@@ -77,21 +88,36 @@ def update_rule(rule_id: int, payload: NormalizationRuleUpdate, db: Session = De
         if not rule:
             raise HTTPException(status_code=404, detail="Rule not found")
 
-        if payload.canonical_key is not None:
+        rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
+        if payload.canonical_key is not None and payload.canonical_key.strip() != rule.canonical_key:
+            changes.append(f"canonical_key: '{rule.canonical_key}' -> '{payload.canonical_key.strip()}'")
             rule.canonical_key = payload.canonical_key.strip()
-        if payload.enabled is not None:
+        if payload.enabled is not None and payload.enabled != rule.enabled:
+            changes.append(f"enabled: {rule.enabled} -> {payload.enabled}")
             rule.enabled = payload.enabled
 
+        rule.updated_by = payload.updated_by.strip()
+        
         db.commit()
         db.refresh(rule)
-        logger.info("Normalization rule updated: id=%d", rule.id)
+        
+        if changes:
+            logger.info("Normalization rule %d updated by '%s': %s", 
+                       rule.id, payload.updated_by, "; ".join(changes))
+        else:
+            logger.info("Normalization rule %d touched by '%s' (no changes)", 
+                       rule.id, payload.updated_by)
+        
         return NormalizationRuleResponse(
             id=rule.id,
+            ingestion_id=rule.ingestion_id,
             raw_key=rule.raw_key,
             canonical_key=rule.canonical_key,
             enabled=rule.enabled,
             applied_count=getattr(rule, "applied_count", 0),
             last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
+            created_by=rule.created_by,
+            updated_by=rule.updated_by,
             created_at=rule.created_at.isoformat() if rule.created_at else None,
             updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
         )

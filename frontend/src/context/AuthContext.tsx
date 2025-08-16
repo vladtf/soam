@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 type AuthContextValue = {
-  username: string | null;
+  username: string;
   login: (name: string) => void;
   logout: () => void;
 };
@@ -10,6 +10,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const STORAGE_KEY = 'username';
 const MAX_LEN = 40;
+const DEFAULT_USERNAME = 'guest'; // Default username when none is set
 const allowed = /^[A-Za-z0-9._-]{1,40}$/;
 
 function sanitize(name: string): string | null {
@@ -42,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = useMemo(
     () => ({
-      username,
+      username: username || DEFAULT_USERNAME, // Use default when username is null
       login: (name: string) => {
         const clean = sanitize(name);
         if (!clean) return;

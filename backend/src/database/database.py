@@ -77,3 +77,41 @@ def ensure_rule_metrics_columns():
     except Exception:
         # Non-fatal; table might not exist yet or DB may not support ALTER
         pass
+
+
+def ensure_rule_ownership_columns():
+    """Ensure created_by and updated_by columns exist on normalization_rules.
+    
+    This is a lightweight, idempotent migration for adding ownership tracking.
+    """
+    try:
+        dialect = engine.url.get_backend_name()
+        with engine.connect() as conn:
+            if 'sqlite' in dialect:
+                rows = conn.exec_driver_sql("PRAGMA table_info('normalization_rules')").fetchall()
+                existing = {row[1] for row in rows}  # name is at index 1
+                if 'created_by' not in existing:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN created_by VARCHAR(255) NOT NULL DEFAULT 'system'"
+                    )
+                if 'updated_by' not in existing:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN updated_by VARCHAR(255) NULL"
+                    )
+            else:
+                # Best-effort for other DBs
+                try:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN created_by VARCHAR(255) NOT NULL DEFAULT 'system'"
+                    )
+                except Exception:
+                    pass
+                try:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE normalization_rules ADD COLUMN updated_by VARCHAR(255) NULL"
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        # Non-fatal; table might not exist yet or DB may not support ALTER
+        pass

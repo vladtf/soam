@@ -367,6 +367,8 @@ export interface NormalizationRule {
   enabled: boolean;
   applied_count?: number;
   last_applied_at?: string | null;
+  created_by: string;
+  updated_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -376,12 +378,14 @@ export interface NormalizationRuleCreatePayload {
   raw_key: string;
   canonical_key: string;
   enabled?: boolean;
+  created_by: string;
 }
 
 export interface NormalizationRuleUpdatePayload {
   ingestion_id?: string | null;
   canonical_key?: string;
   enabled?: boolean;
+  updated_by: string;
 }
 
 export const listNormalizationRules = (): Promise<NormalizationRule[]> => {

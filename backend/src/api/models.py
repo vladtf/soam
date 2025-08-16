@@ -114,12 +114,14 @@ class NormalizationRuleCreate(BaseModel):
     raw_key: str = Field(..., description="Incoming raw field/column name")
     canonical_key: str = Field(..., description="Canonical field/column name")
     enabled: bool = Field(default=True)
+    created_by: str = Field(..., description="Username of the user creating this rule")
 
 
 class NormalizationRuleUpdate(BaseModel):
     ingestion_id: Optional[str] = Field(None)
     canonical_key: Optional[str] = Field(None)
     enabled: Optional[bool] = Field(None)
+    updated_by: str = Field(..., description="Username of the user updating this rule")
 
 
 class NormalizationRuleResponse(BaseModel):
@@ -130,6 +132,8 @@ class NormalizationRuleResponse(BaseModel):
     enabled: bool
     applied_count: int | None = 0
     last_applied_at: Optional[str] = None
+    created_by: str
+    updated_by: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
