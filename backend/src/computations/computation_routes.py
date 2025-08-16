@@ -18,13 +18,23 @@ router = APIRouter(prefix="/computations", tags=["computations"])
 
 def _validate_dataset(ds: str) -> str:
     ds = ds.lower()
-    if ds not in {"silver", "alerts", "sensors"}:
-        raise HTTPException(status_code=400, detail="Invalid dataset. Use silver | alerts | sensors")
+    allowed_datasets = {"bronze", "silver", "gold"}
+    if ds not in allowed_datasets:
+        raise HTTPException(status_code=400, detail=f"Invalid dataset. Use {', '.join(allowed_datasets)}")
     return ds
 
 
-# Example definitions to guide frontend users (datasets are validated separately)
+def _validate_username(username: str) -> str:
+    import re
+    username = username.strip()
+    if not (3 <= len(username) <= 32):
+        raise HTTPException(status_code=400, detail="Username must be 3-32 characters long")
+    if not re.match(r"^[A-Za-z0-9_.-]+$", username):
+        raise HTTPException(status_code=400, detail="Username contains invalid characters")
+    return username
 
+
+# Example definitions to guide frontend users (datasets are validated separately)
 EXAMPLE_DEFINITIONS: list[dict[str, Any]] = [
     {
         "id": "hot-temps",
@@ -181,7 +191,18 @@ def list_computations(db: Session = Depends(get_db)):
 
 @router.post("/", response_model=ComputationResponse)
 def create_computation(payload: ComputationCreate, db: Session = Depends(get_db)):
+    # Validate user is provided
+    if not payload.created_by or not payload.created_by.strip():
+        raise HTTPException(status_code=400, detail="User information required (created_by)")
+
     _ = _validate_dataset(payload.dataset)
+
+    payload.created_by = _validate_username(payload.created_by)
+    # Additional sanitization to prevent SQL injection or unsafe characters
+    import re
+    if re.search(r"[;'\"]|--|\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b", payload.created_by, re.IGNORECASE):
+        raise HTTPException(status_code=400, detail="Username contains unsafe characters or SQL keywords")
+
     # Unique name check
     if db.query(Computation).filter(Computation.name == payload.name).first():
         raise HTTPException(status_code=409, detail="Computation name already exists")
@@ -191,29 +212,60 @@ def create_computation(payload: ComputationCreate, db: Session = Depends(get_db)
         dataset=payload.dataset.lower(),
         definition=json.dumps(payload.definition),
         enabled=payload.enabled,
+        created_by=payload.created_by.strip(),
     )
     db.add(row)
     db.commit()
     db.refresh(row)
+    logger.info("Computation created by '%s': %s (%s)",
+                payload.created_by, row.name, row.dataset)
     return ComputationResponse(**row.to_dict())
 
 
 @router.patch("/{comp_id}", response_model=ComputationResponse)
 def update_computation(comp_id: int, payload: ComputationUpdate, db: Session = Depends(get_db)):
+    # Validate user is provided
+    if not payload.updated_by or not payload.updated_by.strip():
+        raise HTTPException(status_code=400, detail="User information required (updated_by)")
+
     row = db.get(Computation, comp_id)
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
-    if payload.description is not None:
+
+    changes = []
+    if payload.description is not None and payload.description != row.description:
+        changes.append(f"description: '{row.description or ''}' -> '{payload.description}'")
         row.description = payload.description
-    if payload.dataset is not None:
-        row.dataset = _validate_dataset(payload.dataset)
+    if payload.dataset is not None and payload.dataset != row.dataset:
+        new_dataset = _validate_dataset(payload.dataset)
+        changes.append(f"dataset: '{row.dataset}' -> '{new_dataset}'")
+        row.dataset = new_dataset
     if payload.definition is not None:
-        row.definition = json.dumps(payload.definition)
-    if payload.enabled is not None:
+        import hashlib
+        old_def = json.loads(row.definition) if row.definition else {}
+
+        def _json_hash(obj):
+            return hashlib.md5(json.dumps(obj, sort_keys=True).encode('utf-8')).hexdigest()
+        if _json_hash(payload.definition) != _json_hash(old_def):
+            changes.append("definition updated")
+            row.definition = json.dumps(payload.definition)
+    if payload.enabled is not None and payload.enabled != row.enabled:
+        changes.append(f"enabled: {row.enabled} -> {payload.enabled}")
         row.enabled = payload.enabled
+
+    row.updated_by = payload.updated_by.strip()
+
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    if changes:
+        logger.info("Computation %d updated by '%s': %s",
+                    row.id, payload.updated_by, "; ".join(changes))
+    else:
+        logger.info("Computation %d touched by '%s' (no changes)",
+                    row.id, payload.updated_by)
+
     return ComputationResponse(**row.to_dict())
 
 

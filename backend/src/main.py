@@ -21,7 +21,7 @@ from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_confi
 from src.logging_config import setup_logging
 from src.middleware import RequestIdMiddleware
 from src.spark import spark_routes
-from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns
+from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns, ensure_computation_ownership_columns
 from src.spark.cleaner import DataCleaner
 from src.spark.usage_tracker import NormalizationRuleUsageTracker
 
@@ -68,6 +68,11 @@ async def lifespan(app: FastAPI):
         ensure_rule_ownership_columns()
     except Exception as e:
         logger.warning("Could not ensure normalization rule ownership columns: %s", e)
+
+    try:
+        ensure_computation_ownership_columns()
+    except Exception as e:
+        logger.warning("Could not ensure computation ownership columns: %s", e)
 
     # Seed normalization rules (no-op if already present)
     try:

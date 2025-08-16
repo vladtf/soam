@@ -9,6 +9,7 @@ import {
   fetchComputationExamples,
   ComputationExample,
 } from '../../api/backendRequests';
+import { useAuth } from '../../context/AuthContext';
 
 interface ComputationsSectionProps {
   computations: ComputationDef[];
@@ -29,6 +30,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
   activePartition,
   onComputationsChange,
 }) => {
+  const { username } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<ComputationDef>(emptyComputation);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -52,9 +54,15 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     e.preventDefault();
     try {
       if (editingId) {
-        await updateComputation(editingId, form);
+        await updateComputation(editingId, {
+          ...form,
+          updated_by: username,
+        });
       } else {
-        await createComputation(form);
+        await createComputation({
+          ...form,
+          created_by: username,
+        });
       }
       setShowModal(false);
       setForm(emptyComputation);
@@ -115,6 +123,22 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     });
   };
 
+  // Helper function to render 'Updated by' info
+  const renderUpdatedBy = (comp: ComputationDef) => {
+    if (
+      comp.updated_by &&
+      comp.created_by &&
+      comp.updated_by !== comp.created_by
+    ) {
+      return (
+        <div className="small text-muted mt-1">
+          Updated by: {comp.updated_by}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <>
       <Card>
@@ -145,6 +169,8 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                   <th>Dataset</th>
                   <th>Description</th>
                   <th>Status</th>
+                  <th>Created By</th>
+                  <th>Last Updated</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -162,6 +188,16 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                       <Badge bg={comp.enabled ? 'success' : 'secondary'}>
                         {comp.enabled ? 'Active' : 'Disabled'}
                       </Badge>
+                    </td>
+                    <td>
+                      <Badge bg="info">
+                        {comp.created_by || 'unknown'}
+                      </Badge>
+                      {renderUpdatedBy(comp)}
+                    </td>
+                    <td className="small text-muted">
+                      {comp.updated_at ? new Date(comp.updated_at).toLocaleString() : 
+                       comp.created_at ? new Date(comp.created_at).toLocaleString() : '-'}
                     </td>
                     <td>
                       <Button
@@ -235,9 +271,9 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                     value={form.dataset}
                     onChange={(e) => setForm({ ...form, dataset: e.target.value as any })}
                   >
-                    <option value="gold">Gold (Enriched)</option>
-                    <option value="silver">Silver (Enriched)</option>
-                    <option value="bronze">Bronze (Raw)</option>
+                    <option value="gold">Gold</option>
+                    <option value="silver">Silver</option>
+                    <option value="bronze">Bronze</option>
                   </Form.Control>
                 </Form.Group>
               </Col>

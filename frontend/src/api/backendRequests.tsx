@@ -428,11 +428,13 @@ export interface ComputationDef {
   id?: number;
   name: string;
   description?: string;
-  dataset: string; // 'gold' | 'silver' | 'bronze'
+  dataset: string;
   definition: Record<string, unknown>;
   enabled?: boolean;
   created_at?: string;
   updated_at?: string;
+  created_by?: string;
+  updated_by?: string;
 }
 
 export const listComputations = (): Promise<ComputationDef[]> => {
