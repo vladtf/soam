@@ -575,6 +575,8 @@ export interface Device {
   enabled?: boolean;
   created_at?: string;
   updated_at?: string;
+  created_by?: string;
+  updated_by?: string;
 }
 
 export const listDevices = (): Promise<Device[]> => {
@@ -582,12 +584,21 @@ export const listDevices = (): Promise<Device[]> => {
   return doFetch<Device[]>(`${backendUrl}/devices/`);
 };
 
-export const registerDevice = (payload: { ingestion_id: string; sensor_id?: string; name?: string; description?: string; enabled?: boolean }): Promise<Device> => {
+export const registerDevice = (payload: { ingestion_id: string; sensor_id?: string; name?: string; description?: string; enabled?: boolean; created_by: string }): Promise<Device> => {
   const { backendUrl } = getConfig();
   return doFetch<Device>(`${backendUrl}/devices/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: true, ...payload }),
+  });
+};
+
+export const updateDevice = (id: number, payload: { name?: string; description?: string; enabled?: boolean; updated_by: string }): Promise<Device> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Device>(`${backendUrl}/devices/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 };
 

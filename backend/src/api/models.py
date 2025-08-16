@@ -96,6 +96,13 @@ class DeviceCreate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     enabled: bool = True
+    created_by: str = Field(..., description="User who created this device")
+
+class DeviceUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    enabled: Optional[bool] = None
+    updated_by: str = Field(..., description="User who updated this device")
 
 class DeviceResponse(BaseModel):
     id: int
@@ -105,6 +112,8 @@ class DeviceResponse(BaseModel):
     enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
 # ===============================
 # Normalization Rules
 # ===============================

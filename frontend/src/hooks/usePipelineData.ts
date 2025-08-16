@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useError } from '../context/ErrorContext';
+import { useAuth } from '../context/AuthContext';
 import {
   fetchSensorData,
   SensorData,
@@ -19,6 +20,7 @@ import { reportClientError } from '../errors';
 
 export const usePipelineData = () => {
   const { setError } = useError();
+  const { username } = useAuth();
   
   // Shared state for pipeline data
   const [activePartition, setActivePartition] = useState<string>('');
@@ -120,12 +122,17 @@ export const usePipelineData = () => {
 
   const handleRegisterDevice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username) {
+      setError('You must be authenticated to register a device.');
+      return;
+    }
     try {
       await registerDevice({
         ingestion_id: ingestionId,
         name,
         description,
         enabled: true,
+        created_by: username,
       });
       setIngestionId('');
       setName('');

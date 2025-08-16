@@ -147,6 +147,10 @@ class Device(Base):
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Ownership tracking
+    created_by = Column(String(255), nullable=False)
+    updated_by = Column(String(255), nullable=True)
 
     def to_dict(self):
         return {
@@ -157,6 +161,8 @@ class Device(Base):
             "enabled": self.enabled,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_by": getattr(self, "created_by", "unknown"),
+            "updated_by": getattr(self, "updated_by", None),
         }
 
 

@@ -7,6 +7,10 @@ export interface DeviceRow {
     sensor_id?: string;
     name?: string;
     enabled?: boolean;
+    created_by?: string;
+    updated_by?: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface DevicesTableCardProps {
@@ -14,6 +18,16 @@ export interface DevicesTableCardProps {
     onToggle: (id: number) => void;
     onDelete: (id: number) => void;
 }
+
+const TABLE_COLUMNS = [
+    'ID',
+    'Sensor ID',
+    'Name',
+    'Status',
+    'Created By',
+    'Last Updated',
+    ''
+];
 
 const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, onDelete }) => {
     return (
@@ -26,16 +40,18 @@ const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, 
                     <ThemedTable size="sm" responsive hover className="mb-0">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Sensor ID</th>
-                                <th>Name</th>
-                                <th>Status</th>
-                                <th></th>
+                                {TABLE_COLUMNS.map((col, idx) => (
+                                    <th key={idx}>{col}</th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>
                             {devices.length === 0 ? (
-                                <tr><td colSpan={5} className="text-center text-muted">No devices</td></tr>
+                                <tr>
+                                    <td colSpan={TABLE_COLUMNS.length} className="text-center text-muted">
+                                        No devices
+                                    </td>
+                                </tr>
                             ) : devices.map(d => (
                                 <tr key={d.id}>
                                     <td>{d.id}</td>
@@ -43,6 +59,20 @@ const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, 
                                     <td>{d.name || '-'}</td>
                                     <td>
                                         <Badge bg={d.enabled ? 'success' : 'secondary'}>{d.enabled ? 'On' : 'Off'}</Badge>
+                                    </td>
+                                    <td>
+                                        <Badge bg="info" className="text-dark">
+                                            {d.created_by || 'unknown'}
+                                        </Badge>
+                                        {d.updated_by && d.updated_by !== d.created_by && (
+                                            <div className="small text-muted mt-1">
+                                                Updated by: {d.updated_by}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="small text-muted">
+                                        {d.updated_at ? new Date(d.updated_at).toLocaleString() : 
+                                         d.created_at ? new Date(d.created_at).toLocaleString() : '-'}
                                     </td>
                                     <td className="text-end">
                                         <Button size="sm" variant="outline-secondary" className="me-2" onClick={() => d.id && onToggle(d.id)}>Toggle</Button>
