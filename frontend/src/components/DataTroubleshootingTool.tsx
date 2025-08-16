@@ -7,6 +7,60 @@ import { fetchAvailableSensorIds } from '../api/backendRequests';
 const SENSOR_ID_FETCH_LIMIT = 100;
 const SENSOR_ID_FETCH_MINUTES_BACK = 1440;
 
+interface RawDataAnalysis {
+  found_data: boolean;
+  record_count?: number;
+  field_variants_found?: string[];
+  field_values_sample?: Array<{
+    field_variant?: string;
+    field?: string;
+    value: any;
+    type: string;
+    timestamp: string;
+  }>;
+}
+
+interface NormalizationAnalysis {
+  transformation_applied: boolean;
+  field_mapping?: { [raw: string]: string };
+  normalized_values?: Array<{
+    raw_field: string;
+    canonical_field: string;
+    before_values: any[];
+    after_values: any[];
+    values_match: boolean[];
+  }>;
+}
+
+interface EnrichmentAnalysis {
+  found_in_enriched: boolean;
+  record_count?: number;
+  field_in_sensor_data?: boolean;
+  field_in_normalized_data?: boolean;
+  union_schema_analysis?: {
+    field_values_found?: Array<{
+      field_variant?: string;
+      field?: string;
+      value: any;
+      type: string;
+      timestamp: string;
+    }>;
+  };
+}
+
+interface GoldAnalysis {
+  found_in_gold: boolean;
+  record_count?: number;
+  field_aggregations?: {
+    [field: string]: {
+      count: number;
+      min_value: number;
+      max_value: number;
+      avg_value: number;
+    };
+  };
+}
+
 interface FieldDiagnosticResult {
   sensor_id: string;
   field_name: string;
@@ -15,10 +69,10 @@ interface FieldDiagnosticResult {
   timestamp: string;
   status: string;
   error?: string;
-  raw_data_analysis: any;
-  normalization_analysis: any;
-  enrichment_analysis: any;
-  gold_analysis: any;
+  raw_data_analysis?: RawDataAnalysis;
+  normalization_analysis?: NormalizationAnalysis;
+  enrichment_analysis?: EnrichmentAnalysis;
+  gold_analysis?: GoldAnalysis;
   recommendations: string[];
 }
 
@@ -30,7 +84,7 @@ interface PipelineTraceResult {
   error?: string;
   pipeline_stages: {
     [stage: string]: {
-      status: string;
+      const response = await fetchAvailableSensorIds(SENSOR_ID_FETCH_LIMIT, SENSOR_ID_FETCH_MINUTES_BACK); // Last 1440 minutes, max 100 sensors
       record_count?: number;
       columns?: string[];
       sample_records?: any[];
@@ -84,7 +138,7 @@ const DataTroubleshootingTool: React.FC = () => {
     setLoadingSensorIds(true);
     setSensorIdsError(null);
     try {
-      const response = await fetchAvailableSensorIds(SENSOR_ID_FETCH_LIMIT, SENSOR_ID_FETCH_MINUTES_BACK); // Last {SENSOR_ID_FETCH_MINUTES_BACK} minutes, max {SENSOR_ID_FETCH_LIMIT} sensors
+      const response = await fetchAvailableSensorIds(SENSOR_ID_FETCH_LIMIT, SENSOR_ID_FETCH_MINUTES_BACK); // Last SENSOR_ID_FETCH_MINUTES_BACK minutes, max SENSOR_ID_FETCH_LIMIT sensors
       setAvailableSensorIds(response.all_sensors || []);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch sensor IDs';
@@ -514,21 +568,21 @@ const DataTroubleshootingTool: React.FC = () => {
                 <Accordion.Item eventKey="0">
                   <Accordion.Header>
                     🗂️ Raw Data Analysis
-                    <Badge bg={diagnosticResult.raw_data_analysis.found_data ? 'success' : 'warning'} className="ms-2">
-                      {diagnosticResult.raw_data_analysis.found_data ? 'Data Found' : 'No Data'}
+                    <Badge bg={diagnosticResult.raw_data_analysis?.found_data ? 'success' : 'warning'} className="ms-2">
+                      {diagnosticResult.raw_data_analysis?.found_data ? 'Data Found' : 'No Data'}
                     </Badge>
                   </Accordion.Header>
                   <Accordion.Body>
-                    {diagnosticResult.raw_data_analysis.found_data ? (
+                    {diagnosticResult.raw_data_analysis?.found_data ? (
                       <>
-                        <p><strong>Records:</strong> {diagnosticResult.raw_data_analysis.record_count}</p>
+                        <p><strong>Records:</strong> {diagnosticResult.raw_data_analysis?.record_count || 0}</p>
                         <p><strong>Field Variants Found:</strong></p>
-                        {renderFieldVariants(diagnosticResult.raw_data_analysis.field_variants_found || [])}
+                        {renderFieldVariants(diagnosticResult.raw_data_analysis?.field_variants_found || [])}
                         
-                        {diagnosticResult.raw_data_analysis.field_values_sample && (
+                        {diagnosticResult.raw_data_analysis?.field_values_sample && (
                           <div className="mt-3">
                             <strong>Sample Values:</strong>
-                            {renderSampleValues(diagnosticResult.raw_data_analysis.field_values_sample)}
+                            {renderSampleValues(diagnosticResult.raw_data_analysis?.field_values_sample)}
                           </div>
                         )}
                       </>
@@ -542,12 +596,12 @@ const DataTroubleshootingTool: React.FC = () => {
                 <Accordion.Item eventKey="1">
                   <Accordion.Header>
                     ⚙️ Normalization Analysis
-                    <Badge bg={diagnosticResult.normalization_analysis.transformation_applied ? 'success' : 'secondary'} className="ms-2">
-                      {diagnosticResult.normalization_analysis.transformation_applied ? 'Rules Applied' : 'No Rules'}
+                    <Badge bg={diagnosticResult.normalization_analysis?.transformation_applied ? 'success' : 'secondary'} className="ms-2">
+                      {diagnosticResult.normalization_analysis?.transformation_applied ? 'Rules Applied' : 'No Rules'}
                     </Badge>
                   </Accordion.Header>
                   <Accordion.Body>
-                    {Object.keys(diagnosticResult.normalization_analysis.field_mapping || {}).length > 0 ? (
+                    {Object.keys(diagnosticResult.normalization_analysis?.field_mapping || {}).length > 0 ? (
                       <>
                         <strong>Field Mappings:</strong>
                         <Table size="sm" className="mt-2">
@@ -558,7 +612,7 @@ const DataTroubleshootingTool: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {Object.entries(diagnosticResult.normalization_analysis.field_mapping).map(([raw, canonical], idx) => (
+                            {Object.entries(diagnosticResult.normalization_analysis?.field_mapping || {}).map(([raw, canonical], idx) => (
                               <tr key={idx}>
                                 <td><code>{raw}</code></td>
                                 <td><code>{canonical as string}</code></td>
@@ -567,7 +621,7 @@ const DataTroubleshootingTool: React.FC = () => {
                           </tbody>
                         </Table>
 
-                        {diagnosticResult.normalization_analysis.normalized_values && (
+                        {diagnosticResult.normalization_analysis?.normalized_values && (
                           <div className="mt-3">
                             <strong>Normalization Results:</strong>
                             {renderNormalizationValues(diagnosticResult.normalization_analysis.normalized_values)}
@@ -584,31 +638,31 @@ const DataTroubleshootingTool: React.FC = () => {
                 <Accordion.Item eventKey="2">
                   <Accordion.Header>
                     🔗 Enrichment Analysis
-                    <Badge bg={diagnosticResult.enrichment_analysis.found_in_enriched ? 'success' : 'warning'} className="ms-2">
-                      {diagnosticResult.enrichment_analysis.found_in_enriched ? 'Found' : 'Missing'}
+                    <Badge bg={diagnosticResult.enrichment_analysis?.found_in_enriched ? 'success' : 'warning'} className="ms-2">
+                      {diagnosticResult.enrichment_analysis?.found_in_enriched ? 'Found' : 'Missing'}
                     </Badge>
                   </Accordion.Header>
                   <Accordion.Body>
-                    <p><strong>Records in Enriched Layer:</strong> {diagnosticResult.enrichment_analysis.record_count}</p>
+                    <p><strong>Records in Enriched Layer:</strong> {diagnosticResult.enrichment_analysis?.record_count || 0}</p>
                     
                     <Row>
                       <Col md={6}>
                         <p><strong>Field in Sensor Data:</strong> {' '}
-                          <Badge bg={diagnosticResult.enrichment_analysis.field_in_sensor_data ? 'success' : 'danger'}>
-                            {diagnosticResult.enrichment_analysis.field_in_sensor_data ? 'Yes' : 'No'}
+                          <Badge bg={diagnosticResult.enrichment_analysis?.field_in_sensor_data ? 'success' : 'danger'}>
+                            {diagnosticResult.enrichment_analysis?.field_in_sensor_data ? 'Yes' : 'No'}
                           </Badge>
                         </p>
                       </Col>
                       <Col md={6}>
                         <p><strong>Field in Normalized Data:</strong> {' '}
-                          <Badge bg={diagnosticResult.enrichment_analysis.field_in_normalized_data ? 'success' : 'danger'}>
-                            {diagnosticResult.enrichment_analysis.field_in_normalized_data ? 'Yes' : 'No'}
+                          <Badge bg={diagnosticResult.enrichment_analysis?.field_in_normalized_data ? 'success' : 'danger'}>
+                            {diagnosticResult.enrichment_analysis?.field_in_normalized_data ? 'Yes' : 'No'}
                           </Badge>
                         </p>
                       </Col>
                     </Row>
 
-                    {diagnosticResult.enrichment_analysis.union_schema_analysis?.field_values_found && (
+                    {diagnosticResult.enrichment_analysis?.union_schema_analysis?.field_values_found && (
                       <div className="mt-3">
                         <strong>Field Values Found:</strong>
                         {renderSampleValues(diagnosticResult.enrichment_analysis.union_schema_analysis.field_values_found)}
@@ -621,16 +675,16 @@ const DataTroubleshootingTool: React.FC = () => {
                 <Accordion.Item eventKey="3">
                   <Accordion.Header>
                     🥈 Gold Layer Analysis
-                    <Badge bg={diagnosticResult.gold_analysis.found_in_gold ? 'success' : 'warning'} className="ms-2">
-                      {diagnosticResult.gold_analysis.found_in_gold ? 'Found' : 'Missing'}
+                    <Badge bg={diagnosticResult.gold_analysis?.found_in_gold ? 'success' : 'warning'} className="ms-2">
+                      {diagnosticResult.gold_analysis?.found_in_gold ? 'Found' : 'Missing'}
                     </Badge>
                   </Accordion.Header>
                   <Accordion.Body>
-                    {diagnosticResult.gold_analysis.found_in_gold ? (
+                    {diagnosticResult.gold_analysis?.found_in_gold ? (
                       <>
-                        <p><strong>Records:</strong> {diagnosticResult.gold_analysis.record_count}</p>
+                        <p><strong>Records:</strong> {diagnosticResult.gold_analysis?.record_count || 0}</p>
 
-                        {Object.keys(diagnosticResult.gold_analysis.field_aggregations || {}).length > 0 && (
+                        {Object.keys(diagnosticResult.gold_analysis?.field_aggregations || {}).length > 0 && (
                           <div className="mt-3">
                             <strong>Field Statistics:</strong>
                             <Table size="sm" className="mt-2">
@@ -644,7 +698,7 @@ const DataTroubleshootingTool: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {Object.entries(diagnosticResult.gold_analysis.field_aggregations).map(([field, stats], idx) => (
+                                {Object.entries(diagnosticResult.gold_analysis?.field_aggregations || {}).map(([field, stats], idx) => (
                                   <tr key={idx}>
                                     <td><code>{field}</code></td>
                                     <td>{(stats as any).count}</td>

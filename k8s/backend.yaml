@@ -36,7 +36,7 @@ spec:
       containers:
         - name: backend
           image: backend:latest
-          imagePullPolicy: Never  # Use locally built images only
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
             - containerPort: 41397
