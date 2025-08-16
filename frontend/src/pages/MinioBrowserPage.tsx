@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, ListGroup, Button, Breadcrumb, Spinner, Form, Card, InputGroup, Alert, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import PageHeader from '../components/PageHeader';
 import { minioList, minioPreviewParquet, MinioListResponse, ParquetPreview, minioDeleteObjects, minioDeletePrefix } from '../api/backendRequests';
-import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy, FaTable } from 'react-icons/fa';
+import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy, FaTable, FaCode } from 'react-icons/fa';
 import ThemedReactJson from '../components/ThemedReactJson';
 
 const MinioBrowserPage: React.FC = () => {

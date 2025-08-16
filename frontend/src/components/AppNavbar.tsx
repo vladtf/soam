@@ -87,20 +87,27 @@ const AppNavbar: React.FC = () => {
   return (
     <Navbar expand="lg" className="border-bottom border-body bg-body-tertiary">
       <Container>
-        <Navbar.Brand href="/">SOAM</Navbar.Brand>
+        <Navbar.Brand href="/" className="d-flex align-items-center">
+          <img 
+            src="/soam.svg" 
+            alt="SOAM" 
+            style={{ height: '24px', width: '24px', marginRight: '8px' }}
+          />
+          SOAM
+        </Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" />
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
             <Nav.Link href="/dashboard">Dashboard</Nav.Link>
             <Nav.Link href="/pipeline">Data Pipeline</Nav.Link>
             <Nav.Link href="/minio">Data Browser</Nav.Link>
+            <Nav.Link href="/troubleshooting">Troubleshooting</Nav.Link>
             <NavDropdown title="More" id="nav-more">
               <NavDropdown.Item href="/map">Map</NavDropdown.Item>
               <NavDropdown.Item href="/ontology">Ontology</NavDropdown.Item>
               <NavDropdown.Item href="/new-events">New Events</NavDropdown.Item>
               <NavDropdown.Divider />
               <NavDropdown.Item href="/feedback">Feedback</NavDropdown.Item>
-              <NavDropdown.Item href="/troubleshooting">Troubleshooting</NavDropdown.Item>
             </NavDropdown>
           </Nav>
           <Nav className="ms-auto align-items-center gap-2">

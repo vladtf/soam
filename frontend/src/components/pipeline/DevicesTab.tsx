@@ -1,9 +1,10 @@
 import React from 'react';
-import { Row, Col, Card, Badge } from 'react-bootstrap';
+import { Row, Col, Card, Badge, Button } from 'react-bootstrap';
 import { SensorData, Device } from '../../api/backendRequests';
 import RegisterDeviceCard from '../sensor-data/RegisterDeviceCard';
 import DevicesTableCard from '../sensor-data/DevicesTableCard';
-import EnrichmentDiagnosticCard from '../sensor-data/EnrichmentDiagnosticCard';
+import { FaWrench } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 
 interface DevicesTabProps {
   devices: Device[];
@@ -36,6 +37,7 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
   onDelete,
   renderValue,
 }) => {
+  const navigate = useNavigate();
   return (
     <>
       <Row>
@@ -151,9 +153,28 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
         </Col>
       </Row>
       
+      {/* Troubleshooting Tools Link */}
       <Row className="mt-3">
         <Col>
-          <EnrichmentDiagnosticCard />
+          <Card className="shadow-sm border-primary border-opacity-25">
+            <Card.Body className="text-center py-3">
+              <h6 className="mb-2">
+                <FaWrench className="me-2 text-primary" />
+                Need to troubleshoot data pipeline issues?
+              </h6>
+              <p className="text-muted mb-3 small">
+                Access comprehensive diagnostic tools for data enrichment, field-level troubleshooting, and system monitoring.
+              </p>
+              <Button 
+                variant="primary" 
+                size="sm" 
+                onClick={() => navigate('/troubleshooting')}
+              >
+                <FaWrench className="me-1" />
+                Open Troubleshooting Tools
+              </Button>
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
     </>

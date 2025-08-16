@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Table, Badge, Tabs, Tab } from 'react-bootstrap';
+import { Card, Button, Table, Badge, Tabs, Tab, Row, Col } from 'react-bootstrap';
 import { getConfig } from '../config';
 import { flushErrorQueue } from '../errors';
 import { useError } from '../context/ErrorContext';
 import DataTroubleshootingTool from '../components/DataTroubleshootingTool';
 import EnrichmentDiagnosticCard from '../components/sensor-data/EnrichmentDiagnosticCard';
+import EnrichmentStatusCard from '../components/EnrichmentStatusCard';
+import SparkApplicationsCard from '../components/SparkApplicationsCard';
+import ConnectionStatus from '../components/ConnectionStatus';
+import { fetchSparkMasterStatus, SparkMasterStatus } from '../api/backendRequests';
 
 interface ClientErrorRow {
   id: number;
@@ -25,6 +29,9 @@ const TroubleshootingPage: React.FC = () => {
   const { setError } = useError();
   const [rows, setRows] = useState<ClientErrorRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [sparkMasterStatus, setSparkMasterStatus] = useState<SparkMasterStatus | null>(null);
+  const [sparkLoading, setSparkLoading] = useState<boolean>(false);
+  const [lastSparkUpdate, setLastSparkUpdate] = useState<Date | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -40,10 +47,29 @@ const TroubleshootingPage: React.FC = () => {
     }
   };
 
+  const loadSparkStatus = async () => {
+    setSparkLoading(true);
+    try {
+      const status = await fetchSparkMasterStatus();
+      setSparkMasterStatus(status);
+      setLastSparkUpdate(new Date());
+    } catch (e) {
+      console.warn('Failed to load Spark status:', e);
+      // Don't setError here as this is a background operation
+    } finally {
+      setSparkLoading(false);
+    }
+  };
+
   useEffect(() => {
     load();
-    const t = setInterval(load, 20000);
-    return () => clearInterval(t);
+    loadSparkStatus();
+    const errorInterval = setInterval(load, 20000);
+    const sparkInterval = setInterval(loadSparkStatus, 15000);
+    return () => {
+      clearInterval(errorInterval);
+      clearInterval(sparkInterval);
+    };
   }, []);
 
   return (
@@ -68,6 +94,37 @@ const TroubleshootingPage: React.FC = () => {
             <h5 className="mb-3">Field-Level Troubleshooting</h5>
             <DataTroubleshootingTool />
           </div>
+        </Tab>
+
+        <Tab eventKey="system" title="⚡ System Status">
+          <Row className="g-3">
+            <Col md={6}>
+              <div className="mb-4">
+                <h5 className="mb-3">Enrichment Status</h5>
+                <EnrichmentStatusCard minutes={10} autoRefresh={true} />
+              </div>
+            </Col>
+            <Col md={6}>
+              <div className="mb-4">
+                <h5 className="mb-3">Connection Status</h5>
+                <ConnectionStatus />
+              </div>
+            </Col>
+          </Row>
+          
+          <Row className="g-3">
+            <Col xs={12}>
+              <div className="mb-4">
+                <h5 className="mb-3">Spark Applications</h5>
+                <SparkApplicationsCard 
+                  sparkMasterStatus={sparkMasterStatus} 
+                  loading={sparkLoading}
+                  lastUpdated={lastSparkUpdate}
+                  refreshInterval={15000}
+                />
+              </div>
+            </Col>
+          </Row>
         </Tab>
 
         <Tab eventKey="errors" title="🐛 Client Errors">
