@@ -452,7 +452,7 @@ class DataAccessManager:
                 stats["active_rules_count"] = len(active_rules)
                 
                 # Sum up applied counts and calculate averages
-                total_applied = sum(rule.get_applied_count() for rule in active_rules)
+                total_applied = sum(getattr(rule, 'applied_count', 0) for rule in active_rules)
                 stats["total_rules_applied"] = total_applied
                 
                 # Count unique field mappings
@@ -461,7 +461,7 @@ class DataAccessManager:
                 
                 # Calculate rough success rate based on recent usage
                 recent_usage = sum(
-                    rule.get_applied_count()
+                    getattr(rule, 'applied_count', 0)
                     for rule in active_rules
                     if getattr(rule, "last_applied_at", None)
                 )
@@ -526,19 +526,13 @@ class DataAccessManager:
                         if record["normalized_data"]:
                             normalized_fields.update(record["normalized_data"].keys())
                     quality["fields_normalized"] = sorted(list(normalized_fields))
-                
-                for record in sample_normalized:
-                    if record["normalized_data"]:
-                        normalized_fields.update(record["normalized_data"].keys())
-                
-                quality["fields_normalized"] = sorted(list(normalized_fields))
-            
-            # Calculate schema compliance rate
-            total_fields = len(quality["fields_with_data"])
-            normalized_fields_count = len(quality["fields_normalized"])
-            
-            if total_fields > 0:
-                quality["schema_compliance_rate"] = round((normalized_fields_count / total_fields) * 100, 2)
+                # Calculate schema compliance rate
+                normalized_fields_count = len(normalized_fields)
+                total_fields = len(fields_with_data) if fields_with_data else 0
+                if total_fields > 0:
+                    quality["schema_compliance_rate"] = round((normalized_fields_count / total_fields) * 100, 2)
+                else:
+                    quality["schema_compliance_rate"] = None
                 
         except Exception as e:
             logger.warning(f"Error calculating data quality metrics: {e}")
