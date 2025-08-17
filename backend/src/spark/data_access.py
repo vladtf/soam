@@ -491,6 +491,11 @@ class DataAccessManager:
             # Get ingestion ID breakdown
             if "ingestion_id" in enriched_df.columns:
                 ingestion_breakdown = enriched_df.groupBy("ingestion_id").count().collect()
+                quality["ingestion_id_breakdown"] = [
+                    {"ingestion_id": row["ingestion_id"], "count": row["count"]}
+                    for row in ingestion_breakdown
+                ]
+                quality["unique_ingestion_ids"] = len(ingestion_breakdown)
             # Analyze sensor_data and normalized_data fields (fields with actual data)
             fields_with_data = set()
             normalized_fields = set()
