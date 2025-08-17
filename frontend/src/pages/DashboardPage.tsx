@@ -23,12 +23,15 @@ const DashboardPage: React.FC = () => {
   const {
     averageTemperature,
     loading,
+    refreshingTemperature,
     timeRange,
     setTimeRange,
     sparkMasterStatus,
     loadingSparkStatus,
+    refreshingSparkStatus,
     temperatureAlerts,
     loadingAlerts,
+    refreshingAlerts,
     lastUpdated,
     autoRefresh,
     setAutoRefresh,
@@ -164,7 +167,7 @@ const DashboardPage: React.FC = () => {
         title="Dashboard"
         subtitle="Overview of key metrics and cluster status"
         onRefresh={refreshAll}
-        refreshing={loading || loadingSparkStatus || loadingAlerts}
+        refreshing={loading || loadingSparkStatus || loadingAlerts || refreshingTemperature || refreshingSparkStatus || refreshingAlerts}
         autoRefresh={autoRefresh}
         onToggleAutoRefresh={setAutoRefresh}
         lastUpdated={lastUpdated}
@@ -204,6 +207,7 @@ const DashboardPage: React.FC = () => {
           <SparkApplicationsCard
             sparkMasterStatus={sparkMasterStatus}
             loading={loadingSparkStatus}
+            refreshing={refreshingSparkStatus}
             lastUpdated={lastUpdated}
           />
         </Col>
@@ -420,6 +424,7 @@ export default DashboardPage;
 const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onDelete?: () => void; onEdit?: () => void }> = ({ tile, dragEnabled, onDelete, onEdit }) => {
   const [rows, setRows] = useState<unknown[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [tsKey, setTsKey] = useState<number>(0);
   const [cache, setCache] = useState<{ rows: unknown[]; at: number } | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
@@ -430,7 +435,14 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
+    const hasExistingData = rows !== null;
+    
+    if (hasExistingData) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    
     (async () => {
       try {
         const cacheSec = Number((tile.config as any)?.cacheSec ?? 0);
@@ -448,13 +460,19 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
         setLastRefreshed(new Date(now));
       } catch {
         if (!mounted) return;
-        setRows([]);
+        // Don't clear existing data on error if we have it
+        if (!hasExistingData) {
+          setRows([]);
+        }
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     })();
     return () => { mounted = false; };
-  }, [tile.id, tsKey]);
+  }, [tile.id, tsKey, rows]);
 
   // Auto-refresh timer
   useEffect(() => {
@@ -504,7 +522,16 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
       {/* Refresh status info */}
       <div className="small text-body-secondary mb-2 d-flex justify-content-between align-items-center">
         <span>
-          {lastRefreshed ? `Updated ${formatRelativeTime(lastRefreshed)}` : 'Not refreshed yet'}
+          {refreshing ? (
+            <span className="text-primary">
+              <Spinner animation="border" size="sm" className="me-1" />
+              Refreshing...
+            </span>
+          ) : lastRefreshed ? (
+            `Updated ${formatRelativeTime(lastRefreshed)}`
+          ) : (
+            'Not refreshed yet'
+          )}
         </span>
         <span>
           {autoRefreshEnabled ? formatRefreshPeriod(refreshIntervalMs) : 'Manual refresh only'}
@@ -512,7 +539,7 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
       </div>
 
       <div className="flex-grow-1 border rounded p-2 bg-body-tertiary">
-        {loading ? (
+        {loading && rows === null ? (
           <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2" />Loading…</div>
         ) : tile.viz_type === 'timeseries' ? (
           <ResponsiveContainer width="100%" height={Math.max(120, Number((tile.config as any)?.chartHeight ?? 200))}>

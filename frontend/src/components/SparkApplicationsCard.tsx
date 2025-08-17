@@ -9,6 +9,7 @@ import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
 interface SparkApplicationsCardProps {
   sparkMasterStatus: SparkMasterStatus | null;
   loading: boolean;
+  refreshing?: boolean;
   lastUpdated?: Date | null;
   refreshInterval?: number; // in milliseconds
 }
@@ -16,6 +17,7 @@ interface SparkApplicationsCardProps {
 const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({ 
   sparkMasterStatus, 
   loading,
+  refreshing = false,
   lastUpdated,
   refreshInterval = 15000 // default to 15 seconds if not provided
 }) => {
@@ -64,14 +66,22 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
           <FaTasks className="me-2" />
           <strong>Spark Applications & Cluster Status</strong>
         </div>
-        {lastUpdated && (
-          <div className="small">
-            {formatRelativeTime(lastUpdated)} • {formatRefreshPeriod(refreshInterval)}
-          </div>
-        )}
+        <div className="d-flex align-items-center gap-3">
+          {refreshing && (
+            <div className="small text-light">
+              <Spinner animation="border" size="sm" className="me-1" />
+              Refreshing...
+            </div>
+          )}
+          {lastUpdated && (
+            <div className="small">
+              {formatRelativeTime(lastUpdated)} • {formatRefreshPeriod(refreshInterval)}
+            </div>
+          )}
+        </div>
       </Card.Header>
       <Card.Body>
-        {loading ? (
+        {loading && !sparkMasterStatus ? (
           <div className="text-center py-4">
             <span role="status" aria-live="polite" className="d-inline-flex align-items-center">
               <Spinner animation="border" variant="primary" aria-hidden="true" />

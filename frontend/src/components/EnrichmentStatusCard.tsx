@@ -27,14 +27,22 @@ const EnrichmentStatusCard: React.FC<Props> = ({
 }) => {
   const [summary, setSummary] = useState<EnrichmentSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [ingestionBreakdownExpanded, setIngestionBreakdownExpanded] = useState<boolean>(false);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    const hasExistingData = summary !== null;
+    
+    if (hasExistingData) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
+    
     try {
       const s = await fetchEnrichmentSummary(minutes);
       // Transform ingestion_id_breakdown if it's an array
@@ -54,8 +62,10 @@ const EnrichmentStatusCard: React.FC<Props> = ({
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
+      // Don't clear existing data on error if we have it
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [minutes]);
 
@@ -91,6 +101,12 @@ const EnrichmentStatusCard: React.FC<Props> = ({
       <Card.Header className="d-flex justify-content-between align-items-center">
         <span>Enrichment Status</span>
         <div className="d-flex align-items-center gap-2">
+          {refreshing && (
+            <div className="small text-primary">
+              <Spinner animation="border" size="sm" className="me-1" />
+              Refreshing...
+            </div>
+          )}
           {lastRefreshed && (
             <div className="small text-body-secondary">
               {formatRelativeTime(lastRefreshed)} • {autoRefresh ? formatRefreshPeriod(refreshInterval) : 'Manual refresh'}
@@ -101,15 +117,15 @@ const EnrichmentStatusCard: React.FC<Props> = ({
               size="sm"
               variant="outline-secondary"
               onClick={handleManualRefresh}
-              disabled={loading}
+              disabled={loading || refreshing}
             >
-              {loading ? 'Refreshing...' : 'Refresh'}
+              {loading || refreshing ? 'Refreshing...' : 'Refresh'}
             </Button>
           </WithTooltip>
         </div>
       </Card.Header>
       <Card.Body>
-        {loading ? (
+        {loading && summary === null ? (
           <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2" />Loading…</div>
         ) : error ? (
           <div className="text-danger small">{error}</div>

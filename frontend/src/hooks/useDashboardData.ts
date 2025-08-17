@@ -26,14 +26,17 @@ export const useDashboardData = () => {
   // Temperature data state
   const [averageTemperature, setAverageTemperature] = useState<TemperatureData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshingTemperature, setRefreshingTemperature] = useState<boolean>(false);
   
   // Spark status state
   const [sparkMasterStatus, setSparkMasterStatus] = useState<SparkMasterStatus | null>(null);
   const [loadingSparkStatus, setLoadingSparkStatus] = useState<boolean>(true);
+  const [refreshingSparkStatus, setRefreshingSparkStatus] = useState<boolean>(false);
   
   // Temperature alerts state
   const [temperatureAlerts, setTemperatureAlerts] = useState<TemperatureAlert[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState<boolean>(true);
+  const [refreshingAlerts, setRefreshingAlerts] = useState<boolean>(false);
   
   // Time range for temperature data
   const [timeRange, setTimeRange] = useState<number>(24);
@@ -42,6 +45,14 @@ export const useDashboardData = () => {
 
   // Fetch temperature data
   const fetchTemperature = async () => {
+      const hasExistingData = averageTemperature.length > 0;
+      
+      if (hasExistingData) {
+        setRefreshingTemperature(true);
+      } else {
+        setLoading(true);
+      }
+      
       try {
         const data = await fetchAverageTemperature();
         // Format the time_start field for proper display on the X-axis
@@ -56,8 +67,10 @@ export const useDashboardData = () => {
       } catch (error: unknown) {
         setError(error instanceof Error ? error.message : error);
         reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchTemperature' }).catch(() => {});
+        // Don't clear existing data on error if we have it
       } finally {
-        if (loading) setLoading(false);
+        setLoading(false);
+        setRefreshingTemperature(false);
         setLastUpdated(new Date());
       }
     };
@@ -67,19 +80,28 @@ export const useDashboardData = () => {
     if (!autoRefresh) return;
     const interval = setInterval(fetchTemperature, 15000);
     return () => clearInterval(interval);
-  }, [autoRefresh]);
+  }, [autoRefresh, fetchTemperature]);
 
   // Fetch Spark status
   const fetchSparkStatusNow = async () => {
-      setLoadingSparkStatus(true);
+      const hasExistingData = sparkMasterStatus !== null;
+      
+      if (hasExistingData) {
+        setRefreshingSparkStatus(true);
+      } else {
+        setLoadingSparkStatus(true);
+      }
+      
       try {
         const data = await fetchSparkMasterStatus();
         setSparkMasterStatus(data);
       } catch (error: unknown) {
         setError(error instanceof Error ? error.message : error);
         reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchSparkStatusNow' }).catch(() => {});
+        // Don't clear existing data on error if we have it
       } finally {
         setLoadingSparkStatus(false);
+        setRefreshingSparkStatus(false);
       }
     };
 
@@ -92,14 +114,24 @@ export const useDashboardData = () => {
 
   // Fetch temperature alerts
   const fetchAlertsNow = async () => {
+      const hasExistingData = temperatureAlerts.length > 0;
+      
+      if (hasExistingData) {
+        setRefreshingAlerts(true);
+      } else {
+        setLoadingAlerts(true);
+      }
+      
       try {
         const data = await fetchTemperatureAlerts();
         setTemperatureAlerts(data as TemperatureAlert[]);
       } catch (error: unknown) {
         setError(error instanceof Error ? error.message : error);
         reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchAlertsNow' }).catch(() => {});
+        // Don't clear existing data on error if we have it
       } finally {
         setLoadingAlerts(false);
+        setRefreshingAlerts(false);
       }
     };
 
@@ -114,6 +146,7 @@ export const useDashboardData = () => {
     // Temperature data
     averageTemperature,
     loading,
+    refreshingTemperature,
     timeRange,
     setTimeRange,
     lastUpdated,
@@ -131,9 +164,11 @@ export const useDashboardData = () => {
     // Spark status
     sparkMasterStatus,
     loadingSparkStatus,
+    refreshingSparkStatus,
     
     // Temperature alerts
     temperatureAlerts,
-    loadingAlerts
+    loadingAlerts,
+    refreshingAlerts
   };
 };
