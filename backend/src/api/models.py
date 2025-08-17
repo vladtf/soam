@@ -234,6 +234,7 @@ class DashboardTileResponse(BaseModel):
 # ===============================
 
 class ClientErrorCreate(BaseModel):
+    """Schema for creating a client error."""
     message: str
     stack: Optional[str] = None
     url: Optional[str] = None
@@ -242,7 +243,43 @@ class ClientErrorCreate(BaseModel):
     severity: Optional[str] = None
     user_agent: Optional[str] = None
     session_id: Optional[str] = None
-    extra: Optional[Dict[str, Any]] = None
+    extra: Optional[str] = None
+
+
+class SettingCreate(BaseModel):
+    """Schema for creating a setting."""
+    key: str
+    value: str
+    value_type: str = "string"  # string, number, boolean, json
+    description: Optional[str] = None
+    category: Optional[str] = None
+    created_by: str
+
+
+class SettingUpdate(BaseModel):
+    """Schema for updating a setting."""
+    value: str
+    value_type: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    updated_by: str
+
+
+class SettingResponse(BaseModel):
+    """Schema for setting response."""
+    id: int
+    key: str
+    value: str
+    value_type: str
+    description: Optional[str]
+    category: Optional[str]
+    created_by: str
+    updated_by: Optional[str]
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
 
 
 class ClientErrorResponse(BaseModel):

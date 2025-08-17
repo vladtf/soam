@@ -6,6 +6,7 @@ import OntologyPage from './pages/OntologyPage';
 import DashboardPage from './pages/DashboardPage';
 import MapPage from './pages/MapPage';
 import NewEventsPage from './pages/NewEventsPage'; // new import
+import SettingsPage from './pages/SettingsPage';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import AppNavbar from './components/AppNavbar';
 import { Suspense } from 'react';
@@ -33,6 +34,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/ontology" element={<OntologyPage />} />
               <Route path="/map" element={<MapPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/feedback" element={<FeedbackPage />} />
               <Route path="/minio" element={<MinioBrowserPage />} />
               <Route path="/troubleshooting" element={<TroubleshootingPage />} />

@@ -36,6 +36,7 @@ const DashboardPage: React.FC = () => {
     autoRefresh,
     setAutoRefresh,
     refreshAll,
+    refreshAlerts,
   } = useDashboardData();
 
   // User-defined dashboard tiles
@@ -242,6 +243,7 @@ const DashboardPage: React.FC = () => {
             alerts={temperatureAlerts}
             loading={loadingAlerts}
             lastUpdated={lastUpdated}
+            onRefresh={refreshAlerts}
           />
         </Col>
       </Row>

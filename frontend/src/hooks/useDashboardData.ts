@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   fetchAverageTemperature, 
   fetchSparkMasterStatus, 
   fetchTemperatureAlerts, 
   SparkMasterStatus 
 } from '../api/backendRequests';
-import { useError } from '../context/ErrorContext';
 import { reportClientError } from '../errors';
 
 interface TemperatureData {
@@ -21,8 +20,6 @@ interface TemperatureAlert {
 }
 
 export const useDashboardData = () => {
-  const { setError } = useError();
-  
   // Temperature data state
   const [averageTemperature, setAverageTemperature] = useState<TemperatureData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -42,12 +39,27 @@ export const useDashboardData = () => {
   const [timeRange, setTimeRange] = useState<number>(24);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  
+  // Error state
+  const [latestError, setLatestError] = useState<unknown>(null);
+
+  // Use refs to track initial loading state
+  const hasLoadedTemperature = useRef(false);
+  const hasLoadedSparkStatus = useRef(false);
+  const hasLoadedAlerts = useRef(false);
+  
+  // Handle errors when they change
+  useEffect(() => {
+    if (latestError) {
+      console.error('Dashboard data error:', latestError);
+      // Implement error handling here if needed, e.g., setError(latestError);
+      setLatestError(null); // Clear after handling
+    }
+  }, [latestError]);
 
   // Fetch temperature data
-  const fetchTemperature = async () => {
-      const hasExistingData = averageTemperature.length > 0;
-      
-      if (hasExistingData) {
+  const fetchTemperature = useCallback(async () => {
+      if (hasLoadedTemperature.current) {
         setRefreshingTemperature(true);
       } else {
         setLoading(true);
@@ -60,12 +72,11 @@ export const useDashboardData = () => {
           ...item,
           time_start: new Date(item.time_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }));
-        // Compare new data with the existing state to avoid unnecessary updates
-        if (JSON.stringify(formattedData) !== JSON.stringify(averageTemperature)) {
-          setAverageTemperature(formattedData);
-        }
+        setAverageTemperature(formattedData);
+        hasLoadedTemperature.current = true;
       } catch (error: unknown) {
-        setError(error instanceof Error ? error.message : error);
+        // Handle error outside useCallback to avoid dependency
+        setLatestError(error);
         reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchTemperature' }).catch(() => {});
         // Don't clear existing data on error if we have it
       } finally {
@@ -73,20 +84,18 @@ export const useDashboardData = () => {
         setRefreshingTemperature(false);
         setLastUpdated(new Date());
       }
-    };
+    }, []);
 
   useEffect(() => {
     fetchTemperature();
     if (!autoRefresh) return;
     const interval = setInterval(fetchTemperature, 15000);
     return () => clearInterval(interval);
-  }, [autoRefresh, fetchTemperature]);
+  }, [autoRefresh]); // Removed fetchTemperature from dependencies
 
   // Fetch Spark status
-  const fetchSparkStatusNow = async () => {
-      const hasExistingData = sparkMasterStatus !== null;
-      
-      if (hasExistingData) {
+  const fetchSparkStatusNow = useCallback(async () => {
+      if (hasLoadedSparkStatus.current) {
         setRefreshingSparkStatus(true);
       } else {
         setLoadingSparkStatus(true);
@@ -95,28 +104,27 @@ export const useDashboardData = () => {
       try {
         const data = await fetchSparkMasterStatus();
         setSparkMasterStatus(data);
+        hasLoadedSparkStatus.current = true;
       } catch (error: unknown) {
-        setError(error instanceof Error ? error.message : error);
+        setLatestError(error);
         reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchSparkStatusNow' }).catch(() => {});
         // Don't clear existing data on error if we have it
       } finally {
         setLoadingSparkStatus(false);
         setRefreshingSparkStatus(false);
       }
-    };
+    }, []);
 
   useEffect(() => {
     fetchSparkStatusNow();
     if (!autoRefresh) return;
     const interval = setInterval(fetchSparkStatusNow, 15000);
     return () => clearInterval(interval); // Cleanup interval on component unmount
-  }, [setError, autoRefresh]);
+  }, [autoRefresh]); // Removed setError dependency
 
   // Fetch temperature alerts
-  const fetchAlertsNow = async () => {
-      const hasExistingData = temperatureAlerts.length > 0;
-      
-      if (hasExistingData) {
+  const fetchAlertsNow = useCallback(async () => {
+      if (hasLoadedAlerts.current) {
         setRefreshingAlerts(true);
       } else {
         setLoadingAlerts(true);
@@ -125,22 +133,23 @@ export const useDashboardData = () => {
       try {
         const data = await fetchTemperatureAlerts();
         setTemperatureAlerts(data as TemperatureAlert[]);
+        hasLoadedAlerts.current = true;
       } catch (error: unknown) {
-        setError(error instanceof Error ? error.message : error);
+        setLatestError(error);
         reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchAlertsNow' }).catch(() => {});
         // Don't clear existing data on error if we have it
       } finally {
         setLoadingAlerts(false);
         setRefreshingAlerts(false);
       }
-    };
+    }, []);
 
   useEffect(() => {
     fetchAlertsNow();
     if (!autoRefresh) return;
     const interval = setInterval(fetchAlertsNow, 15000);
     return () => clearInterval(interval);
-  }, [setError, autoRefresh]);
+  }, [autoRefresh]); // Removed setError dependency
 
   return {
     // Temperature data
@@ -169,6 +178,7 @@ export const useDashboardData = () => {
     // Temperature alerts
     temperatureAlerts,
     loadingAlerts,
-    refreshingAlerts
+    refreshingAlerts,
+    refreshAlerts: fetchAlertsNow
   };
 };

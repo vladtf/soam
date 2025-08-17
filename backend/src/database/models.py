@@ -1,9 +1,10 @@
 """
 SQLAlchemy models for application storage.
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float, JSON, Enum as SAEnum
 from sqlalchemy.sql import func
 from src.database.database import Base
+import enum
 
 
 class Feedback(Base):
@@ -164,6 +165,48 @@ class Device(Base):
             "created_by": getattr(self, "created_by", "unknown"),
             "updated_by": getattr(self, "updated_by", None),
         }
+
+
+class ValueTypeEnum(enum.Enum):
+    STRING = "string"
+    NUMBER = "number"
+    BOOLEAN = "boolean"
+    JSON = "json"
+
+class Setting(Base):
+    """Application settings and configuration values."""
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(255), nullable=False, unique=True, index=True)  # Setting key (e.g., 'temperature_threshold')
+    value = Column(String(1024), nullable=False)  # Setting value as string; type conversion handled by manager
+    value_type = Column(SAEnum(ValueTypeEnum), nullable=False, default=ValueTypeEnum.STRING)  # Type: string, number, boolean, json
+    description = Column(Text, nullable=True)  # Human-readable description
+    category = Column(String(100), nullable=True)  # Category for grouping (e.g., 'alerts', 'thresholds')
+    
+    # Ownership and audit fields
+    created_by = Column(String(255), nullable=False)
+    updated_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "key": self.key,
+            "value": self.value,
+            "value_type": self.value_type.value if self.value_type else None,
+            "description": self.description,
+            "category": self.category,
+            "created_by": self.created_by,
+            "updated_by": self.updated_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def get_typed_value(self):
+        """Return the value in its native type (JSON column handles conversion)."""
+        return self.value
 
 
 class ClientError(Base):

@@ -728,3 +728,69 @@ export const fetchAvailableSensorIds = (limit: number = 100, minutesBack: number
   });
   return doFetch<SensorIdsResponse>(`${backendUrl}/api/v1/troubleshooting/sensor-ids?${params}`);
 };
+
+// Settings API
+export interface Setting {
+  id?: number;
+  key: string;
+  value: string;
+  value_type?: string;
+  description?: string | null;
+  category?: string | null;
+  created_by?: string;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SettingCreatePayload {
+  key: string;
+  value: string;
+  value_type?: string;
+  description?: string;
+  category?: string;
+  created_by: string;
+}
+
+export interface SettingUpdatePayload {
+  value: string;
+  value_type?: string;
+  description?: string;
+  category?: string;
+  updated_by: string;
+}
+
+export const listSettings = (): Promise<Setting[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Setting[]>(`${backendUrl}/api/settings/`);
+};
+
+export const getSetting = (key: string): Promise<Setting> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Setting>(`${backendUrl}/api/settings/${encodeURIComponent(key)}`);
+};
+
+export const createSetting = (payload: SettingCreatePayload): Promise<Setting> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Setting>(`${backendUrl}/api/settings/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const updateSetting = (key: string, payload: SettingUpdatePayload): Promise<Setting> => {
+  const { backendUrl } = getConfig();
+  return doFetch<Setting>(`${backendUrl}/api/settings/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const deleteSetting = (key: string): Promise<{ status?: string; message?: string }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/api/settings/${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+  });
+};

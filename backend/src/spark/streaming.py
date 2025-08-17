@@ -9,8 +9,14 @@ from pyspark.sql.streaming import StreamingQuery
 from .config import SparkConfig, SparkSchemas
 from .cleaner import DataCleaner
 from .session import SparkSessionManager
+from src.utils.settings_manager import settings_manager
 
 logger = logging.getLogger(__name__)
+
+
+def get_temperature_threshold() -> float:
+    """Get the temperature threshold from database settings or fallback to default."""
+    return settings_manager.get_temperature_threshold(SparkConfig.TEMP_THRESHOLD)
 
 
 class StreamingManager:
@@ -246,10 +252,13 @@ class StreamingManager:
         )
 
         # Filter for temperature alerts
+        temp_threshold = get_temperature_threshold()
+        logger.info(f"Using temperature threshold: {temp_threshold}°C")
+        
         alerts = (
             alert_stream
             .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
-            .filter(F.col("temperature") > SparkConfig.TEMP_THRESHOLD)
+            .filter(F.col("temperature") > temp_threshold)
             .withColumn("alert_type", F.lit("TEMP_OVER_LIMIT"))
             .withColumn("alert_id", F.concat(F.col("sensorId"), F.lit("_"), F.col("event_time")))
             .withColumn("alert_time", F.current_timestamp())

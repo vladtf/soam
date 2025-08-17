@@ -11,6 +11,7 @@ from src.api import normalization_routes
 from src.api import dashboard_tiles_routes
 from src.api import minio_routes
 from src.api import config_routes
+from src.api import settings_routes
 from src.api import troubleshooting
 from src.neo4j import building_routes
 from src.computations import computation_routes
@@ -24,6 +25,7 @@ from src.spark import spark_routes
 from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns, ensure_computation_ownership_columns, ensure_device_ownership_columns
 from src.spark.cleaner import DataCleaner
 from src.spark.usage_tracker import NormalizationRuleUsageTracker
+from src.api.settings_routes import ensure_default_settings
 
 # Configure structured logging once
 setup_logging(service_name="backend", log_file="backend.log")
@@ -86,6 +88,21 @@ async def lifespan(app: FastAPI):
             logger.info("Seeded %d normalization rules", inserted)
     except Exception as e:
         logger.error("Error seeding normalization rules: %s", e)
+
+    # Initialize default settings
+    try:
+        from src.database.database import SessionLocal
+        from src.utils.settings_manager import settings_manager
+        
+        db = SessionLocal()
+        try:
+            ensure_default_settings(db)
+            # Also ensure settings manager has fresh data
+            settings_manager.clear_cache()
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning("Could not initialize default settings: %s", e)
 
     # Start background aggregator for normalization rule usage
     try:
@@ -177,6 +194,7 @@ def create_app() -> FastAPI:
     app.include_router(computation_routes.router)
     app.include_router(dashboard_tiles_routes.router)
     app.include_router(config_routes.router)
+    app.include_router(settings_routes.router)
     app.include_router(troubleshooting.router)
 
     return app
