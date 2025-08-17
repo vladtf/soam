@@ -221,7 +221,7 @@ class DataAccessManager:
                         )
                     )
                     
-                    # Aggregate metrics
+                    # Aggregate basic metrics
                     summary = analysis_df.agg(
                         F.count("*").alias("total_records"),
                         F.countDistinct("sensorId").alias("unique_sensors")
@@ -237,10 +237,26 @@ class DataAccessManager:
                         .collect()
                     )
                     
+                    # Calculate processing metrics
+                    processing_metrics = self._calculate_processing_metrics(analysis_df, minutes)
+                    
+                    # Calculate streaming metrics
+                    streaming_metrics = self._get_streaming_metrics()
+                    
+                    # Calculate normalization statistics
+                    normalization_stats = self._get_normalization_stats(minutes)
+                    
+                    # Calculate data quality metrics
+                    data_quality = self._get_data_quality_metrics(analysis_df)
+                    
                     result["enriched"]["recent_rows"] = summary["total_records"]
                     result["enriched"]["recent_sensors"] = summary["unique_sensors"]
                     result["enriched"]["sample_sensors"] = [s for s in sample_sensors if s]
                     result["enriched"]["matched_sensors"] = summary["unique_sensors"]  # For union schema, assume all are matched
+                    result["enriched"]["processing_metrics"] = processing_metrics
+                    result["enriched"]["streaming_metrics"] = streaming_metrics
+                    result["enriched"]["normalization_stats"] = normalization_stats
+                    result["enriched"]["data_quality"] = data_quality
                     
             except Exception as e:
                 if self._handle_table_not_found_error(e):
@@ -294,4 +310,233 @@ class DataAccessManager:
         Uses union schema implementation.
         """
         return self.get_enrichment_summary_union(minutes)
+
+    def _calculate_processing_metrics(self, enriched_df, minutes: int) -> Dict[str, Any]:
+        """Calculate detailed processing metrics for the enrichment process."""
+        metrics = {
+            "records_processed": 0,
+            "records_failed": 0,
+            "processing_duration_seconds": None,
+            "records_per_second": None,
+            "error_rate_percent": None,
+            "last_processing_time": None
+        }
+        
+        try:
+            # Cache the DataFrame to avoid multiple scans
+            enriched_df.cache()
+            
+            # Combine aggregations to minimize scans
+            agg_result = enriched_df.agg(
+                F.count("*").alias("total_records"),
+                F.sum(
+                    F.when(
+                        F.col("normalized_data").isNull() | (F.size(F.col("normalized_data")) == 0), 1
+                    ).otherwise(0)
+                ).alias("failed_records"),
+                F.min("ingest_ts").alias("earliest_time"),
+                F.max("ingest_ts").alias("latest_time")
+            ).collect()[0]
+            
+            total_records = agg_result["total_records"]
+            failed_records = agg_result["failed_records"]
+            metrics["records_processed"] = total_records
+            metrics["records_failed"] = failed_records
+            
+            # Calculate error rate
+            if total_records > 0:
+                metrics["error_rate_percent"] = round((failed_records / total_records) * 100, 2)
+            
+            # Get time range for processing duration calculation
+            if total_records > 0 and agg_result["earliest_time"] and agg_result["latest_time"]:
+                earliest = agg_result["earliest_time"]
+                latest = agg_result["latest_time"]
+                
+                # Calculate duration in seconds
+                duration_seconds = (latest - earliest).total_seconds()
+                metrics["processing_duration_seconds"] = round(duration_seconds, 2)
+                
+                # Calculate processing rate
+                if duration_seconds > 0:
+                    metrics["records_per_second"] = round(total_records / duration_seconds, 2)
+                
+                # Format last processing time
+                metrics["last_processing_time"] = latest.isoformat()
+            
+            # Unpersist the DataFrame after use
+            enriched_df.unpersist()
+                    
+        except Exception as e:
+            logger.warning(f"Error calculating processing metrics: {e}")
+            
+        return metrics
+
+    def _get_streaming_metrics(self) -> Dict[str, Any]:
+        """Get metrics from active streaming queries."""
+        metrics = {
+            "query_active": False,
+            "query_name": None,
+            "last_batch_id": None,
+            "input_rows_per_second": None,
+            "processing_time_ms": None,
+            "batch_duration_ms": None,
+            "last_batch_timestamp": None
+        }
+        
+        try:
+            # Try to find the enrichment stream query
+            spark = self.session_manager.spark
+            active_queries = spark.streams.active
+            
+            for query in active_queries:
+                try:
+                    if query.name == "enrich_stream":
+                        metrics["query_active"] = True
+                        metrics["query_name"] = query.name
+                        
+                        # Get last progress if available
+                        if hasattr(query, 'lastProgress') and query.lastProgress:
+                            progress = query.lastProgress
+                            metrics["last_batch_id"] = progress.get("batchId")
+                            
+                            # Input metrics
+                            input_stats = progress.get("inputRowsPerSecond")
+                            if input_stats is not None:
+                                metrics["input_rows_per_second"] = round(input_stats, 2)
+                            
+                            # Processing time metrics
+                            processing_time = progress.get("durationMs", {}).get("triggerExecution")
+                            if processing_time is not None:
+                                metrics["processing_time_ms"] = processing_time
+                                
+                            batch_duration = progress.get("durationMs", {}).get("getBatch")
+                            if batch_duration is not None:
+                                metrics["batch_duration_ms"] = batch_duration
+                            
+                            # Timestamp
+                            timestamp = progress.get("timestamp")
+                            if timestamp:
+                                metrics["last_batch_timestamp"] = timestamp
+                        break
+                except Exception as e:
+                    logger.debug(f"Error getting progress for query {query.name if hasattr(query, 'name') else 'unknown'}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.warning(f"Error getting streaming metrics: {e}")
+            
+        return metrics
+
+    def _get_normalization_stats(self, minutes: int) -> Dict[str, Any]:
+        """Get statistics about normalization rule usage."""
+        stats = {
+            "total_rules_applied": 0,
+            "active_rules_count": 0,
+            "field_mappings_applied": 0,
+            "normalization_success_rate": None
+        }
+        
+        try:
+            from sqlalchemy.orm import sessionmaker
+            from src.database.database import engine
+            from src.database.models import NormalizationRule
+            SessionLocal = sessionmaker(bind=engine)
+            db = SessionLocal()
+            
+            try:
+                # Count active rules
+                active_rules = db.query(NormalizationRule).filter(
+                    NormalizationRule.enabled == True
+                ).all()
+                
+                stats["active_rules_count"] = len(active_rules)
+                
+                # Sum up applied counts and calculate averages
+                total_applied = sum(rule.get_applied_count() for rule in active_rules)
+                stats["total_rules_applied"] = total_applied
+                
+                # Count unique field mappings
+                unique_mappings = len(set(rule.canonical_key for rule in active_rules))
+                stats["field_mappings_applied"] = unique_mappings
+                
+                # Calculate rough success rate based on recent usage
+                recent_usage = sum(
+                    rule.get_applied_count()
+                    for rule in active_rules
+                    if getattr(rule, "last_applied_at", None)
+                )
+                
+                if total_applied > 0:
+                    stats["normalization_success_rate"] = round((recent_usage / total_applied) * 100, 2)
+                    
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.warning(f"Error getting normalization stats: {e}")
+            
+        return stats
+
+    def _get_data_quality_metrics(self, enriched_df) -> Dict[str, Any]:
+        """Calculate data quality metrics from enriched DataFrame."""
+        quality = {
+            "schema_compliance_rate": None,
+            "unique_ingestion_ids": 0,
+            "ingestion_id_breakdown": {},
+            "fields_with_data": [],
+            "fields_normalized": []
+        }
+        
+        try:
+            # Get ingestion ID breakdown
+            if "ingestion_id" in enriched_df.columns:
+                ingestion_breakdown = enriched_df.groupBy("ingestion_id").count().collect()
+            # Analyze sensor_data and normalized_data fields (fields with actual data)
+            fields_with_data = set()
+            normalized_fields = set()
+            if "sensor_data" in enriched_df.columns and "normalized_data" in enriched_df.columns:
+                # Collect both columns together to minimize .collect() calls
+                samples = (
+                    enriched_df.select("sensor_data", "normalized_data")
+                    .limit(10)
+                    .collect()
+                )
+                for record in samples:
+                    if record["sensor_data"]:
+                        fields_with_data.update(record["sensor_data"].keys())
+                    if record["normalized_data"]:
+                        normalized_fields.update(record["normalized_data"].keys())
+                quality["fields_with_data"] = sorted(list(fields_with_data))
+                quality["fields_normalized"] = sorted(list(normalized_fields))
+            else:
+                if "sensor_data" in enriched_df.columns:
+                    sample_records = enriched_df.select("sensor_data").limit(10).collect()
+                    for record in sample_records:
+                        if record["sensor_data"]:
+                            fields_with_data.update(record["sensor_data"].keys())
+                    quality["fields_with_data"] = sorted(list(fields_with_data))
+                if "normalized_data" in enriched_df.columns:
+                    sample_normalized = enriched_df.select("normalized_data").limit(10).collect()
+                    for record in sample_normalized:
+                        if record["normalized_data"]:
+                            normalized_fields.update(record["normalized_data"].keys())
+                    quality["fields_normalized"] = sorted(list(normalized_fields))
+                
+                for record in sample_normalized:
+                    if record["normalized_data"]:
+                        normalized_fields.update(record["normalized_data"].keys())
+                
+                quality["fields_normalized"] = sorted(list(normalized_fields))
+            
+            # Calculate schema compliance rate
+            total_fields = len(quality["fields_with_data"])
+            normalized_fields_count = len(quality["fields_normalized"])
+            
+            if total_fields > 0:
+                quality["schema_compliance_rate"] = round((normalized_fields_count / total_fields) * 100, 2)
+                
+        except Exception as e:
+            logger.warning(f"Error calculating data quality metrics: {e}")
+            
+        return quality
 

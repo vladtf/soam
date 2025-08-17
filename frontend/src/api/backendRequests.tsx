@@ -98,6 +98,36 @@ export interface EnrichmentSummary {
     recent_sensors: number;
     sample_sensors: string[];
     matched_sensors: number;
+    processing_metrics?: {
+      records_processed: number;
+      records_failed: number;
+      processing_duration_seconds?: number;
+      records_per_second?: number;
+      error_rate_percent?: number;
+      last_processing_time?: string;
+    };
+    streaming_metrics?: {
+      query_active: boolean;
+      query_name?: string;
+      last_batch_id?: number;
+      input_rows_per_second?: number;
+      processing_time_ms?: number;
+      batch_duration_ms?: number;
+      last_batch_timestamp?: string;
+    };
+    normalization_stats?: {
+      total_rules_applied: number;
+      active_rules_count: number;
+      field_mappings_applied: number;
+      normalization_success_rate?: number;
+    };
+    data_quality?: {
+      schema_compliance_rate?: number;
+      unique_ingestion_ids: number;
+      ingestion_id_breakdown: Record<string, number>;
+      fields_with_data: string[];
+      fields_normalized: string[];
+    };
   };
   gold: {
     exists: boolean;

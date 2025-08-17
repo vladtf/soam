@@ -134,6 +134,126 @@ const EnrichmentStatusCard: React.FC<Props> = ({
                     <ListGroup.Item className="px-0">Sample: {summary.enriched.sample_sensors.join(', ')}</ListGroup.Item>
                   )}
                 </ListGroup>
+                
+                {/* Processing Metrics */}
+                {summary.enriched?.processing_metrics && (
+                  <div className="mt-3">
+                    <div className="fw-semibold mb-1">Processing Details</div>
+                    <ListGroup variant="flush" className="small">
+                      <ListGroup.Item className="px-0">
+                        Records Processed: 
+                        <Badge bg="primary" className="ms-2">
+                          {summary.enriched.processing_metrics.records_processed}
+                        </Badge>
+                      </ListGroup.Item>
+                      <ListGroup.Item className="px-0">
+                        Records Failed: 
+                        <Badge 
+                          bg={summary.enriched.processing_metrics.records_failed > 0 ? "warning" : "success"} 
+                          className="ms-2"
+                        >
+                          {summary.enriched.processing_metrics.records_failed}
+                        </Badge>
+                      </ListGroup.Item>
+                      {typeof summary.enriched.processing_metrics.error_rate_percent === 'number' && (
+                        <ListGroup.Item className="px-0">
+                          Error Rate: 
+                          <Badge 
+                            bg={summary.enriched.processing_metrics.error_rate_percent > 5 ? "danger" : "success"} 
+                            className="ms-2"
+                          >
+                            {summary.enriched.processing_metrics.error_rate_percent}%
+                          </Badge>
+                        </ListGroup.Item>
+                      )}
+                      {typeof summary.enriched.processing_metrics.processing_duration_seconds === 'number' && (
+                        <ListGroup.Item className="px-0">
+                          Duration: {summary.enriched.processing_metrics.processing_duration_seconds}s
+                        </ListGroup.Item>
+                      )}
+                      {typeof summary.enriched.processing_metrics.records_per_second === 'number' && (
+                        <ListGroup.Item className="px-0">
+                          Rate: {summary.enriched.processing_metrics.records_per_second} rec/s
+                        </ListGroup.Item>
+                      )}
+                      {summary.enriched.processing_metrics.last_processing_time && (
+                        <ListGroup.Item className="px-0">
+                          Last Processed: {formatRelativeTime(new Date(summary.enriched.processing_metrics.last_processing_time))}
+                        </ListGroup.Item>
+                      )}
+                    </ListGroup>
+                  </div>
+                )}
+                
+                {/* Streaming Metrics */}
+                {summary.enriched?.streaming_metrics && (
+                  <div className="mt-3">
+                    <div className="fw-semibold mb-1">Streaming Status</div>
+                    <ListGroup variant="flush" className="small">
+                      <ListGroup.Item className="px-0">
+                        Query Status: 
+                        <Badge 
+                          bg={summary.enriched.streaming_metrics.query_active ? "success" : "danger"} 
+                          className="ms-2"
+                        >
+                          {summary.enriched.streaming_metrics.query_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </ListGroup.Item>
+                      {summary.enriched.streaming_metrics.query_name && (
+                        <ListGroup.Item className="px-0">
+                          Query: {summary.enriched.streaming_metrics.query_name}
+                        </ListGroup.Item>
+                      )}
+                      {typeof summary.enriched.streaming_metrics.input_rows_per_second === 'number' && (
+                        <ListGroup.Item className="px-0">
+                          Input Rate: {summary.enriched.streaming_metrics.input_rows_per_second} rows/sec
+                        </ListGroup.Item>
+                      )}
+                      {typeof summary.enriched.streaming_metrics.processing_time_ms === 'number' && (
+                        <ListGroup.Item className="px-0">
+                          Processing Time: {summary.enriched.streaming_metrics.processing_time_ms}ms
+                        </ListGroup.Item>
+                      )}
+                      {summary.enriched.streaming_metrics.last_batch_timestamp && (
+                        <ListGroup.Item className="px-0">
+                          Last Batch: {formatRelativeTime(new Date(summary.enriched.streaming_metrics.last_batch_timestamp))}
+                        </ListGroup.Item>
+                      )}
+                    </ListGroup>
+                  </div>
+                )}
+                
+                {/* Normalization Statistics */}
+                {summary.enriched?.normalization_stats && (
+                  <div className="mt-3">
+                    <div className="fw-semibold mb-1">Normalization Stats</div>
+                    <ListGroup variant="flush" className="small">
+                      <ListGroup.Item className="px-0">
+                        Active Rules: 
+                        <Badge bg="info" className="ms-2">
+                          {summary.enriched.normalization_stats.active_rules_count}
+                        </Badge>
+                      </ListGroup.Item>
+                      <ListGroup.Item className="px-0">
+                        Total Applications: {summary.enriched.normalization_stats.total_rules_applied}
+                      </ListGroup.Item>
+                      <ListGroup.Item className="px-0">
+                        Field Mappings: {summary.enriched.normalization_stats.field_mappings_applied}
+                      </ListGroup.Item>
+                      {typeof summary.enriched.normalization_stats.normalization_success_rate === 'number' && (
+                        <ListGroup.Item className="px-0">
+                          Success Rate: 
+                          <Badge 
+                            bg={summary.enriched.normalization_stats.normalization_success_rate > 80 ? "success" : "warning"} 
+                            className="ms-2"
+                          >
+                            {summary.enriched.normalization_stats.normalization_success_rate}%
+                          </Badge>
+                        </ListGroup.Item>
+                      )}
+                    </ListGroup>
+                  </div>
+                )}
               </div>
               <div>
                 <div className="fw-semibold mb-1">Gold (avg) (last {minutes}m)</div>
@@ -143,6 +263,62 @@ const EnrichmentStatusCard: React.FC<Props> = ({
                   <ListGroup.Item className="px-0">Sensors: {summary.gold?.recent_sensors || 0}</ListGroup.Item>
                 </ListGroup>
               </div>
+              
+              {/* Data Quality Metrics */}
+              {summary.enriched?.data_quality && (
+                <div>
+                  <div className="fw-semibold mb-1">Data Quality</div>
+                  <ListGroup variant="flush" className="small">
+                    <ListGroup.Item className="px-0">
+                      Ingestion IDs: 
+                      <Badge bg="secondary" className="ms-2">
+                        {summary.enriched.data_quality.unique_ingestion_ids}
+                      </Badge>
+                    </ListGroup.Item>
+                    {typeof summary.enriched.data_quality.schema_compliance_rate === 'number' && (
+                      <ListGroup.Item className="px-0">
+                        Schema Compliance: 
+                        <Badge 
+                          bg={summary.enriched.data_quality.schema_compliance_rate > 80 ? "success" : 
+                             summary.enriched.data_quality.schema_compliance_rate > 60 ? "warning" : "danger"} 
+                          className="ms-2"
+                        >
+                          {summary.enriched.data_quality.schema_compliance_rate}%
+                        </Badge>
+                      </ListGroup.Item>
+                    )}
+                    <ListGroup.Item className="px-0">
+                      Fields with Data: {summary.enriched.data_quality.fields_with_data.length}
+                    </ListGroup.Item>
+                    <ListGroup.Item className="px-0">
+                      Fields Normalized: {summary.enriched.data_quality.fields_normalized.length}
+                    </ListGroup.Item>
+                    {Object.keys(summary.enriched.data_quality.ingestion_id_breakdown).length > 0 && (
+                      <ListGroup.Item className="px-0">
+                        <details 
+                          className="mt-1"
+                          aria-expanded={false}
+                        >
+                          <summary 
+                            className="cursor-pointer text-primary"
+                            aria-label="Show ingestion ID breakdown"
+                          >
+                            Ingestion ID Breakdown
+                          </summary>
+                          <div className="mt-2">
+                            {Object.entries(summary.enriched.data_quality.ingestion_id_breakdown).map(([id, count]) => (
+                              <div key={id} className="d-flex justify-content-between">
+                                <code className="small">{id}</code>
+                                <Badge bg="light" text="dark">{count}</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      </ListGroup.Item>
+                    )}
+                  </ListGroup>
+                </div>
+              )}
             </div>
           </div>
         ) : (
