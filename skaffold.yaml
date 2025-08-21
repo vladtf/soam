@@ -45,7 +45,11 @@ manifests:
   rawYaml:
     - k8s/*.yaml
 deploy:
-  kubectl: {}
+  kubectl:
+    hooks:
+      before:
+        - host:
+            command: ["pwsh", "-c", "./scripts/cleanup-images.ps1"]
   helm:
     releases:
       - name: soam
