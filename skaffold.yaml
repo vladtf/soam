@@ -49,7 +49,7 @@ deploy:
     hooks:
       before:
         - host:
-            command: ["pwsh", "-c", "./scripts/cleanup-images.ps1"]
+            command: ["pwsh", "-c", "./utils/cleanup-images.ps1"]
   helm:
     releases:
       - name: soam
