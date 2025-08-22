@@ -18,6 +18,8 @@ import { AuthProvider } from './context/AuthContext';
 import TroubleshootingPage from './pages/TroubleshootingPage';
 import DataPipelinePage from './pages/DataPipelinePage';
 import ErrorBoundary from './components/ErrorBoundary';
+import DebugFloatingButton from './components/DebugFloatingButton';
+import './utils/devTools'; // Initialize dev tools
 
 function App() {
 
@@ -43,6 +45,7 @@ function App() {
                 <Route path="/new-events" element={<NewEventsPage />} /> {/* new route */}
               </Routes>
               <AppFooter />
+              <DebugFloatingButton />
             </div>
           </Suspense>
         </BrowserRouter>

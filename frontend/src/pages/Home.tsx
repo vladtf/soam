@@ -2,6 +2,7 @@ import React from 'react';
 import { Container, Row, Col, Card } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { FaChartLine, FaSitemap, FaTachometerAlt, FaMapMarkedAlt, FaChartBar, FaDatabase, FaCloud, FaServer, FaProjectDiagram, FaDocker } from 'react-icons/fa';
+import ErrorTestComponent from '../components/ErrorTestComponent';
 
 const Home: React.FC = () => {
   return (
@@ -156,6 +157,9 @@ const Home: React.FC = () => {
             </Card>
           </Col>
         </Row>
+
+        {/* Error Testing Component - Development Only */}
+        <ErrorTestComponent />
       </Container>
     </Container>
   );

@@ -17,7 +17,7 @@ from src.database.models import NormalizationRule
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/normalization", tags=["normalization"])
+router = APIRouter(prefix="/api/normalization", tags=["normalization"])
 
 
 @router.get("/", response_model=List[NormalizationRuleResponse])
@@ -88,6 +88,7 @@ def update_rule(rule_id: int, payload: NormalizationRuleUpdate, db: Session = De
         if not rule:
             raise HTTPException(status_code=404, detail="Rule not found")
 
+        changes = []
         rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
         if payload.canonical_key is not None and payload.canonical_key.strip() != rule.canonical_key:
             changes.append(f"canonical_key: '{rule.canonical_key}' -> '{payload.canonical_key.strip()}'")

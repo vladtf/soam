@@ -1,5 +1,6 @@
 import { getConfig } from '../config';
 import { Building } from '../models/Building';
+import { fetchWithErrorHandling, NetworkError } from '../utils/networkErrorHandler';
 
 export interface SensorData {
   sensorId?: string;
@@ -24,40 +25,93 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
   return schema;
 };
 
-// General fetch handler
+// Enhanced fetch handler with better error handling and development debugging
 async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  let resultRaw: unknown;
+  const startTime = Date.now();
+  
   try {
-    resultRaw = await response.json();
-  } catch {
-    resultRaw = undefined;
-  }
-
-  // Normalize to ApiResponse
-  const result = resultRaw as ApiResponse<T>;
-
-  if (!response.ok) {
-    let detailMsg: string;
-    if (typeof result.detail === 'object' && result.detail !== null) {
-      detailMsg = JSON.stringify(result.detail);
-    } else {
-      detailMsg = result.detail ?? response.statusText;
+    // Use our enhanced fetch with error handling
+    const response = await fetchWithErrorHandling(url, options);
+    
+    let resultRaw: unknown;
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        resultRaw = await response.json();
+      } else {
+        const text = await response.text();
+        // Try to parse as JSON, fallback to text
+        try {
+          resultRaw = JSON.parse(text);
+        } catch {
+          resultRaw = text;
+        }
+      }
+    } catch (parseError) {
+      const error = new Error(`Failed to parse response from ${url}`) as NetworkError;
+      error.name = 'ParseError';
+      error.url = url;
+      error.method = options?.method || 'GET';
+      
+      // Log parsing error in development
+      if ((import.meta as any).env?.MODE === 'development') {
+        console.error('Response parsing failed:', parseError);
+        console.log('Response:', response);
+      }
+      
+      throw error;
     }
-    throw new Error(detailMsg);
-  }
 
-  if (result.status && result.status !== 'success') {
-    const errMsg = result.detail ?? `Error on ${url}`;
-    throw new Error(errMsg);
-  }
+    // Normalize to ApiResponse
+    const result = resultRaw as ApiResponse<T>;
 
-  if (result.data !== undefined) {
-    return result.data;
-  }
+    // Check for API-level errors in the response
+    if (result.status && result.status !== 'success') {
+      const errMsg = result.detail ?? `API error on ${url}`;
+      const apiError = new Error(errMsg) as NetworkError;
+      apiError.name = 'APIError';
+      apiError.url = url;
+      apiError.method = options?.method || 'GET';
+      apiError.response = result;
+      throw apiError;
+    }
 
-  // Fallback to raw
-  return resultRaw as T;
+    // Log successful API calls in development
+    if ((import.meta as any).env?.MODE === 'development') {
+      const duration = Date.now() - startTime;
+      console.log(`📡 API Success: ${options?.method || 'GET'} ${url} (${duration}ms)`, {
+        request: { url, options },
+        response: result,
+      });
+    }
+
+    // Return the data field if present, otherwise return the raw result
+    if (result.data !== undefined) {
+      return result.data;
+    }
+
+    return resultRaw as T;
+    
+  } catch (error) {
+    // Add additional context to the error
+    if (error instanceof Error) {
+      const enhancedError = error as NetworkError;
+      enhancedError.url = enhancedError.url || url;
+      enhancedError.method = enhancedError.method || options?.method || 'GET';
+      
+      // Add request details for debugging
+      if ((import.meta as any).env?.MODE === 'development') {
+        (enhancedError as any).requestDetails = {
+          url,
+          options,
+          timestamp: new Date().toISOString(),
+          duration: Date.now() - startTime,
+        };
+      }
+    }
+    
+    throw error;
+  }
 }
 
 export const fetchSensorData = (partition?: string): Promise<SensorData[]> => {
@@ -420,18 +474,22 @@ export interface NormalizationRuleUpdatePayload {
 
 export const listNormalizationRules = (): Promise<NormalizationRule[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<NormalizationRule[]>(`${backendUrl}/normalization/`);
+  return doFetch<NormalizationRule[]>(`${backendUrl}/api/normalization/`);
 };
 
 export const createNormalizationRule = (
   payload: NormalizationRuleCreatePayload
 ): Promise<NormalizationRule> => {
   const { backendUrl } = getConfig();
-  return doFetch<NormalizationRule>(`${backendUrl}/normalization/`, {
+  return doFetch<NormalizationRule>(`${backendUrl}/api/normalization/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: true, ...payload }),
   });
+};
+
+export const createMultipleNormalizationRules = (rules: NormalizationRuleCreatePayload[]): Promise<NormalizationRule[]> => {
+  return Promise.all(rules.map(rule => createNormalizationRule(rule)));
 };
 
 export const updateNormalizationRule = (
@@ -792,5 +850,83 @@ export const deleteSetting = (key: string): Promise<{ status?: string; message?:
   const { backendUrl } = getConfig();
   return doFetch<{ status?: string; message?: string }>(`${backendUrl}/api/settings/${encodeURIComponent(key)}`, {
     method: 'DELETE',
+  });
+};
+
+// Normalization Preview API
+export interface NormalizationPreviewSampleData {
+  status: string;
+  data: any[];
+  columns: string[];
+  total_records: number;
+  sample_ingestion_ids: string[];
+}
+
+export interface NormalizationPreviewResult {
+  status: string;
+  summary: {
+    total_records: number;
+    total_columns: number;
+    rules_applied: number;
+    columns_mapped: number;
+    unmapped_columns: number;
+  };
+  original_data: any[];
+  normalized_data: any[];
+  applied_rules: any[];
+  column_mappings: Record<string, string>;
+  unmapped_columns: string[];
+  available_columns: string[];
+}
+
+export const getNormalizationSampleData = (
+  ingestionId?: string,
+  limit: number = 100
+): Promise<NormalizationPreviewSampleData> => {
+  const { backendUrl } = getConfig();
+  const params = new URLSearchParams({ limit: limit.toString() });
+  if (ingestionId) {
+    params.append('ingestion_id', ingestionId);
+  }
+  return doFetch<NormalizationPreviewSampleData>(`${backendUrl}/api/normalization/preview/sample-data?${params}`);
+};
+
+export const previewNormalization = (payload: {
+  ingestion_id?: string;
+  custom_rules?: Array<{ raw_key: string; canonical_key: string; ingestion_id?: string }>;
+  sample_limit: number;
+}): Promise<{ status: string; preview: NormalizationPreviewResult }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ status: string; preview: NormalizationPreviewResult }>(`${backendUrl}/api/normalization/preview/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const validateNormalizationRules = (payload: {
+  rules: Array<{ raw_key: string; canonical_key: string; ingestion_id?: string }>;
+  ingestion_id?: string;
+  sample_limit: number;
+}): Promise<{ status: string; validation: any }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ status: string; validation: any }>(`${backendUrl}/api/normalization/preview/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const compareNormalizationScenarios = (payload: {
+  ingestion_id?: string;
+  scenario_a_rules: Array<{ raw_key: string; canonical_key: string; ingestion_id?: string }>;
+  scenario_b_rules: Array<{ raw_key: string; canonical_key: string; ingestion_id?: string }>;
+  sample_limit: number;
+}): Promise<any> => {
+  const { backendUrl } = getConfig();
+  return doFetch<any>(`${backendUrl}/api/normalization/preview/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 };

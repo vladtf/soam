@@ -1,7 +1,9 @@
-import React from 'react';
-import { Row, Col, Card, Badge } from 'react-bootstrap';
+import React, { useState } from 'react';
+import { Row, Col, Card, Badge, Button } from 'react-bootstrap';
+import { FaEye } from 'react-icons/fa';
 import { SensorData, NormalizationRule } from '../../api/backendRequests';
 import NormalizationRulesSection from './NormalizationRulesSection';
+import NormalizationPreviewModal from '../NormalizationPreviewModal';
 
 interface NormalizationTabProps {
   filteredRules: NormalizationRule[];
@@ -22,17 +24,31 @@ const NormalizationTab: React.FC<NormalizationTabProps> = ({
   tableColumns,
   renderValue,
 }) => {
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
   return (
-    <Row>
-      <Col lg={8}>
-        <NormalizationRulesSection
-          rules={filteredRules}
-          activePartition={activePartition}
-          partitions={partitions}
-          onRulesChange={onRulesChange}
-          sampleData={sampleData}
-        />
-      </Col>
+    <>
+      <Row>
+        <Col lg={8}>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h5 className="mb-0">Normalization Rules</h5>
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={() => setShowPreviewModal(true)}
+            >
+              <FaEye className="me-1" />
+              Preview Normalization
+            </Button>
+          </div>
+          <NormalizationRulesSection
+            rules={filteredRules}
+            activePartition={activePartition}
+            partitions={partitions}
+            onRulesChange={onRulesChange}
+            sampleData={sampleData}
+          />
+        </Col>
       <Col lg={4}>
         <Card className="h-100">
           <Card.Header>
@@ -88,6 +104,12 @@ const NormalizationTab: React.FC<NormalizationTabProps> = ({
         </Card>
       </Col>
     </Row>
+
+    <NormalizationPreviewModal
+      show={showPreviewModal}
+      onHide={() => setShowPreviewModal(false)}
+    />
+    </>
   );
 };
 
