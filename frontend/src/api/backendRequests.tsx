@@ -478,14 +478,14 @@ export interface NormalizationRuleUpdatePayload {
 
 export const listNormalizationRules = (): Promise<NormalizationRule[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<NormalizationRule[]>(`${backendUrl}/api/normalization/`);
+  return doFetch<NormalizationRule[]>(`${backendUrl}/api/normalization`);
 };
 
 export const createNormalizationRule = (
   payload: NormalizationRuleCreatePayload
 ): Promise<NormalizationRule> => {
   const { backendUrl } = getConfig();
-  return doFetch<NormalizationRule>(`${backendUrl}/api/normalization/`, {
+  return doFetch<NormalizationRule>(`${backendUrl}/api/normalization`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: true, ...payload }),
@@ -531,12 +531,12 @@ export interface ComputationDef {
 
 export const listComputations = (): Promise<ComputationDef[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<ComputationDef[]>(`${backendUrl}/api/computations/`);
+  return doFetch<ComputationDef[]>(`${backendUrl}/api/computations`);
 };
 
 export const createComputation = (payload: ComputationDef): Promise<ComputationDef> => {
   const { backendUrl } = getConfig();
-  return doFetch<ComputationDef>(`${backendUrl}/api/computations/`, {
+  return doFetch<ComputationDef>(`${backendUrl}/api/computations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -673,12 +673,12 @@ export interface Device {
 
 export const listDevices = (): Promise<Device[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<Device[]>(`${backendUrl}/api/devices/`);
+  return doFetch<Device[]>(`${backendUrl}/api/devices`);
 };
 
 export const registerDevice = (payload: { ingestion_id: string; sensor_id?: string; name?: string; description?: string; enabled?: boolean; created_by: string }): Promise<Device> => {
   const { backendUrl } = getConfig();
-  return doFetch<Device>(`${backendUrl}/api/devices/`, {
+  return doFetch<Device>(`${backendUrl}/api/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: true, ...payload }),
@@ -763,7 +763,7 @@ export const getSchemaConfig = (): Promise<SchemaConfig> => {
 
 export const getSystemConfig = (): Promise<SystemConfig> => {
   const { backendUrl } = getConfig();
-  return doFetch<SystemConfig>(`${backendUrl}/api/config/`);
+  return doFetch<SystemConfig>(`${backendUrl}/api/config`);
 };
 
 export const getFeatureFlags = (): Promise<FeatureFlags> => {
@@ -824,7 +824,7 @@ export interface SettingUpdatePayload {
 
 export const listSettings = (): Promise<Setting[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<Setting[]>(`${backendUrl}/api/settings/`);
+  return doFetch<Setting[]>(`${backendUrl}/api/settings`);
 };
 
 export const getSetting = (key: string): Promise<Setting> => {
@@ -834,7 +834,7 @@ export const getSetting = (key: string): Promise<Setting> => {
 
 export const createSetting = (payload: SettingCreatePayload): Promise<Setting> => {
   const { backendUrl } = getConfig();
-  return doFetch<Setting>(`${backendUrl}/api/settings/`, {
+  return doFetch<Setting>(`${backendUrl}/api/settings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

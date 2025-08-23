@@ -19,7 +19,7 @@ const PipelineNavigationSidebar: React.FC<PipelineNavigationSidebarProps> = ({
     <div className="sticky-top" style={{ top: '20px' }}>
       <Card className="mb-3">
         <Card.Header>
-          <h6 className="mb-0">🧭 Pipeline Navigation</h6>
+          <h6 className="mb-0">Pipeline Navigation</h6>
         </Card.Header>
         <Card.Body className="p-2">
           <Nav variant="pills" className="flex-column">

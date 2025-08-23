@@ -90,8 +90,8 @@ async def get_system_config(spark_manager: SparkManagerDep) -> ApiResponse:
             },
             "streaming": {
                 "enrichment_active": (
-                    spark_manager.streaming_manager.enrich_query.isActive 
-                    if spark_manager.streaming_manager and spark_manager.streaming_manager.enrich_query 
+                    spark_manager.streaming_manager.enrichment_manager.is_enrichment_active() 
+                    if spark_manager.streaming_manager and spark_manager.streaming_manager.enrichment_manager 
                     else False
                 ),
                 "temperature_active": (
