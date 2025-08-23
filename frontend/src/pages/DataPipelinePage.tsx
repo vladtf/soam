@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { Container, Row, Col, Tab } from 'react-bootstrap';
+import { useSearchParams } from 'react-router-dom';
 import { usePipelineData } from '../hooks/usePipelineData';
 
 // Import components
@@ -13,6 +14,26 @@ import ComputationsTab from '../components/pipeline/ComputationsTab';
 import DevicesTab from '../components/pipeline/DevicesTab';
 
 const DataPipelinePage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Define valid tab keys as a memoized constant
+  const validTabs = useMemo(() => ['overview', 'sensors', 'normalization', 'computations', 'devices'], []);
+  
+  // Get current tab directly from URL (single source of truth)
+  const activeTab = useMemo(() => {
+    const tabFromUrl = searchParams.get('tab');
+    return (tabFromUrl && validTabs.includes(tabFromUrl)) ? tabFromUrl : 'overview';
+  }, [searchParams, validTabs]);
+
+  // Handle tab selection with immediate URL update
+  const handleTabSelect = useCallback((tab: string | null) => {
+    if (tab && validTabs.includes(tab) && tab !== activeTab) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set('tab', tab);
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [activeTab, validTabs, searchParams, setSearchParams]);
+
   const {
     // State
     activePartition,
@@ -90,7 +111,7 @@ const DataPipelinePage: React.FC = () => {
       </Row>
 
       {/* Tabbed Interface with Persistent Sidebar */}
-      <Tab.Container defaultActiveKey="overview">
+      <Tab.Container activeKey={activeTab} onSelect={handleTabSelect}>
         <Row>
           <Col lg={3} xl={2}>
             {/* Persistent Navigation Sidebar */}
