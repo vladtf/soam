@@ -24,8 +24,8 @@ from src.logging_config import setup_logging
 from src.middleware import RequestIdMiddleware
 from src.spark import spark_routes
 from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns, ensure_computation_ownership_columns, ensure_device_ownership_columns
-from src.spark.cleaner import DataCleaner
-from src.spark.usage_tracker import NormalizationRuleUsageTracker
+from src.spark.enrichment.cleaner import DataCleaner
+from src.spark.enrichment.usage_tracker import NormalizationRuleUsageTracker
 from src.api.settings_routes import ensure_default_settings
 
 # Configure structured logging once

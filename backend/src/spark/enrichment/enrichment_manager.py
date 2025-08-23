@@ -8,7 +8,7 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
 
-from ..cleaner import DataCleaner
+from .cleaner import DataCleaner
 from ..config import SparkConfig, SparkSchemas
 from .batch_processor import BatchProcessor
 
@@ -173,7 +173,7 @@ class EnrichmentManager:
         try:
             self.spark.read.format("delta").load(self.enriched_path).limit(0)
         except Exception:
-            from ..union_schema import create_empty_enriched_union_dataframe
+            from .union_schema import create_empty_enriched_union_dataframe
             empty_enriched = create_empty_enriched_union_dataframe(self.spark)
             (
                 empty_enriched.write

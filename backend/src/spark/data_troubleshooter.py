@@ -10,8 +10,8 @@ from pyspark.sql.types import StructType
 from src.spark.config import SparkConfig
 
 from .session import SparkSessionManager
-from .cleaner import DataCleaner
-from .union_schema import UnionSchemaTransformer
+from .enrichment.cleaner import DataCleaner
+from .enrichment.union_schema import UnionSchemaTransformer
 
 logger = logging.getLogger(__name__)
 

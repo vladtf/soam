@@ -20,13 +20,10 @@ export interface DevicesTableCardProps {
 }
 
 const TABLE_COLUMNS = [
-    'ID',
-    'Sensor ID',
-    'Name',
+    'Device',
     'Status',
-    'Created By',
-    'Last Updated',
-    ''
+    'Created',
+    'Actions'
 ];
 
 const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, onDelete }) => {
@@ -36,12 +33,12 @@ const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, 
                 <strong>Registered Devices</strong>
             </Card.Header>
             <Card.Body className="p-0">
-                <div style={{ maxHeight: 'min(40vh, 400px)', overflow: 'auto' }}>
+                <div style={{ maxHeight: 'min(50vh, 500px)', overflow: 'auto' }}>
                     <ThemedTable size="sm" responsive hover className="mb-0">
-                        <thead>
+                        <thead className="sticky-top bg-light">
                             <tr>
                                 {TABLE_COLUMNS.map((col, idx) => (
-                                    <th key={idx}>{col}</th>
+                                    <th key={idx} className="border-bottom">{col}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -54,29 +51,48 @@ const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, 
                                 </tr>
                             ) : devices.map(d => (
                                 <tr key={d.id}>
-                                    <td>{d.id}</td>
-                                    <td>{d.sensor_id}</td>
-                                    <td>{d.name || '-'}</td>
                                     <td>
-                                        <Badge bg={d.enabled ? 'success' : 'secondary'}>{d.enabled ? 'On' : 'Off'}</Badge>
-                                    </td>
-                                    <td>
-                                        <Badge bg="info" className="text-dark">
-                                            {d.created_by || 'unknown'}
-                                        </Badge>
-                                        {d.updated_by && d.updated_by !== d.created_by && (
-                                            <div className="small text-muted mt-1">
-                                                Updated by: {d.updated_by}
-                                            </div>
+                                        <div className="fw-bold">{d.name || 'Unnamed Device'}</div>
+                                        {d.sensor_id && (
+                                            <small className="text-muted">ID: {d.sensor_id}</small>
                                         )}
                                     </td>
-                                    <td className="small text-muted">
-                                        {d.updated_at ? new Date(d.updated_at).toLocaleString() : 
-                                         d.created_at ? new Date(d.created_at).toLocaleString() : '-'}
+                                    <td>
+                                        <Badge bg={d.enabled ? 'success' : 'secondary'}>
+                                            {d.enabled ? '🟢 Active' : '⚪ Inactive'}
+                                        </Badge>
                                     </td>
-                                    <td className="text-end">
-                                        <Button size="sm" variant="outline-secondary" className="me-2" onClick={() => d.id && onToggle(d.id)}>Toggle</Button>
-                                        <Button size="sm" variant="outline-danger" onClick={() => d.id && onDelete(d.id)}>Delete</Button>
+                                    <td>
+                                        <div className="small">
+                                            <div>
+                                                <Badge bg="info" className="text-dark mb-1">
+                                                    {d.created_by || 'unknown'}
+                                                </Badge>
+                                            </div>
+                                            <div className="text-muted">
+                                                {d.created_at ? new Date(d.created_at).toLocaleDateString() : '-'}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div className="d-flex flex-column gap-1" style={{ minWidth: '80px' }}>
+                                            <Button 
+                                                size="sm" 
+                                                variant={d.enabled ? "outline-warning" : "outline-success"} 
+                                                onClick={() => d.id && onToggle(d.id)}
+                                                className="py-1"
+                                            >
+                                                {d.enabled ? 'Disable' : 'Enable'}
+                                            </Button>
+                                            <Button 
+                                                size="sm" 
+                                                variant="outline-danger" 
+                                                onClick={() => d.id && onDelete(d.id)}
+                                                className="py-1"
+                                            >
+                                                Delete
+                                            </Button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

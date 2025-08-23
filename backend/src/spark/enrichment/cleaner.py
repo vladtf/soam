@@ -1,7 +1,7 @@
 """
 Utilities for cleaning and normalizing raw sensor data before enrichment.
 """
-from src.spark.usage_tracker import NormalizationRuleUsageTracker as Usage
+from src.spark.enrichment.usage_tracker import NormalizationRuleUsageTracker as Usage
 from typing import Dict, List, Optional
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
@@ -30,10 +30,6 @@ class DataCleaner:
         "sensorid": "sensorId",
         "sensor_id": "sensorId",
         "sensor-id": "sensorId",
-        # ingestion id variants
-        "ingestionid": "ingestion_id",
-        "ingestion_id": "ingestion_id",
-        "ingestion-id": "ingestion_id",
         # temperature
         "temperature": "temperature",
         # humidity

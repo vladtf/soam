@@ -295,7 +295,7 @@ def create_empty_union_dataframe(spark_session) -> DataFrame:
     Returns:
         Empty DataFrame with union schema
     """
-    from .config import SparkSchemas
+    from ..config import SparkSchemas
     
     schema = SparkSchemas.get_union_schema()
     return spark_session.createDataFrame([], schema)
@@ -310,7 +310,7 @@ def create_empty_enriched_union_dataframe(spark_session) -> DataFrame:
     Returns:
         Empty DataFrame with enriched union schema
     """
-    from .config import SparkSchemas
+    from ..config import SparkSchemas
     
     schema = SparkSchemas.get_enriched_union_schema()
     return spark_session.createDataFrame([], schema)

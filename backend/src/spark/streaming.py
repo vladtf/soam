@@ -7,7 +7,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
 
 from .config import SparkConfig, SparkSchemas
-from .cleaner import DataCleaner
+from .enrichment.cleaner import DataCleaner
 from .session import SparkSessionManager
 from .enrichment import EnrichmentManager
 from src.utils.settings_manager import settings_manager
@@ -148,7 +148,7 @@ class StreamingManager:
             return
 
         # Extract temperature from union schema and filter valid values
-        from .union_schema import UnionSchemaTransformer
+        from .enrichment.union_schema import UnionSchemaTransformer
 
         temp_stream = UnionSchemaTransformer.extract_column_from_union(
             enriched_stream, "temperature", prefer_normalized=True
@@ -235,7 +235,7 @@ class StreamingManager:
             return
 
         # Extract temperature and sensorId from union schema
-        from .union_schema import UnionSchemaTransformer
+        from .enrichment.union_schema import UnionSchemaTransformer
 
         alert_stream = UnionSchemaTransformer.extract_column_from_union(
             enriched_stream, "temperature", prefer_normalized=True
