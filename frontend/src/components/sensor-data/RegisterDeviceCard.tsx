@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, Button, Form } from 'react-bootstrap';
+import { SensorData } from '../../api/backendRequests';
 
 export interface RegisterDeviceCardProps {
     activePartition: string;
@@ -10,6 +11,7 @@ export interface RegisterDeviceCardProps {
     description: string;
     setDescription: (v: string) => void;
     onRegister: (e: React.FormEvent) => void;
+    sensorData: SensorData[];
 }
 
 const RegisterDeviceCard: React.FC<RegisterDeviceCardProps> = ({
@@ -21,7 +23,32 @@ const RegisterDeviceCard: React.FC<RegisterDeviceCardProps> = ({
     description,
     setDescription,
     onRegister,
+    sensorData,
 }) => {
+    // Extract unique ingestion IDs from sensor data
+    const availableIngestionIds = useMemo(() => {
+        const uniqueIds = new Set<string>();
+        
+        sensorData.forEach((data) => {
+            // Only check ingestion_id field
+            const ingestionId = data.ingestion_id;
+            
+            if (ingestionId && typeof ingestionId === 'string' && ingestionId.trim()) {
+                uniqueIds.add(ingestionId.trim());
+            }
+        });
+        
+        return Array.from(uniqueIds).sort();
+    }, [sensorData]);
+
+    const handleIngestionIdSelect = (selectedId: string) => {
+        setIngestionId(selectedId);
+        // Also auto-fill the name if it's empty
+        if (!name && selectedId) {
+            setName(selectedId);
+        }
+    };
+
     return (
         <Card className="mb-3">
             <Card.Header className="py-2">
@@ -40,7 +67,24 @@ const RegisterDeviceCard: React.FC<RegisterDeviceCardProps> = ({
                 <Form onSubmit={onRegister}>
                     <Form.Group controlId="ingestionId" className="mb-2">
                         <Form.Label className="mb-1">Ingestion ID</Form.Label>
-                        <Form.Control size="sm" type="text" value={ingestionId} onChange={(e) => setIngestionId(e.target.value)} placeholder="Required: ingestion_id (source)" required />
+                        <Form.Select 
+                            size="sm" 
+                            value={ingestionId} 
+                            onChange={(e) => handleIngestionIdSelect(e.target.value)}
+                            required
+                        >
+                            <option value="">Select an ingestion ID...</option>
+                            {availableIngestionIds.map((id) => (
+                                <option key={id} value={id}>
+                                    {id}
+                                </option>
+                            ))}
+                        </Form.Select>
+                        {availableIngestionIds.length > 0 && (
+                            <Form.Text className="text-muted">
+                                Found {availableIngestionIds.length} unique ID(s) in sensor data
+                            </Form.Text>
+                        )}
                     </Form.Group>
                     <Form.Group controlId="deviceName" className="mb-2">
                         <Form.Label className="mb-1">Name</Form.Label>

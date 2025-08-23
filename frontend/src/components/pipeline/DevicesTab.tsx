@@ -51,6 +51,7 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
             description={description}
             setDescription={setDescription}
             onRegister={onRegister}
+            sensorData={sensorData}
           />
         </Col>
         <Col lg={6}>

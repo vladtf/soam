@@ -4,8 +4,7 @@ import { fetchWithErrorHandling, NetworkError } from '../utils/networkErrorHandl
 
 export interface SensorData {
   sensorId?: string;
-  temperature?: number;
-  humidity?: number;
+  ingestion_id?: string;
 }
 
 // Standard API response wrapper
