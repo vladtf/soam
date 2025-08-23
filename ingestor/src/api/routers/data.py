@@ -3,52 +3,53 @@ Data and connection management API endpoints.
 """
 import logging
 from fastapi import APIRouter, HTTPException
-from typing import List, Optional
+from typing import Optional
 
 from src.api.models import (
     ConnectionConfigCreate,
-    ConnectionConfig,
     BrokerSwitchRequest,
-    ConnectionsResponse,
     ApiResponse,
+    ApiListResponse,
 )
-from src.api.dependencies import IngestorStateDep, MinioClientDep
+from src.api.response_utils import success_response, list_response
+from src.api.dependencies import IngestorStateDep
 from src.config import ConnectionConfig as ConfigDataclass
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["data"])
+router = APIRouter(prefix="/api", tags=["data"])
 
 
-@router.get("/data", response_model=List[dict])
+@router.get("/data", response_model=ApiListResponse)
 async def get_data(state: IngestorStateDep, limit_per_partition: Optional[int] = None):
     """Returns buffered sensor data across all partitions (optionally limited per partition)."""
     try:
         rows = state.all_data_flat(limit_per_partition=limit_per_partition)
         logger.debug("Fetched %d buffered rows across %d partitions", len(rows), len(state.data_buffers))
-        return rows
+        return list_response(rows, f"Retrieved {len(rows)} sensor data records")
     except Exception as e:
         logger.error("Error fetching data: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/partitions", response_model=List[str])
+@router.get("/partitions", response_model=ApiListResponse)
 async def list_partitions(state: IngestorStateDep):
     """List known ingestion_id partitions currently in buffer."""
     try:
         parts = sorted(state.data_buffers.keys())
-        return parts
+        return list_response(parts, f"Retrieved {len(parts)} partitions")
     except Exception as e:
         logger.error("Error listing partitions: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/data/{ingestion_id}", response_model=List[dict])
+@router.get("/data/{ingestion_id}", response_model=ApiListResponse)
 async def get_data_by_partition(ingestion_id: str, state: IngestorStateDep):
     """Return buffered data for a specific ingestion_id partition."""
     try:
         buf = state.get_partition_buffer(ingestion_id)
-        return list(buf)
+        data = list(buf)
+        return list_response(data, f"Retrieved {len(data)} records from partition {ingestion_id}")
     except Exception as e:
         logger.error("Error fetching partition data: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -119,11 +120,10 @@ async def get_topic_analysis(state: IngestorStateDep):
             analysis["buffer_status"]["active_broker"] = f"{state.active_connection.broker}:{state.active_connection.port}"
             analysis["buffer_status"]["subscribed_topic"] = state.active_connection.topic
         
-        return {
-            "status": "success",
-            "data": analysis,
-            "message": f"Topic analysis completed - {len(state.data_buffers)} partitions analyzed, {total_messages_in_buffers} total messages in buffers"
-        }
+        return success_response(
+            data=analysis,
+            message=f"Topic analysis completed - {len(state.data_buffers)} partitions analyzed, {total_messages_in_buffers} total messages in buffers"
+        )
     except Exception as e:
         logger.error("Error in topic analysis: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -135,22 +135,21 @@ async def set_buffer_size(payload: dict, state: IngestorStateDep):
     try:
         max_rows = int(payload.get("max_rows", 100))
         state.set_buffer_max_rows(max_rows)
-        return {"status": "success", "data": {"max_rows": state.buffer_max_rows}}
+        return success_response(data={"max_rows": state.buffer_max_rows})
     except Exception as e:
         logger.error("Error setting buffer size: %s", str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/connections", response_model=ConnectionsResponse)
+@router.get("/connections", response_model=ApiResponse)
 async def get_connections(state: IngestorStateDep):
     """Get all connection configurations."""
     try:
         logger.debug(
             "Fetching %d connection configurations", len(state.connection_configs)
         )
-        return {
-            "status": "success",
-            "data": {
+        return success_response(
+            data={
                 "connections": [
                     {
                         "id": c.id,
@@ -168,7 +167,7 @@ async def get_connections(state: IngestorStateDep):
                     "connectionType": state.active_connection.connectionType
                 } if state.active_connection else None
             }
-        }
+        )
     except Exception as e:
         logger.error(f"Error fetching connections: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -194,11 +193,10 @@ async def add_connection(
         if state.active_connection is None:
             state.active_connection = new_config
             
-        return {
-            "status": "success",
-            "data": {"id": config_id},
-            "message": "Connection configuration added successfully"
-        }
+        return success_response(
+            data={"id": config_id},
+            message="Connection configuration added successfully"
+        )
     except Exception as e:
         logger.error(f"Error adding connection: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -220,17 +218,16 @@ async def switch_broker(
                 # TODO: Restart MQTT client with new configuration
                 # This would need to be handled in the application lifecycle
                 
-                return {
-                    "status": "success",
-                    "data": {
+                return success_response(
+                    data={
                         "id": config.id,
                         "broker": config.broker,
                         "port": config.port,
                         "topic": config.topic,
                         "connectionType": config.connectionType
                     },
-                    "message": f"Switched to connection {target_id}"
-                }
+                    message=f"Switched to connection {target_id}"
+                )
         
         raise HTTPException(
             status_code=404, 

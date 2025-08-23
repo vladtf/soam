@@ -2,7 +2,6 @@
 Normalization rules CRUD endpoints.
 """
 import logging
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -11,20 +10,23 @@ from src.api.models import (
     NormalizationRuleUpdate,
     NormalizationRuleResponse,
     ApiResponse,
+    ApiListResponse,
 )
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
 from src.database import get_db
 from src.database.models import NormalizationRule
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/normalization", tags=["normalization"])
+router = APIRouter(prefix="/api", tags=["normalization"])
 
 
-@router.get("/", response_model=List[NormalizationRuleResponse])
+@router.get("/normalization", response_model=ApiListResponse)
 def list_rules(db: Session = Depends(get_db)):
+    """List all normalization rules."""
     try:
         rules = db.query(NormalizationRule).order_by(NormalizationRule.id.asc()).all()
-        return [
+        rule_responses = [
             NormalizationRuleResponse(
                 id=r.id,
                 ingestion_id=r.ingestion_id,
@@ -40,13 +42,18 @@ def list_rules(db: Session = Depends(get_db)):
             )
             for r in rules
         ]
+        return list_response(
+            data=rule_responses,
+            message=f"Retrieved {len(rule_responses)} normalization rules"
+        )
     except Exception as e:
         logger.error("Error listing normalization rules: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to retrieve normalization rules", str(e))
 
 
-@router.post("/", response_model=NormalizationRuleResponse)
+@router.post("/normalization", response_model=ApiResponse)
 def create_rule(payload: NormalizationRuleCreate, db: Session = Depends(get_db)):
+    """Create a new normalization rule."""
     try:
         rule = NormalizationRule(
             ingestion_id=payload.ingestion_id,
@@ -60,7 +67,8 @@ def create_rule(payload: NormalizationRuleCreate, db: Session = Depends(get_db))
         db.refresh(rule)
         logger.info("Normalization rule created by '%s': %s -> %s", 
                    payload.created_by, rule.raw_key, rule.canonical_key)
-        return NormalizationRuleResponse(
+        
+        rule_response = NormalizationRuleResponse(
             id=rule.id,
             ingestion_id=rule.ingestion_id,
             raw_key=rule.raw_key,
@@ -73,23 +81,28 @@ def create_rule(payload: NormalizationRuleCreate, db: Session = Depends(get_db))
             created_at=rule.created_at.isoformat() if rule.created_at else None,
             updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
         )
+        
+        return success_response(
+            data=rule_response,
+            message="Normalization rule created successfully"
+        )
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         logger.error("Error creating normalization rule: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to create normalization rule", str(e))
 
 
-@router.patch("/{rule_id}", response_model=NormalizationRuleResponse)
+@router.patch("/normalization/{rule_id}", response_model=ApiResponse)
 def update_rule(rule_id: int, payload: NormalizationRuleUpdate, db: Session = Depends(get_db)):
+    """Update an existing normalization rule."""
     try:
         rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
         if not rule:
-            raise HTTPException(status_code=404, detail="Rule not found")
+            not_found_error("Rule not found")
 
         changes = []
-        rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
         if payload.canonical_key is not None and payload.canonical_key.strip() != rule.canonical_key:
             changes.append(f"canonical_key: '{rule.canonical_key}' -> '{payload.canonical_key.strip()}'")
             rule.canonical_key = payload.canonical_key.strip()
@@ -109,7 +122,7 @@ def update_rule(rule_id: int, payload: NormalizationRuleUpdate, db: Session = De
             logger.info("Normalization rule %d touched by '%s' (no changes)", 
                        rule.id, payload.updated_by)
         
-        return NormalizationRuleResponse(
+        rule_response = NormalizationRuleResponse(
             id=rule.id,
             ingestion_id=rule.ingestion_id,
             raw_key=rule.raw_key,
@@ -122,27 +135,31 @@ def update_rule(rule_id: int, payload: NormalizationRuleUpdate, db: Session = De
             created_at=rule.created_at.isoformat() if rule.created_at else None,
             updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
         )
+        
+        return success_response(
+            data=rule_response,
+            message="Normalization rule updated successfully"
+        )
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         logger.error("Error updating normalization rule %d: %s", rule_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to update normalization rule", str(e))
 
 
-@router.delete("/{rule_id}", response_model=ApiResponse)
+@router.delete("/normalization/{rule_id}", response_model=ApiResponse)
 def delete_rule(rule_id: int, db: Session = Depends(get_db)):
+    """Delete a normalization rule."""
     try:
         rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
         if not rule:
-            raise HTTPException(status_code=404, detail="Rule not found")
+            not_found_error("Rule not found")
         db.delete(rule)
         db.commit()
         logger.info("Normalization rule deleted: id=%d", rule_id)
-        return ApiResponse(status="success", message="Rule deleted")
-    except HTTPException:
-        raise
+        return success_response(message="Rule deleted successfully")
     except Exception as e:
         db.rollback()
         logger.error("Error deleting normalization rule %d: %s", rule_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to delete normalization rule", str(e))

@@ -2,7 +2,7 @@
 Data access operations for Spark data.
 """
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from pyspark.sql import functions as F
 
 from .config import SparkConfig
@@ -47,12 +47,11 @@ class DataAccessManager:
     def _create_table_not_ready_response(self, data_type: str) -> Dict[str, Any]:
         """Create a standard response for when tables are not ready."""
         return {
-            "status": "success",
             "data": [],
             "message": f"{data_type} data not available yet. Please wait for data processing to begin."
         }
     
-    def get_streaming_average_temperature(self, minutes: int = 30) -> Dict[str, Any]:
+    def get_streaming_average_temperature(self, minutes: int = 30) -> List[Dict[str, Any]]:
         """
         Get streaming average temperature data for the specified time window.
         
@@ -60,7 +59,7 @@ class DataAccessManager:
             minutes: Time window in minutes (default: 30)
             
         Returns:
-            Dict containing status and temperature data
+            List of temperature data records
         """
         if not self.session_manager.is_connected():
             logger.info("Spark connection lost, attempting to reconnect...")
@@ -74,21 +73,18 @@ class DataAccessManager:
                 .filter(F.col("time_start") >= F.current_timestamp() - F.expr(f"INTERVAL {minutes} MINUTES"))
             )
             rows = df.collect()
-            return {
-                "status": "success",
-                "data": [row.asDict() for row in rows]
-            }
+            return [row.asDict() for row in rows]
             
         except Exception as e:
             logger.error(f"Failed to get streaming average temperature: {e}")
             
             if self._handle_table_not_found_error(e):
                 logger.info("Gold temperature averages table not found, streaming likely hasn't started yet")
-                return self._create_table_not_ready_response("Temperature")
+                return []  # Return empty list instead of wrapped response
             else:
                 raise e
 
-    def get_temperature_alerts(self, since_minutes: int = 60) -> Dict[str, Any]:
+    def get_temperature_alerts(self, since_minutes: int = 60) -> List[Dict[str, Any]]:
         """
         Get recent temperature alerts.
         
@@ -96,7 +92,7 @@ class DataAccessManager:
             since_minutes: Time window in minutes (default: 60)
             
         Returns:
-            Dict containing status and alert data
+            List of temperature alert records
         """
         if not self.session_manager.is_connected():
             logger.info("Spark connection lost, attempting to reconnect...")
@@ -109,17 +105,14 @@ class DataAccessManager:
                 .load(self.gold_alerts_path)
                 .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes"))
             )
-            return {
-                "status": "success",
-                "data": [row.asDict() for row in df.collect()]
-            }
+            return [row.asDict() for row in df.collect()]
             
         except Exception as e:
             logger.error(f"Failed to get temperature alerts: {e}")
             
             if self._handle_table_not_found_error(e):
                 logger.info("Gold alerts table not found, streaming likely hasn't started yet")
-                return self._create_table_not_ready_response("Alert")
+                return []  # Return empty list instead of wrapped response
             
             # Try reconnecting and retry once
             if self.session_manager.reconnect():
@@ -129,14 +122,11 @@ class DataAccessManager:
                         .load(self.gold_alerts_path)
                         .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes"))
                     )
-                    return {
-                        "status": "success",
-                        "data": [row.asDict() for row in df.collect()]
-                    }
+                    return [row.asDict() for row in df.collect()]
                 except Exception as retry_e:
                     logger.error(f"Retry also failed: {retry_e}")
                     if self._handle_table_not_found_error(retry_e):
-                        return self._create_table_not_ready_response("Alert")
+                        return []  # Return empty list instead of wrapped response
                     raise
             else:
                 raise
@@ -290,19 +280,12 @@ class DataAccessManager:
                 else:
                     logger.error(f"Error reading gold data: {e}")
 
-            return {
-                "status": "success",
-                "data": result,
-                "message": f"Enrichment summary for last {minutes} minutes"
-            }
+            return result
             
         except Exception as e:
             logger.error(f"Error getting union enrichment summary: {e}")
-            return {
-                "status": "error", 
-                "data": result,
-                "message": f"Failed to get enrichment summary: {str(e)}"
-            }
+            # Return the result with minimal data even on error
+            return result
 
     def get_enrichment_summary(self, minutes: int = 10) -> Dict[str, Any]:
         """Summarize enrichment inputs and recent activity to help users verify computation inputs.

@@ -92,7 +92,7 @@ export async function flushErrorQueue(force = false): Promise<void> {
     // Send batch sequentially (could be parallel but keep simple & ordered)
     for (const entry of batch) {
       try {
-        const res = await fetch(`${backendUrl}/errors/`, {
+        const res = await fetch(`${backendUrl}/api/errors/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...entry, user_agent: navigator.userAgent }),

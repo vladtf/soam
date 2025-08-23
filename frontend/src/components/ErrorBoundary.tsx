@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Button, Card } from 'react-bootstrap';
-import { FaExclamationTriangle, FaRedo } from 'react-icons/fa';
+import { FaExclamationTriangle, FaRedo, FaHome } from 'react-icons/fa';
 import DevErrorOverlay, { DevErrorInfo } from './DevErrorOverlay';
 
 interface ErrorBoundaryState {
@@ -105,6 +105,10 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     });
   };
 
+  navigateHome = () => {
+    window.location.href = '/';
+  };
+
   render() {
     if (this.state.hasError) {
       // Show development overlay if enabled and in development mode
@@ -195,6 +199,12 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
                 <FaRedo className="me-2" />
                 Try Again
               </Button>
+
+              <Button variant="outline-primary" onClick={this.navigateHome}>
+                <FaHome className="me-2" />
+                Home
+              </Button>
+              
               
               {isDevelopment && (
                 <Button 

@@ -1,115 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Form, Button, Alert, Accordion, Badge, Table, Spinner, Row, Col, InputGroup } from 'react-bootstrap';
-import { getConfig } from '../config';
-import { fetchAvailableSensorIds } from '../api/backendRequests';
+import { fetchAvailableSensorIds, diagnoseField, tracePipeline, FieldDiagnosticResult, PipelineTraceResult } from '../api/backendRequests';
 
 // Configuration constants
 const SENSOR_ID_FETCH_LIMIT = 100;
 const SENSOR_ID_FETCH_MINUTES_BACK = 1440;
-
-interface RawDataAnalysis {
-  found_data: boolean;
-  record_count?: number;
-  field_variants_found?: string[];
-  field_values_sample?: Array<{
-    field_variant?: string;
-    field?: string;
-    value: any;
-    type: string;
-    timestamp: string;
-  }>;
-}
-
-interface NormalizationAnalysis {
-  transformation_applied: boolean;
-  field_mapping?: { [raw: string]: string };
-  normalized_values?: Array<{
-    raw_field: string;
-    canonical_field: string;
-    before_values: any[];
-    after_values: any[];
-    values_match: boolean[];
-  }>;
-}
-
-interface EnrichmentAnalysis {
-  found_in_enriched: boolean;
-  record_count?: number;
-  field_in_sensor_data?: boolean;
-  field_in_normalized_data?: boolean;
-  union_schema_analysis?: {
-    field_values_found?: Array<{
-      field_variant?: string;
-      field?: string;
-      value: any;
-      type: string;
-      timestamp: string;
-    }>;
-  };
-}
-
-interface GoldAnalysis {
-  found_in_gold: boolean;
-  record_count?: number;
-  field_aggregations?: {
-    [field: string]: {
-      count: number;
-      min_value: number;
-      max_value: number;
-      avg_value: number;
-    };
-  };
-}
-
-interface FieldDiagnosticResult {
-  sensor_id: string;
-  field_name: string;
-  minutes_back: number;
-  ingestion_id?: string;
-  timestamp: string;
-  status: string;
-  error?: string;
-  raw_data_analysis?: RawDataAnalysis;
-  normalization_analysis?: NormalizationAnalysis;
-  enrichment_analysis?: EnrichmentAnalysis;
-  gold_analysis?: GoldAnalysis;
-  recommendations: string[];
-}
-
-interface PipelineTraceResult {
-  sensor_id: string;
-  minutes_back: number;
-  timestamp: string;
-  status: string;
-  error?: string;
-  pipeline_stages: {
-    [stage: string]: {
-      record_count?: number;
-      columns?: string[];
-      sample_records?: any[];
-      error?: string;
-    };
-  };
-}
-
-// Helper function for API calls
-async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  let resultRaw: unknown;
-  try {
-    resultRaw = await response.json();
-  } catch {
-    resultRaw = undefined;
-  }
-
-  if (!response.ok) {
-    const result = resultRaw as any;
-    const detailMsg = result?.detail ?? response.statusText;
-    throw new Error(detailMsg);
-  }
-
-  return resultRaw as T;
-}
 
 // Storage key for persisting troubleshooting state
 const TROUBLESHOOTING_STATE_KEY = 'troubleshooting_tool_state';
@@ -221,17 +116,7 @@ const DataTroubleshootingTool: React.FC = () => {
     setDiagnosticResult(null);
 
     try {
-      const { backendUrl } = getConfig();
-      const result = await doFetch<FieldDiagnosticResult>(`${backendUrl}/api/v1/troubleshooting/diagnose-field`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sensor_id: sensorId,
-          field_name: fieldName,
-          minutes_back: minutesBack,
-          ingestion_id: ingestionId || undefined
-        })
-      });
+      const result = await diagnoseField(sensorId, fieldName, minutesBack, ingestionId || undefined);
 
       setDiagnosticResult(result);
     } catch (err) {
@@ -247,15 +132,7 @@ const DataTroubleshootingTool: React.FC = () => {
     setPipelineTrace(null);
 
     try {
-      const { backendUrl } = getConfig();
-      const result = await doFetch<PipelineTraceResult>(`${backendUrl}/api/v1/troubleshooting/trace-pipeline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sensor_id: sensorId,
-          minutes_back: minutesBack
-        })
-      });
+      const result = await tracePipeline(sensorId, minutesBack);
 
       setPipelineTrace(result);
     } catch (err) {

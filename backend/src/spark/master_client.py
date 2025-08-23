@@ -28,23 +28,13 @@ class SparkMasterClient:
             response.raise_for_status()
             data = response.json()
             
-            # Parse using the SparkMasterStatus model
+            # Parse using the SparkMasterStatus model and return the data directly
             master_status = SparkMasterStatus.from_dict(data)
-            
-            return {
-                "status": "success",
-                "data": master_status
-            }
+            return master_status
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch Spark master status: {e}")
-            return {
-                "status": "error",
-                "message": f"Failed to connect to Spark master: {str(e)}"
-            }
+            raise ConnectionError(f"Failed to connect to Spark master: {str(e)}")
         except Exception as e:
             logger.error(f"Error parsing Spark master status: {e}")
-            return {
-                "status": "error",
-                "message": f"Error processing Spark master response: {str(e)}"
-            }
+            raise ValueError(f"Error processing Spark master response: {str(e)}")

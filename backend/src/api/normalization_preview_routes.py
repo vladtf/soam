@@ -3,8 +3,7 @@ API routes for data normalization preview functionality.
 Provides endpoints to preview normalization results before applying them.
 """
 import logging
-import pandas as pd
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -13,6 +12,8 @@ from src.database.database import get_db
 from src.services.normalization_preview import DataNormalizationPreview
 from src.minio.minio_browser import MinioBrowser
 from src.api.dependencies import get_minio_client, get_config, AppConfig
+from src.api.models import ApiResponse
+from src.api.response_utils import success_response
 from minio import Minio
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ def get_preview_service(
     return DataNormalizationPreview(minio_browser)
 
 
-@router.get("/sample-data")
+@router.get("/sample-data", response_model=ApiResponse)
 async def get_sample_data(
     ingestion_id: Optional[str] = Query(None, description="Filter by ingestion ID"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum records to return"),
@@ -74,29 +75,31 @@ async def get_sample_data(
         sample_df = preview_service.get_sample_data(ingestion_id=ingestion_id, limit=limit)
         
         if sample_df.empty:
-            return {
-                "status": "warning",
-                "message": "No sample data available",
-                "data": {
+            return success_response(
+                data={
                     "data": [],
                     "columns": [],
                     "total_records": 0,
                     "sample_ingestion_ids": []
-                }
-            }
+                },
+                message="No sample data available",
+                status_text="warning"
+            )
         
-        return {
-            "status": "success",
-            "data": {
-                "data": sample_df.head(50).to_dict('records'),  # Return first 50 for display
-                "columns": list(sample_df.columns),
-                "total_records": len(sample_df),
-                "sample_ingestion_ids": (
-                    sample_df['_ingestion_id'].dropna().unique().tolist() 
-                    if '_ingestion_id' in sample_df.columns else []
-                )
-            }
+        sample_data = {
+            "data": sample_df.head(50).to_dict('records'),  # Return first 50 for display
+            "columns": list(sample_df.columns),
+            "total_records": len(sample_df),
+            "sample_ingestion_ids": (
+                sample_df['_ingestion_id'].dropna().unique().tolist() 
+                if '_ingestion_id' in sample_df.columns else []
+            )
         }
+        
+        return success_response(
+            data=sample_data,
+            message="Sample data retrieved successfully"
+        )
         
     except Exception as e:
         logger.error(f"Error getting sample data: {e}")
@@ -106,7 +109,7 @@ async def get_sample_data(
         )
 
 
-@router.post("/preview")
+@router.post("/preview", response_model=ApiResponse)
 async def preview_normalization(
     request: NormalizationPreviewRequest,
     db: Session = Depends(get_db),
@@ -126,16 +129,16 @@ async def preview_normalization(
         )
         
         if sample_df.empty:
-            return {
-                "status": "warning",
-                "message": "No sample data available for preview",
-                "preview": {
+            return success_response(
+                data={
                     "original_data": [],
                     "normalized_data": [],
                     "applied_rules": [],
                     "unmapped_columns": []
-                }
-            }
+                },
+                message="No sample data available for preview",
+                status_text="warning"
+            )
         
         # Convert custom rules to dictionary format
         custom_rules_dict = None
@@ -157,10 +160,10 @@ async def preview_normalization(
             custom_rules=custom_rules_dict
         )
         
-        return {
-            "status": "success",
-            "preview": preview_result
-        }
+        return success_response(
+            data={"preview": preview_result},
+            message="Normalization preview generated successfully"
+        )
         
     except Exception as e:
         logger.error(f"Error previewing normalization: {e}")
@@ -170,7 +173,7 @@ async def preview_normalization(
         )
 
 
-@router.post("/compare")
+@router.post("/compare", response_model=ApiResponse)
 async def compare_normalization_scenarios(
     request: NormalizationComparisonRequest,
     db: Session = Depends(get_db),
@@ -190,10 +193,11 @@ async def compare_normalization_scenarios(
         )
         
         if sample_df.empty:
-            return {
-                "status": "warning",
-                "message": "No sample data available for comparison"
-            }
+            return success_response(
+                data={},
+                message="No sample data available for comparison",
+                status_text="warning"
+            )
         
         # Convert rules to dictionary format
         scenario_a_rules = [
@@ -223,7 +227,10 @@ async def compare_normalization_scenarios(
             ingestion_id=request.ingestion_id
         )
         
-        return comparison_result
+        return success_response(
+            data=comparison_result,
+            message="Normalization scenarios compared successfully"
+        )
         
     except Exception as e:
         logger.error(f"Error comparing normalization scenarios: {e}")
@@ -233,7 +240,7 @@ async def compare_normalization_scenarios(
         )
 
 
-@router.post("/validate")
+@router.post("/validate", response_model=ApiResponse)
 async def validate_normalization_rules(
     request: RuleValidationRequest,
     preview_service: DataNormalizationPreview = Depends(get_preview_service)
@@ -252,16 +259,16 @@ async def validate_normalization_rules(
         )
         
         if sample_df.empty:
-            return {
-                "status": "warning",
-                "message": "No sample data available for validation",
-                "validation": {
+            return success_response(
+                data={
                     "overall_valid": False,
                     "total_rules": len(request.rules),
                     "valid_rules": 0,
                     "invalid_rules": len(request.rules)
-                }
-            }
+                },
+                message="No sample data available for validation",
+                status_text="warning"
+            )
         
         # Convert rules to dictionary format
         rules_dict = [
@@ -279,10 +286,10 @@ async def validate_normalization_rules(
             sample_data=sample_df
         )
         
-        return {
-            "status": "success",
-            "validation": validation_result
-        }
+        return success_response(
+            data=validation_result,
+            message="Rules validated successfully"
+        )
         
     except Exception as e:
         logger.error(f"Error validating normalization rules: {e}")
@@ -292,7 +299,7 @@ async def validate_normalization_rules(
         )
 
 
-@router.get("/ingestion-ids")
+@router.get("/ingestion-ids", response_model=ApiResponse)
 async def get_available_ingestion_ids(
     preview_service: DataNormalizationPreview = Depends(get_preview_service)
 ):
@@ -306,19 +313,21 @@ async def get_available_ingestion_ids(
         sample_df = preview_service.get_sample_data(limit=1000)
         
         if sample_df.empty or '_ingestion_id' not in sample_df.columns:
-            return {
-                "status": "warning",
-                "message": "No ingestion IDs found in sample data",
-                "ingestion_ids": []
-            }
+            return success_response(
+                data=[],
+                message="No ingestion IDs found in sample data",
+                status_text="warning"
+            )
         
         ingestion_ids = sample_df['_ingestion_id'].dropna().unique().tolist()
         
-        return {
-            "status": "success",
-            "ingestion_ids": sorted(ingestion_ids),
-            "total_count": len(ingestion_ids)
-        }
+        return success_response(
+            data={
+                "ingestion_ids": sorted(ingestion_ids),
+                "total_count": len(ingestion_ids)
+            },
+            message="Ingestion IDs retrieved successfully"
+        )
         
     except Exception as e:
         logger.error(f"Error getting available ingestion IDs: {e}")

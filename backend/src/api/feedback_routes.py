@@ -6,15 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-from src.api.models import FeedbackCreate, FeedbackResponse, ApiResponse
+from src.api.models import FeedbackCreate, FeedbackResponse, ApiResponse, ApiListResponse
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
 from src.database import get_db, Feedback
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/feedback", tags=["feedback"])
+router = APIRouter(prefix="/api", tags=["feedback"])
 
 
-@router.post("/", response_model=ApiResponse)
+@router.post("/feedback", response_model=ApiResponse)
 async def create_feedback(
     feedback: FeedbackCreate,
     db: Session = Depends(get_db)
@@ -33,19 +34,18 @@ async def create_feedback(
         
         logger.info(f"New feedback submitted by {feedback.email}")
         
-        return ApiResponse(
-            status="success",
-            data={"id": db_feedback.id},
-            message="Feedback submitted successfully"
+        return success_response(
+            {"id": db_feedback.id},
+            "Feedback submitted successfully"
         )
         
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating feedback: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to submit feedback", str(e))
 
 
-@router.get("/", response_model=List[FeedbackResponse])
+@router.get("/feedback", response_model=ApiListResponse[FeedbackResponse])
 async def get_feedbacks(
     skip: int = 0,
     limit: int = 100,
@@ -55,7 +55,7 @@ async def get_feedbacks(
     try:
         feedbacks = db.query(Feedback).offset(skip).limit(limit).all()
         
-        return [
+        feedback_responses = [
             FeedbackResponse(
                 id=f.id,
                 email=f.email,
@@ -65,12 +65,14 @@ async def get_feedbacks(
             for f in feedbacks
         ]
         
+        return list_response(feedback_responses, message="Feedback retrieved successfully")
+        
     except Exception as e:
         logger.error(f"Error fetching feedbacks: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to retrieve feedback", str(e))
 
 
-@router.get("/{feedback_id}", response_model=FeedbackResponse)
+@router.get("/feedback/{feedback_id}", response_model=ApiResponse[FeedbackResponse])
 async def get_feedback(
     feedback_id: int,
     db: Session = Depends(get_db)
@@ -80,7 +82,7 @@ async def get_feedback(
         feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
         
         if not feedback:
-            raise HTTPException(status_code=404, detail="Feedback not found")
+            not_found_error("Feedback not found")
             
         return FeedbackResponse(
             id=feedback.id,
@@ -96,7 +98,7 @@ async def get_feedback(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{feedback_id}", response_model=ApiResponse)
+@router.delete("/feedback/{feedback_id}", response_model=ApiResponse)
 async def delete_feedback(
     feedback_id: int,
     db: Session = Depends(get_db)

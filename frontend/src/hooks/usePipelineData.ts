@@ -54,9 +54,10 @@ export const usePipelineData = () => {
       
       setPartitions(parts);
       setNormalizationRules(rules);
-      setComputations(comps);
+      setComputations(comps || []); // Ensure it's always an array
     } catch (err) {
       console.error('Error loading pipeline data:', err);
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

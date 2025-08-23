@@ -13,7 +13,9 @@ type ApiResponse<T> = {
   status?: string;
   detail?: string;
   data?: T;
+  message?: string;
 };
+
 
 export const extractDataSchema = (data: SensorData[]): Record<string, string[]> => {
   const schema: Record<string, string[]> = {};
@@ -117,28 +119,30 @@ async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
 export const fetchSensorData = (partition?: string): Promise<SensorData[]> => {
   const { ingestorUrl } = getConfig();
   if (partition && partition.length > 0) {
-    return doFetch<SensorData[]>(`${ingestorUrl}/data/${encodeURIComponent(partition)}`);
+    return doFetch<SensorData[]>(`${ingestorUrl}/api/data/${encodeURIComponent(partition)}`);
   }
-  return doFetch<SensorData[]>(`${ingestorUrl}/data`);
+  return doFetch<SensorData[]>(`${ingestorUrl}/api/data`);
 };
 
 export const fetchPartitions = (): Promise<string[]> => {
   const { ingestorUrl } = getConfig();
-  return doFetch<string[]>(`${ingestorUrl}/partitions`);
+  return doFetch<string[]>(`${ingestorUrl}/api/partitions`);
 };
 
-export const setBufferMaxRows = (max_rows: number): Promise<{ status?: string; data?: { max_rows: number } }> => {
+export const setBufferMaxRows = (maxRows: number): Promise<{ max_rows: number }> => {
   const { ingestorUrl } = getConfig();
-  return doFetch<{ status?: string; data?: { max_rows: number } }>(`${ingestorUrl}/buffer/size`, {
+  return doFetch<{ max_rows: number }>(`${ingestorUrl}/api/buffer/size`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ max_rows }),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ max_rows: maxRows }),
   });
 };
 
 export const fetchAverageTemperature = (): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown[]>(`${backendUrl}/spark/average-temperature`);
+  return doFetch<unknown[]>(`${backendUrl}/api/spark/average-temperature`);
 };
 
 // Enrichment summary (verification aid)
@@ -192,7 +196,7 @@ export interface EnrichmentSummary {
 
 export const fetchEnrichmentSummary = (minutes = 10): Promise<EnrichmentSummary> => {
   const { backendUrl } = getConfig();
-  return doFetch<EnrichmentSummary>(`${backendUrl}/spark/enrichment-summary?minutes=${minutes}`);
+  return doFetch<EnrichmentSummary>(`${backendUrl}/api/spark/enrichment-summary?minutes=${minutes}`);
 };
 
 // Spark Master Status interfaces
@@ -237,7 +241,7 @@ export interface SparkMasterStatus {
 
 export const fetchSparkMasterStatus = (): Promise<SparkMasterStatus> => {
   const { backendUrl } = getConfig();
-  return doFetch<SparkMasterStatus>(`${backendUrl}/spark/master-status`);
+  return doFetch<SparkMasterStatus>(`${backendUrl}/api/spark/master-status`);
 };
 
 // Enrichment Filtering Diagnostic interfaces
@@ -259,7 +263,7 @@ export interface EnrichmentDiagnosticData {
 
 export const fetchEnrichmentDiagnostic = (): Promise<EnrichmentDiagnosticData> => {
   const { backendUrl } = getConfig();
-  return doFetch<EnrichmentDiagnosticData>(`${backendUrl}/spark/diagnose/enrichment-filtering`);
+  return doFetch<EnrichmentDiagnosticData>(`${backendUrl}/api/spark/diagnose/enrichment-filtering`);
 };
 
 // Ingestor Topic Analysis interfaces
@@ -286,9 +290,9 @@ export interface IngestorTopicAnalysis {
 
 export const fetchIngestorTopicAnalysis = (): Promise<IngestorTopicAnalysis> => {
   const { ingestorUrl } = getConfig();
-  console.log('Fetching from URL:', `${ingestorUrl}/diagnostics/topic-analysis`);
-  
-  return doFetch<IngestorTopicAnalysis>(`${ingestorUrl}/diagnostics/topic-analysis`)
+  console.log('Fetching from URL:', `${ingestorUrl}/api/diagnostics/topic-analysis`);
+
+  return doFetch<IngestorTopicAnalysis>(`${ingestorUrl}/api/diagnostics/topic-analysis`)
     .then(response => {
       console.log('Processed API response:', response);
       return response;
@@ -301,7 +305,7 @@ export const fetchIngestorTopicAnalysis = (): Promise<IngestorTopicAnalysis> => 
 
 export const postNewBuilding = (newBuilding: Building): Promise<unknown> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown>(`${backendUrl}/buildings`, {
+  return doFetch<unknown>(`${backendUrl}/api/buildings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(newBuilding),
@@ -313,18 +317,18 @@ export const fetchTemperatureAlerts = (
 ): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
   return doFetch<unknown[]>(
-    `${backendUrl}/spark/temperature-alerts?since_minutes=${sinceMinutes}`
+    `${backendUrl}/api/spark/temperature-alerts?since_minutes=${sinceMinutes}`
   );
 };
 
 export const fetchConnections = (): Promise<unknown> => {
   const { ingestorUrl } = getConfig();
-  return doFetch<unknown>(`${ingestorUrl}/connections`);
+  return doFetch<{ status: string; data: { connections: any[]; active: any } }>(`${ingestorUrl}/api/connections`);
 };
 
 export const switchBroker = (id: number): Promise<unknown> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown>(`${backendUrl}/switchBroker`, {
+  return doFetch<unknown>(`${backendUrl}/api/switchBroker`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -333,12 +337,12 @@ export const switchBroker = (id: number): Promise<unknown> => {
 
 export const fetchBuildings = (): Promise<Building[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<Building[]>(`${backendUrl}/buildings`);
+  return doFetch<Building[]>(`${backendUrl}/api/buildings`);
 };
 
 export const deleteBuilding = (name: string, lat: number, lng: number): Promise<{ status?: string; message?: string }> => {
   const { backendUrl } = getConfig();
-  const url = new URL(`${backendUrl}/buildings`);
+  const url = new URL(`${backendUrl}/api/buildings`);
   url.searchParams.set('name', name);
   url.searchParams.set('lat', String(lat));
   url.searchParams.set('lng', String(lng));
@@ -347,7 +351,7 @@ export const deleteBuilding = (name: string, lat: number, lng: number): Promise<
 
 export const addConnection = (config: unknown): Promise<unknown> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown>(`${backendUrl}/addConnection`, {
+  return doFetch<unknown>(`${backendUrl}/api/addConnection`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -367,9 +371,9 @@ export interface FeedbackResponse {
   created_at: string;
 }
 
-export const submitFeedback = (feedback: FeedbackData): Promise<ApiResponse<{ id: number }>> => {
+export const submitFeedback = (feedback: FeedbackData): Promise<{ id: number }> => {
   const { backendUrl } = getConfig();
-  return doFetch<ApiResponse<{ id: number }>>(`${backendUrl}/feedback`, {
+  return doFetch<{ id: number }>(`${backendUrl}/api/feedback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(feedback),
@@ -378,7 +382,7 @@ export const submitFeedback = (feedback: FeedbackData): Promise<ApiResponse<{ id
 
 export const fetchFeedbacks = (): Promise<FeedbackResponse[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<FeedbackResponse[]>(`${backendUrl}/feedback`);
+  return doFetch<FeedbackResponse[]>(`${backendUrl}/api/feedback`);
 };
 
 // MinIO Browser API
@@ -399,21 +403,21 @@ export interface ParquetPreview {
 
 export const minioList = (prefix = ""): Promise<MinioListResponse> => {
   const { backendUrl } = getConfig();
-  const url = new URL(`${backendUrl}/minio/ls`);
+  const url = new URL(`${backendUrl}/api/minio/ls`);
   if (prefix) url.searchParams.set('prefix', prefix);
   return doFetch<MinioListResponse>(url.toString());
 };
 
 export const minioFind = (prefix = ""): Promise<MinioObjectInfo[]> => {
   const { backendUrl } = getConfig();
-  const url = new URL(`${backendUrl}/minio/find`);
+  const url = new URL(`${backendUrl}/api/minio/find`);
   if (prefix) url.searchParams.set('prefix', prefix);
   return doFetch<MinioObjectInfo[]>(url.toString());
 };
 
 export const minioPreviewParquet = (key: string, limit = 50): Promise<ParquetPreview> => {
   const { backendUrl } = getConfig();
-  const url = new URL(`${backendUrl}/minio/preview`);
+  const url = new URL(`${backendUrl}/api/minio/preview`);
   url.searchParams.set('key', key);
   url.searchParams.set('limit', String(limit));
   return doFetch<ParquetPreview>(url.toString());
@@ -421,14 +425,14 @@ export const minioPreviewParquet = (key: string, limit = 50): Promise<ParquetPre
 
 export const minioDeleteObject = (key: string): Promise<{ deleted: number; errors: unknown[] }> => {
   const { backendUrl } = getConfig();
-  const url = new URL(`${backendUrl}/minio/object`);
+  const url = new URL(`${backendUrl}/api/minio/object`);
   url.searchParams.set('key', key);
   return doFetch<{ deleted: number; errors: unknown[] }>(url.toString(), { method: 'DELETE' });
 };
 
 export const minioDeleteObjects = (keys: string[]): Promise<{ deleted: number; errors: unknown[] }> => {
   const { backendUrl } = getConfig();
-  return doFetch<{ deleted: number; errors: unknown[] }>(`${backendUrl}/minio/delete`, {
+  return doFetch<{ deleted: number; errors: unknown[] }>(`${backendUrl}/api/minio/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ keys }),
@@ -437,7 +441,7 @@ export const minioDeleteObjects = (keys: string[]): Promise<{ deleted: number; e
 
 export const minioDeletePrefix = (prefix: string): Promise<{ deleted: number; errors: unknown[] }> => {
   const { backendUrl } = getConfig();
-  const url = new URL(`${backendUrl}/minio/prefix`);
+  const url = new URL(`${backendUrl}/api/minio/prefix`);
   url.searchParams.set('prefix', prefix);
   return doFetch<{ deleted: number; errors: unknown[] }>(url.toString(), { method: 'DELETE' });
 };
@@ -497,7 +501,7 @@ export const updateNormalizationRule = (
   payload: NormalizationRuleUpdatePayload
 ): Promise<NormalizationRule> => {
   const { backendUrl } = getConfig();
-  return doFetch<NormalizationRule>(`${backendUrl}/normalization/${id}`, {
+  return doFetch<NormalizationRule>(`${backendUrl}/api/normalization/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -506,7 +510,7 @@ export const updateNormalizationRule = (
 
 export const deleteNormalizationRule = (id: number): Promise<{ status?: string; message?: string }> => {
   const { backendUrl } = getConfig();
-  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/normalization/${id}`, {
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/api/normalization/${id}`, {
     method: 'DELETE',
   });
 };
@@ -527,12 +531,12 @@ export interface ComputationDef {
 
 export const listComputations = (): Promise<ComputationDef[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<ComputationDef[]>(`${backendUrl}/computations/`);
+  return doFetch<ComputationDef[]>(`${backendUrl}/api/computations/`);
 };
 
 export const createComputation = (payload: ComputationDef): Promise<ComputationDef> => {
   const { backendUrl } = getConfig();
-  return doFetch<ComputationDef>(`${backendUrl}/computations/`, {
+  return doFetch<ComputationDef>(`${backendUrl}/api/computations/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -541,7 +545,7 @@ export const createComputation = (payload: ComputationDef): Promise<ComputationD
 
 export const updateComputation = (id: number, payload: Partial<ComputationDef>): Promise<ComputationDef> => {
   const { backendUrl } = getConfig();
-  return doFetch<ComputationDef>(`${backendUrl}/computations/${id}`, {
+  return doFetch<ComputationDef>(`${backendUrl}/api/computations/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -550,12 +554,12 @@ export const updateComputation = (id: number, payload: Partial<ComputationDef>):
 
 export const deleteComputation = (id: number): Promise<{ status?: string; message?: string }> => {
   const { backendUrl } = getConfig();
-  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/computations/${id}`, { method: 'DELETE' });
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/api/computations/${id}`, { method: 'DELETE' });
 };
 
 export const previewComputation = (id: number): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown[]>(`${backendUrl}/computations/${id}/preview`, {
+  return doFetch<unknown[]>(`${backendUrl}/api/computations/${id}/preview`, {
     method: 'POST',
   });
 };
@@ -577,12 +581,12 @@ export interface ComputationExamplesResponse {
 
 export const fetchComputationExamples = (): Promise<ComputationExamplesResponse> => {
   const { backendUrl } = getConfig();
-  return doFetch<ComputationExamplesResponse>(`${backendUrl}/computations/examples`);
+  return doFetch<ComputationExamplesResponse>(`${backendUrl}/api/computations/examples`);
 };
 
 export const fetchComputationSources = (): Promise<{ sources: string[] }> => {
   const { backendUrl } = getConfig();
-  return doFetch<{ sources: string[] }>(`${backendUrl}/computations/sources`);
+  return doFetch<{ sources: string[] }>(`${backendUrl}/api/computations/sources`);
 };
 
 export interface ComputationSchemasResponse {
@@ -592,7 +596,7 @@ export interface ComputationSchemasResponse {
 
 export const fetchComputationSchemas = (): Promise<ComputationSchemasResponse> => {
   const { backendUrl } = getConfig();
-  return doFetch<ComputationSchemasResponse>(`${backendUrl}/computations/schemas`);
+  return doFetch<ComputationSchemasResponse>(`${backendUrl}/api/computations/schemas`);
 };
 
 // Dashboard tiles API
@@ -610,12 +614,12 @@ export interface DashboardTileDef {
 
 export const listDashboardTiles = (): Promise<DashboardTileDef[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<DashboardTileDef[]>(`${backendUrl}/dashboard/tiles`);
+  return doFetch<DashboardTileDef[]>(`${backendUrl}/api/dashboard/tiles`);
 };
 
 export const createDashboardTile = (payload: DashboardTileDef): Promise<DashboardTileDef> => {
   const { backendUrl } = getConfig();
-  return doFetch<DashboardTileDef>(`${backendUrl}/dashboard/tiles`, {
+  return doFetch<DashboardTileDef>(`${backendUrl}/api/dashboard/tiles`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -624,7 +628,7 @@ export const createDashboardTile = (payload: DashboardTileDef): Promise<Dashboar
 
 export const updateDashboardTile = (id: number, payload: Partial<DashboardTileDef>): Promise<DashboardTileDef> => {
   const { backendUrl } = getConfig();
-  return doFetch<DashboardTileDef>(`${backendUrl}/dashboard/tiles/${id}`, {
+  return doFetch<DashboardTileDef>(`${backendUrl}/api/dashboard/tiles/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -633,12 +637,12 @@ export const updateDashboardTile = (id: number, payload: Partial<DashboardTileDe
 
 export const deleteDashboardTile = (id: number): Promise<{ status?: string; message?: string }> => {
   const { backendUrl } = getConfig();
-  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/dashboard/tiles/${id}`, { method: 'DELETE' });
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/api/dashboard/tiles/${id}`, { method: 'DELETE' });
 };
 
 export const previewDashboardTile = (id: number): Promise<unknown[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<unknown[]>(`${backendUrl}/dashboard/tiles/${id}/preview`, {
+  return doFetch<unknown[]>(`${backendUrl}/api/dashboard/tiles/${id}/preview`, {
     method: 'POST',
   });
 };
@@ -650,7 +654,7 @@ export interface DashboardTileExamplesResponse {
 
 export const fetchDashboardTileExamples = (): Promise<DashboardTileExamplesResponse> => {
   const { backendUrl } = getConfig();
-  return doFetch<DashboardTileExamplesResponse>(`${backendUrl}/dashboard/examples`);
+  return doFetch<DashboardTileExamplesResponse>(`${backendUrl}/api/dashboard/examples`);
 };
 
 // Devices API
@@ -669,12 +673,12 @@ export interface Device {
 
 export const listDevices = (): Promise<Device[]> => {
   const { backendUrl } = getConfig();
-  return doFetch<Device[]>(`${backendUrl}/devices/`);
+  return doFetch<Device[]>(`${backendUrl}/api/devices/`);
 };
 
 export const registerDevice = (payload: { ingestion_id: string; sensor_id?: string; name?: string; description?: string; enabled?: boolean; created_by: string }): Promise<Device> => {
   const { backendUrl } = getConfig();
-  return doFetch<Device>(`${backendUrl}/devices/`, {
+  return doFetch<Device>(`${backendUrl}/api/devices/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: true, ...payload }),
@@ -683,7 +687,7 @@ export const registerDevice = (payload: { ingestion_id: string; sensor_id?: stri
 
 export const updateDevice = (id: number, payload: { name?: string; description?: string; enabled?: boolean; updated_by: string }): Promise<Device> => {
   const { backendUrl } = getConfig();
-  return doFetch<Device>(`${backendUrl}/devices/${id}`, {
+  return doFetch<Device>(`${backendUrl}/api/devices/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -692,12 +696,12 @@ export const updateDevice = (id: number, payload: { name?: string; description?:
 
 export const deleteDevice = (id: number): Promise<{ status?: string; message?: string }> => {
   const { backendUrl } = getConfig();
-  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/devices/${id}`, { method: 'DELETE' });
+  return doFetch<{ status?: string; message?: string }>(`${backendUrl}/api/devices/${id}`, { method: 'DELETE' });
 };
 
 export const toggleDevice = (id: number): Promise<Device> => {
   const { backendUrl } = getConfig();
-  return doFetch<Device>(`${backendUrl}/devices/${id}/toggle`, { method: 'POST' });
+  return doFetch<Device>(`${backendUrl}/api/devices/${id}/toggle`, { method: 'POST' });
 };
 
 // Configuration API
@@ -754,17 +758,17 @@ export interface FeatureFlags {
 
 export const getSchemaConfig = (): Promise<SchemaConfig> => {
   const { backendUrl } = getConfig();
-  return doFetch<SchemaConfig>(`${backendUrl}/config/schema`);
+  return doFetch<SchemaConfig>(`${backendUrl}/api/config/schema`);
 };
 
 export const getSystemConfig = (): Promise<SystemConfig> => {
   const { backendUrl } = getConfig();
-  return doFetch<SystemConfig>(`${backendUrl}/config/`);
+  return doFetch<SystemConfig>(`${backendUrl}/api/config/`);
 };
 
 export const getFeatureFlags = (): Promise<FeatureFlags> => {
   const { backendUrl } = getConfig();
-  return doFetch<FeatureFlags>(`${backendUrl}/config/features`);
+  return doFetch<FeatureFlags>(`${backendUrl}/api/config/features`);
 };
 
 // Troubleshooting interfaces and functions
@@ -784,7 +788,7 @@ export const fetchAvailableSensorIds = (limit: number = 100, minutesBack: number
     limit: limit.toString(),
     minutes_back: minutesBack.toString()
   });
-  return doFetch<SensorIdsResponse>(`${backendUrl}/api/v1/troubleshooting/sensor-ids?${params}`);
+  return doFetch<SensorIdsResponse>(`${backendUrl}/api/troubleshooting/sensor-ids?${params}`);
 };
 
 // Settings API
@@ -895,9 +899,9 @@ export const previewNormalization = (payload: {
   ingestion_id?: string;
   custom_rules?: Array<{ raw_key: string; canonical_key: string; ingestion_id?: string }>;
   sample_limit: number;
-}): Promise<{ status: string; preview: NormalizationPreviewResult }> => {
+}): Promise<{ status: string; data: { preview: NormalizationPreviewResult } }> => {
   const { backendUrl } = getConfig();
-  return doFetch<{ status: string; preview: NormalizationPreviewResult }>(`${backendUrl}/api/normalization/preview/preview`, {
+  return doFetch<{ status: string; data: { preview: NormalizationPreviewResult } }>(`${backendUrl}/api/normalization/preview/preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -928,5 +932,137 @@ export const compareNormalizationScenarios = (payload: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  });
+};
+
+// Error reporting API
+export interface ClientErrorRow {
+  id: number;
+  message: string;
+  stack?: string | null;
+  url?: string | null;
+  component?: string | null;
+  context?: string | null;
+  severity?: string | null;
+  user_agent?: string | null;
+  session_id?: string | null;
+  extra?: Record<string, unknown> | null;
+  created_at?: string | null;
+}
+
+export const fetchErrors = (limit: number = 200): Promise<ClientErrorRow[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ClientErrorRow[]>(`${backendUrl}/api/errors/?limit=${limit}`);
+};
+
+// Troubleshooting API types
+export interface FieldDiagnosticResult {
+  sensor_id: string;
+  field_name: string;
+  minutes_back: number;
+  ingestion_id?: string;
+  timestamp: string;
+  status: string;
+  error?: string;
+  raw_data_analysis?: {
+    found_data: boolean;
+    record_count?: number;
+    field_variants_found?: string[];
+    field_values_sample?: Array<{
+      field_variant?: string;
+      field?: string;
+      value: any;
+      type: string;
+      timestamp: string;
+    }>;
+  };
+  normalization_analysis?: {
+    transformation_applied: boolean;
+    field_mapping?: { [raw: string]: string };
+    normalized_values?: Array<{
+      raw_field: string;
+      canonical_field: string;
+      before_values: any[];
+      after_values: any[];
+      values_match: boolean[];
+    }>;
+  };
+  enrichment_analysis?: {
+    found_in_enriched: boolean;
+    record_count?: number;
+    field_in_sensor_data?: boolean;
+    field_in_normalized_data?: boolean;
+    union_schema_analysis?: {
+      field_values_found?: Array<{
+        field_variant?: string;
+        field?: string;
+        value: any;
+        type: string;
+        timestamp: string;
+      }>;
+    };
+  };
+  gold_analysis?: {
+    found_in_gold: boolean;
+    record_count?: number;
+    field_aggregations?: {
+      [field: string]: {
+        count: number;
+        min_value: number;
+        max_value: number;
+        avg_value: number;
+      };
+    };
+  };
+  recommendations: string[];
+}
+
+export interface PipelineTraceResult {
+  sensor_id: string;
+  minutes_back: number;
+  timestamp: string;
+  status: string;
+  error?: string;
+  pipeline_stages: {
+    [stage: string]: {
+      record_count?: number;
+      columns?: string[];
+      sample_records?: any[];
+      error?: string;
+    };
+  };
+}
+
+export const diagnoseField = (
+  sensorId: string,
+  fieldName: string,
+  minutesBack: number,
+  ingestionId?: string
+): Promise<FieldDiagnosticResult> => {
+  const { backendUrl } = getConfig();
+  return doFetch<FieldDiagnosticResult>(`${backendUrl}/api/troubleshooting/diagnose-field`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sensor_id: sensorId,
+      field_name: fieldName,
+      minutes_back: minutesBack,
+      ingestion_id: ingestionId
+    })
+  });
+};
+
+export const tracePipeline = (
+  sensorId: string,
+  minutesBack: number
+): Promise<PipelineTraceResult> => {
+  const { backendUrl } = getConfig();
+  return doFetch<PipelineTraceResult>(`${backendUrl}/api/troubleshooting/trace-pipeline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sensor_id: sensorId,
+      minutes_back: minutesBack
+    })
   });
 };

@@ -11,7 +11,7 @@ from ..spark.data_troubleshooter import DataTroubleshooter
 from .dependencies import get_spark_manager, get_config
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/troubleshooting", tags=["troubleshooting"])
+router = APIRouter(prefix="/api/troubleshooting", tags=["troubleshooting"])
 
 
 class FieldDiagnosticRequest(BaseModel):

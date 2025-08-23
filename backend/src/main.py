@@ -214,7 +214,7 @@ async def root():
         "message": "SOAM Smart City Backend API",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/api/health"
     }
 
 

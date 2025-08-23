@@ -5,7 +5,8 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from src.api.models import ComputationCreate, ComputationUpdate, ComputationResponse, ApiResponse
+from src.api.models import ComputationCreate, ComputationUpdate, ComputationResponse, ApiResponse, ApiListResponse
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error, conflict_error
 from src.database.database import get_db
 from src.database.models import Computation
 from src.api.dependencies import get_spark_manager, ConfigDep, MinioClientDep
@@ -13,14 +14,14 @@ from src.spark.spark_manager import SparkManager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/computations", tags=["computations"])
+router = APIRouter(prefix="/api", tags=["computations"])
 
 
 def _validate_dataset(ds: str) -> str:
     ds = ds.lower()
     allowed_datasets = {"bronze", "silver", "gold"}
     if ds not in allowed_datasets:
-        raise HTTPException(status_code=400, detail=f"Invalid dataset. Use {', '.join(allowed_datasets)}")
+        bad_request_error(f"Invalid dataset. Use {', '.join(allowed_datasets)}")
     return ds
 
 
@@ -28,9 +29,9 @@ def _validate_username(username: str) -> str:
     import re
     username = username.strip()
     if not (3 <= len(username) <= 32):
-        raise HTTPException(status_code=400, detail="Username must be 3-32 characters long")
+        bad_request_error("Username must be 3-32 characters long")
     if not re.match(r"^[A-Za-z0-9_.-]+$", username):
-        raise HTTPException(status_code=400, detail="Username contains invalid characters")
+        bad_request_error("Username contains invalid characters")
     return username
 
 
@@ -115,11 +116,11 @@ def _detect_available_sources(config: ConfigDep, client: MinioClientDep) -> list
     return sources
 
 
-@router.get("/examples")
-def get_examples(config: ConfigDep, client: MinioClientDep) -> Dict[str, Any]:
+@router.get("/computations/examples", response_model=ApiResponse)
+def get_examples(config: ConfigDep, client: MinioClientDep):
     """Return suggested examples and available sources (datasets) discovered from MinIO."""
     sources = _detect_available_sources(config, client)
-    return {
+    data = {
         "sources": sources,
         "examples": EXAMPLE_DEFINITIONS,
         "dsl": {
@@ -128,16 +129,17 @@ def get_examples(config: ConfigDep, client: MinioClientDep) -> Dict[str, Any]:
             "notes": "All where conditions are ANDed. Dataset is chosen separately as 'silver' | 'alerts' | 'sensors'."
         }
     }
+    return success_response(data, "Examples retrieved successfully")
 
 
-@router.get("/sources")
-def get_sources(config: ConfigDep, client: MinioClientDep) -> Dict[str, list[str]]:
+@router.get("/computations/sources", response_model=ApiResponse)
+def get_sources(config: ConfigDep, client: MinioClientDep):
     sources = _detect_available_sources(config, client)
-    return {"sources": sources}
+    return success_response({"sources": sources}, "Sources retrieved successfully")
 
 
-@router.get("/schemas")
-def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager = Depends(get_spark_manager)) -> Dict[str, Any]:
+@router.get("/computations/schemas", response_model=ApiResponse)
+def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager = Depends(get_spark_manager)):
     """Return detected sources plus inferred column schemas for each source using Spark."""
     sources = _detect_available_sources(config, client)
     schemas: Dict[str, list[Dict[str, str]]] = {}
@@ -145,7 +147,7 @@ def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager =
     # Ensure Spark session available
     session = spark.session_manager
     if not session.is_connected() and not session.reconnect():
-        return {"sources": sources, "schemas": schemas}
+        return success_response({"sources": sources, "schemas": schemas}, "Schemas retrieved (Spark unavailable)")
 
     from src.spark.config import SparkConfig
 
@@ -180,20 +182,25 @@ def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager =
             # Skip if path not present or unreadable
             continue
 
-    return {"sources": sources, "schemas": schemas}
+    return success_response({"sources": sources, "schemas": schemas}, "Schemas retrieved successfully")
 
 
-@router.get("/", response_model=List[ComputationResponse])
+@router.get("/computations", response_model=ApiListResponse[ComputationResponse])
 def list_computations(db: Session = Depends(get_db)):
-    rows = db.query(Computation).order_by(Computation.created_at.desc()).all()
-    return [ComputationResponse(**r.to_dict()) for r in rows]
+    try:
+        rows = db.query(Computation).order_by(Computation.created_at.desc()).all()
+        computations = [ComputationResponse(**r.to_dict()) for r in rows]
+        return list_response(computations, message="Computations retrieved successfully")
+    except Exception as e:
+        logger.error("Error listing computations: %s", e)
+        internal_server_error("Failed to retrieve computations", str(e))
 
 
-@router.post("/", response_model=ComputationResponse)
+@router.post("/computations", response_model=ApiResponse[ComputationResponse])
 def create_computation(payload: ComputationCreate, db: Session = Depends(get_db)):
     # Validate user is provided
     if not payload.created_by or not payload.created_by.strip():
-        raise HTTPException(status_code=400, detail="User information required (created_by)")
+        bad_request_error("User information required (created_by)")
 
     _ = _validate_dataset(payload.dataset)
 
@@ -201,11 +208,11 @@ def create_computation(payload: ComputationCreate, db: Session = Depends(get_db)
     # Additional sanitization to prevent SQL injection or unsafe characters
     import re
     if re.search(r"[;'\"]|--|\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b", payload.created_by, re.IGNORECASE):
-        raise HTTPException(status_code=400, detail="Username contains unsafe characters or SQL keywords")
+        bad_request_error("Username contains unsafe characters or SQL keywords")
 
     # Unique name check
     if db.query(Computation).filter(Computation.name == payload.name).first():
-        raise HTTPException(status_code=409, detail="Computation name already exists")
+        conflict_error("Computation name already exists")
     row = Computation(
         name=payload.name,
         description=payload.description,
@@ -219,18 +226,21 @@ def create_computation(payload: ComputationCreate, db: Session = Depends(get_db)
     db.refresh(row)
     logger.info("Computation created by '%s': %s (%s)",
                 payload.created_by, row.name, row.dataset)
-    return ComputationResponse(**row.to_dict())
+    return success_response(
+        ComputationResponse(**row.to_dict()),
+        "Computation created successfully"
+    )
 
 
-@router.patch("/{comp_id}", response_model=ComputationResponse)
+@router.patch("/computations/{comp_id}", response_model=ApiResponse[ComputationResponse])
 def update_computation(comp_id: int, payload: ComputationUpdate, db: Session = Depends(get_db)):
     # Validate user is provided
     if not payload.updated_by or not payload.updated_by.strip():
-        raise HTTPException(status_code=400, detail="User information required (updated_by)")
+        bad_request_error("User information required (updated_by)")
 
     row = db.get(Computation, comp_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Not found")
+        not_found_error("Not found")
 
     changes = []
     if payload.description is not None and payload.description != row.description:
@@ -266,36 +276,39 @@ def update_computation(comp_id: int, payload: ComputationUpdate, db: Session = D
         logger.info("Computation %d touched by '%s' (no changes)",
                     row.id, payload.updated_by)
 
-    return ComputationResponse(**row.to_dict())
+    return success_response(
+        ComputationResponse(**row.to_dict()),
+        "Computation updated successfully"
+    )
 
 
-@router.delete("/{comp_id}", response_model=ApiResponse)
+@router.delete("/computations/{comp_id}", response_model=ApiResponse)
 def delete_computation(comp_id: int, db: Session = Depends(get_db)):
     row = db.get(Computation, comp_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Not found")
+        not_found_error("Not found")
     db.delete(row)
     db.commit()
-    return {"status": "success", "message": "Deleted"}
+    return success_response(message="Computation deleted successfully")
 
 
-@router.post("/{comp_id}/preview")
+@router.post("/computations/{comp_id}/preview", response_model=ApiResponse)
 def preview_computation(comp_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
     row = db.get(Computation, comp_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Not found")
+        not_found_error("Not found")
     try:
         definition = json.loads(row.definition)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON definition")
+        bad_request_error("Invalid JSON definition")
 
     # Execute a minimal set of operations using Spark
     try:
         result = _execute_definition(definition, row.dataset, spark)
-        return {"status": "success", "data": result}
+        return success_response(result, "Computation preview executed successfully")
     except Exception as e:
         logger.exception("Computation preview failed")
-        raise HTTPException(status_code=400, detail=str(e))
+        bad_request_error(str(e))
 
 
 def _execute_definition(defn: Dict[str, Any], dataset: str, spark: SparkManager) -> list[dict]:

@@ -86,7 +86,7 @@ class Neo4jManager:
     def add_building(self, data):
         """Add a building and its address to Neo4j."""
         if not self.driver:
-            return {"status": "error", "detail": "No database connection available"}
+            raise ConnectionError("No database connection available")
             
         query = """
         MERGE (b:Building { name: $name })
@@ -98,23 +98,25 @@ class Neo4jManager:
         """
         logger.info("Adding building with data: %s", data)
         if not all(key in data for key in ["name", "description", "street", "city", "country", "lat", "lng"]):
-            return {"status": "error", "detail": "Missing required fields"}
+            raise ValueError("Missing required fields")
         try:
             with self.driver.session() as session:
                 result = session.run(query, **data)
                 record = result.single()
                 if record is None:
-                    return {"status": "No building added"}
+                    raise RuntimeError("No building added")
                 b = record["b"]
                 a = record["a"]
-                return {"status": "Building added", "building": dict(b), "address": dict(a)}
+                return {"building": dict(b), "address": dict(a)}
         except Exception as e:
-            return {"status": "error", "detail": str(e)}
+            if isinstance(e, (ConnectionError, ValueError, RuntimeError)):
+                raise
+            raise RuntimeError(f"Failed to add building: {str(e)}")
 
     def delete_building(self, name: str, lat: float, lng: float):
         """Delete a building-address link by name and coordinates. If building/address become orphaned, delete them too."""
         if not self.driver:
-            return {"status": "error", "detail": "No database connection available"}
+            raise ConnectionError("No database connection available")
 
         query = """
         MATCH (b:Building { name: $name })- [r:hasAddress] -> (a:Address)
@@ -135,10 +137,11 @@ class Neo4jManager:
                 result = session.run(query, name=name, lat=lat, lng=lng)
                 rec = result.single()
                 if rec is None:
-                    return {"status": "error", "detail": "Building/address not found"}
-            return {"status": "Building deleted"}
+                    raise ValueError("Building/address not found")
         except Exception as e:
-            return {"status": "error", "detail": str(e)}
+            if isinstance(e, (ConnectionError, ValueError)):
+                raise
+            raise RuntimeError(f"Failed to delete building: {str(e)}")
 
     def _clear_existing_data(self):
         """Clear existing test data to avoid conflicts."""
@@ -251,14 +254,16 @@ class Neo4jManager:
         """Check if Neo4j connection is healthy."""
         try:
             if not self.driver:
-                return {"status": "error", "message": "No database connection"}
+                raise ConnectionError("No database connection")
             
             with self.driver.session() as session:
                 result = session.run("RETURN 1 as test")
                 record = result.single()
                 if record and record["test"] == 1:
-                    return {"status": "healthy", "message": "Neo4j connection is working"}
+                    return {"message": "Neo4j connection is working"}
                 else:
-                    return {"status": "error", "message": "Unexpected response from database"}
+                    raise RuntimeError("Unexpected response from database")
         except Exception as e:
-            return {"status": "error", "message": f"Database health check failed: {str(e)}"}
+            if isinstance(e, (ConnectionError, RuntimeError)):
+                raise
+            raise RuntimeError(f"Database health check failed: {str(e)}")

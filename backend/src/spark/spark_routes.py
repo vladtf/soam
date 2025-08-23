@@ -3,24 +3,25 @@ Spark-related API endpoints.
 """
 import logging
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Any
 
 from src.api.models import SparkTestResult, ApiResponse
+from src.api.response_utils import success_response, not_found_error, bad_request_error, internal_server_error
 from src.api.dependencies import SparkManagerDep
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/spark", tags=["spark"])
+router = APIRouter(prefix="/api/spark", tags=["spark"])
 
 
 @router.get("/master-status", response_model=ApiResponse)
 async def get_spark_master_status(spark_manager: SparkManagerDep):
     """Get Spark master status including workers and applications."""
     try:
-        return spark_manager.get_spark_master_status()
+        status = spark_manager.get_spark_master_status()
+        return success_response(status, "Spark master status retrieved successfully")
     except Exception as e:
         logger.error(f"Error fetching Spark master status: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to fetch Spark master status", str(e))
 
 
 @router.get("/average-temperature", response_model=ApiResponse)
@@ -30,10 +31,11 @@ async def get_average_temperature(
 ):
     """Get streaming average temperature data for the specified time window."""
     try:
-        return spark_manager.get_streaming_average_temperature(minutes)
+        data = spark_manager.get_streaming_average_temperature(minutes)
+        return success_response(data, "Average temperature data retrieved successfully")
     except Exception as e:
         logger.error(f"Error fetching average temperature: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to fetch average temperature", str(e))
 
 
 @router.get("/temperature-alerts", response_model=ApiResponse)
@@ -43,10 +45,11 @@ async def get_temperature_alerts(
 ):
     """Get recent temperature alerts."""
     try:
-        return spark_manager.get_temperature_alerts(since_minutes)
+        alerts = spark_manager.get_temperature_alerts(since_minutes)
+        return success_response(alerts, "Temperature alerts retrieved successfully")
     except Exception as e:
         logger.error(f"Error fetching temperature alerts: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to fetch temperature alerts", str(e))
 
 
 @router.get("/enrichment-summary", response_model=ApiResponse)
@@ -56,30 +59,33 @@ async def get_enrichment_summary(
 ):
     """Summarize enrichment inputs and recent activity (registered devices, recent sensors, matches)."""
     try:
-        return spark_manager.get_enrichment_summary(minutes)
+        summary = spark_manager.get_enrichment_summary(minutes)
+        return success_response(summary, "Enrichment summary retrieved successfully")
     except Exception as e:
         logger.error(f"Error fetching enrichment summary: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to fetch enrichment summary", str(e))
 
 
 @router.get("/test/computation", response_model=SparkTestResult)
 async def test_spark_computation(spark_manager: SparkManagerDep):
     """Test Spark with a basic computation."""
     try:
-        return spark_manager.test_spark_basic_computation()
+        result = spark_manager.test_spark_basic_computation()
+        return success_response(result, "Spark computation test completed successfully")
     except Exception as e:
         logger.error(f"Error in Spark computation test: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Spark computation test failed", str(e))
 
 
 @router.get("/test/sensor-data", response_model=SparkTestResult)
 async def test_sensor_data_access(spark_manager: SparkManagerDep):
     """Test Spark access to sensor data."""
     try:
-        return spark_manager.test_sensor_data_access()
+        result = spark_manager.test_sensor_data_access()
+        return success_response(result, "Sensor data access test completed successfully")
     except Exception as e:
         logger.error(f"Error in sensor data access test: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Sensor data access test failed", str(e))
 
 
 @router.get("/diagnose/enrichment-filtering", response_model=ApiResponse)
@@ -96,12 +102,10 @@ async def diagnose_enrichment_filtering(spark_manager: SparkManagerDep):
             spark_manager.session_manager, 
             enriched_path
         )
-        
-        return {
-            "status": "success",
-            "data": diagnosis,
-            "message": "Enrichment filtering diagnosis completed"
-        }
+        return success_response(
+            diagnosis,
+            "Enrichment filtering diagnosis completed"
+        )
     except Exception as e:
         logger.error(f"Error in enrichment filtering diagnosis: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Enrichment filtering diagnosis failed", str(e))

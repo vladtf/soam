@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any, List
 from pydantic import BaseModel
 
@@ -6,7 +6,8 @@ from src.api.dependencies import ConfigDep, MinioClientDep
 from src.minio.minio_browser import MinioBrowser
 
 
-router = APIRouter(prefix="/minio", tags=["minio"])
+
+router = APIRouter(prefix="/api/minio", tags=["minio"])
 
 
 def _browser(config: ConfigDep, client: MinioClientDep) -> MinioBrowser:

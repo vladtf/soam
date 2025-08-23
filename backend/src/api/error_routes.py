@@ -7,16 +7,17 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from src.api.models import ClientErrorCreate, ClientErrorResponse
+from src.api.models import ClientErrorCreate, ClientErrorResponse, ApiResponse
+from src.api.response_utils import success_response
 from src.database import get_db
 from src.database.models import ClientError as ClientErrorModel
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/errors", tags=["errors"]) 
+router = APIRouter(prefix="/api", tags=["errors"]) 
 
 
-@router.post("/", response_model=dict)
+@router.post("/errors", response_model=ApiResponse)
 async def create_error(payload: ClientErrorCreate, db: Session = Depends(get_db)):
     """Accept a client error report and store it in the database."""
     try:
@@ -35,14 +36,14 @@ async def create_error(payload: ClientErrorCreate, db: Session = Depends(get_db)
         db.commit()
         db.refresh(db_err)
         logger.error("Client error stored id=%s message=%s", db_err.id, (db_err.message or "")[:200])
-        return {"status": "success", "data": {"id": db_err.id}}
+        return success_response({"id": db_err.id}, "Error report stored successfully")
     except Exception as e:
         db.rollback()
         logger.exception("Failed to store client error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/", response_model=List[ClientErrorResponse])
+@router.get("/errors", response_model=List[ClientErrorResponse])
 async def list_errors(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """List recent client errors for troubleshooting UI."""
     try:

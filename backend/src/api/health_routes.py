@@ -4,15 +4,16 @@ Health and monitoring API endpoints.
 import logging
 from fastapi import APIRouter
 
-from src.api.models import HealthStatus
+from src.api.models import HealthStatus, ApiResponse
 from src.api.dependencies import SparkManagerDep, Neo4jManagerDep
+from src.api.response_utils import success_response, error_response
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["health"])
+router = APIRouter(prefix="/api", tags=["health"])
 
 
-@router.get("/ready")
+@router.get("/ready", response_model=ApiResponse)
 async def get_readiness_status(
     spark_manager: SparkManagerDep,
     neo4j_manager: Neo4jManagerDep
@@ -32,7 +33,7 @@ async def get_readiness_status(
         # Check Neo4j (critical for basic functionality)
         try:
             neo4j_health = neo4j_manager.health_check()
-            ready_status["checks"]["neo4j"] = neo4j_health["status"] == "healthy"
+            ready_status["checks"]["neo4j"] = True  # If no exception, it's healthy
         except Exception:
             ready_status["checks"]["neo4j"] = False
             ready_status["ready"] = False
@@ -56,14 +57,23 @@ async def get_readiness_status(
             ready_status["checks"]["database"] = False
             ready_status["ready"] = False
         
-        return ready_status
+        if ready_status["ready"]:
+            return success_response(
+                data=ready_status,
+                message="Service is ready"
+            )
+        else:
+            return error_response(
+                message="Service is not ready",
+                status_text="error"
+            )
         
     except Exception as e:
         logger.error(f"Error in readiness check: {str(e)}")
-        return {
-            "ready": False,
-            "error": str(e)
-        }
+        return error_response(
+            message="Readiness check failed",
+            detail=str(e)
+        )
 
 
 @router.get("/health", response_model=HealthStatus)
@@ -88,11 +98,7 @@ async def get_health_status(
         # Check Neo4j
         try:
             neo4j_health = neo4j_manager.health_check()
-            if neo4j_health["status"] == "healthy":
-                health_status["components"]["neo4j"] = "healthy"
-            else:
-                health_status["components"]["neo4j"] = f"unhealthy: {neo4j_health['message']}"
-                health_status["status"] = "degraded"
+            health_status["components"]["neo4j"] = "healthy"
         except Exception as e:
             health_status["components"]["neo4j"] = f"unhealthy: {str(e)}"
             health_status["status"] = "degraded"

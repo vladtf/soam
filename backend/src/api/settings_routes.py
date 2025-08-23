@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from src.database.database import get_db
 from src.database.models import Setting, ValueTypeEnum
-from src.api.models import SettingCreate, SettingUpdate, SettingResponse
+from src.api.models import SettingCreate, SettingUpdate, SettingResponse, ApiResponse
+from src.api.response_utils import success_response
 from src.utils.settings_manager import settings_manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/api", tags=["settings"])
 
 
 def _get_value_type_enum(value_type_str: str) -> ValueTypeEnum:
@@ -24,7 +25,7 @@ def _get_value_type_enum(value_type_str: str) -> ValueTypeEnum:
         return ValueTypeEnum.STRING
 
 
-@router.get("/", response_model=List[SettingResponse])
+@router.get("/settings", response_model=List[SettingResponse])
 async def list_settings(
     category: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -45,7 +46,7 @@ async def list_settings(
         )
 
 
-@router.get("/{key}", response_model=SettingResponse)
+@router.get("/settings/{key}", response_model=SettingResponse)
 async def get_setting(
     key: str,
     db: Session = Depends(get_db)
@@ -70,7 +71,7 @@ async def get_setting(
         )
 
 
-@router.post("/", response_model=SettingResponse)
+@router.post("/settings", response_model=SettingResponse)
 async def create_setting(
     setting_data: SettingCreate,
     db: Session = Depends(get_db)
@@ -118,7 +119,7 @@ async def create_setting(
         )
 
 
-@router.put("/{key}", response_model=SettingResponse)
+@router.put("/settings/{key}", response_model=SettingResponse)
 async def update_setting(
     key: str,
     setting_data: SettingUpdate,
@@ -169,11 +170,11 @@ async def update_setting(
         )
 
 
-@router.delete("/{key}")
+@router.delete("/settings/{key}", response_model=ApiResponse)
 async def delete_setting(
     key: str,
     db: Session = Depends(get_db)
-):
+) -> ApiResponse:
     """Delete a setting."""
     try:
         setting = db.query(Setting).filter(Setting.key == key).first()
@@ -190,7 +191,7 @@ async def delete_setting(
         settings_manager.clear_cache()
         
         logger.info(f"Deleted setting '{key}'")
-        return {"message": f"Setting '{key}' deleted successfully"}
+        return success_response(message=f"Setting '{key}' deleted successfully")
         
     except HTTPException:
         raise
@@ -203,7 +204,7 @@ async def delete_setting(
         )
 
 
-@router.get("/{key}/typed-value")
+@router.get("/settings/{key}/typed-value")
 async def get_setting_typed_value(
     key: str,
     db: Session = Depends(get_db)

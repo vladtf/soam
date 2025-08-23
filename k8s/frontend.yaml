@@ -29,7 +29,7 @@ spec:
               
               # Also check if the backend health endpoint is responsive
               echo "Checking backend health endpoint..."
-              until wget -q --spider http://backend-external:8000/health 2>/dev/null; do
+              until wget -q --spider http://backend-external:8000/api/health 2>/dev/null; do
                 echo "Backend health endpoint is not ready yet. Waiting 3 seconds..."
                 sleep 3
               done

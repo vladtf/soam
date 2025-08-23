@@ -3,14 +3,15 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from src.api.models import DashboardTileCreate, DashboardTileUpdate, DashboardTileResponse
+from src.api.models import DashboardTileCreate, DashboardTileUpdate, DashboardTileResponse, ApiResponse
+from src.api.response_utils import success_response, not_found_error, bad_request_error
 from src.database.database import get_db
 from src.database.models import DashboardTile, Computation
 from src.computations.computation_routes import _execute_definition
 from src.api.dependencies import get_spark_manager
 from src.spark.spark_manager import SparkManager
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"]) 
+router = APIRouter(prefix="/api/dashboard", tags=["dashboard"]) 
 
 
 @router.get("/tiles", response_model=List[DashboardTileResponse])
@@ -67,14 +68,14 @@ def update_tile(tile_id: int, payload: DashboardTileUpdate, db: Session = Depend
     return DashboardTileResponse(**row.to_dict())
 
 
-@router.delete("/tiles/{tile_id}")
+@router.delete("/tiles/{tile_id}", response_model=ApiResponse)
 def delete_tile(tile_id: int, db: Session = Depends(get_db)):
     row = db.get(DashboardTile, tile_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Not found")
+        not_found_error("Dashboard tile not found")
     db.delete(row)
     db.commit()
-    return {"status": "success", "message": "Deleted"}
+    return success_response(message="Dashboard tile deleted successfully")
 
 
 @router.get("/examples")
@@ -115,14 +116,14 @@ def get_tile_examples(db: Session = Depends(get_db)) -> Dict[str, Any]:
     }
 
 
-@router.post("/tiles/{tile_id}/preview")
+@router.post("/tiles/{tile_id}/preview", response_model=ApiResponse)
 def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
     tile = db.get(DashboardTile, tile_id)
     if not tile:
-        raise HTTPException(status_code=404, detail="Not found")
+        not_found_error("Dashboard tile not found")
     comp = db.get(Computation, tile.computation_id)
     if not comp:
-        raise HTTPException(status_code=400, detail="Computation not found")
+        bad_request_error("Computation not found")
     import json
     try:
         defn = json.loads(comp.definition)
@@ -130,4 +131,4 @@ def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManage
         defn = {}
     # Execute computation
     data = _execute_definition(defn, comp.dataset, spark)
-    return {"status": "success", "data": data}
+    return success_response(data, "Dashboard tile preview executed successfully")

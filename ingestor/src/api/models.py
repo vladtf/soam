@@ -50,6 +50,17 @@ class ApiResponse(BaseModel):
     error: Optional[str] = None
 
 
+class ApiListResponse(BaseModel):
+    """Generic API list response wrapper."""
+    status: str
+    data: List[Any]
+    total: Optional[int] = None
+    page: Optional[int] = None
+    page_size: Optional[int] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+
+
 class HealthStatus(BaseModel):
     """Schema for health check response."""
     status: str = Field(..., description="Overall service status")

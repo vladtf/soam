@@ -132,9 +132,9 @@ async def root():
     return {
         "message": "SOAM Ingestor API",
         "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health",
-        "metrics": "/metrics"
+        "docs": "/api/docs",
+        "health": "/api/health",
+        "metrics": "/api/metrics"
     }
 
 

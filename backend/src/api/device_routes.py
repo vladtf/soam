@@ -6,31 +6,33 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from src.api.models import DeviceCreate, DeviceUpdate, DeviceResponse, ApiResponse
+from src.api.models import DeviceCreate, DeviceUpdate, DeviceResponse, ApiResponse, ApiListResponse
+from src.api.response_utils import success_response, error_response, list_response, not_found_error, bad_request_error, internal_server_error
 from src.database.database import get_db
 from src.database.models import Device
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/devices", tags=["devices"])
+router = APIRouter(prefix="/api", tags=["devices"])
 
 
-@router.get("/", response_model=List[DeviceResponse])
+@router.get("/devices", response_model=ApiListResponse[DeviceResponse])
 def list_devices(db: Session = Depends(get_db)):
     try:
         rows = db.query(Device).order_by(Device.created_at.desc()).all()
-        return [r.to_dict() for r in rows]
+        devices = [r.to_dict() for r in rows]
+        return list_response(devices, message="Devices retrieved successfully")
     except Exception as e:
         logger.error("Error listing devices: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to retrieve devices", str(e))
 
 
-@router.post("/", response_model=DeviceResponse)
+@router.post("/devices", response_model=ApiResponse[DeviceResponse])
 def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
     try:
         # Validate user is provided
         if not payload.created_by or not payload.created_by.strip():
-            raise HTTPException(status_code=400, detail="User information required (created_by)")
+            bad_request_error("User information required (created_by)")
         
         # Initial registration should only require ingestion_id.
         # If a device with the same ingestion_id exists, update its metadata; otherwise create it.
@@ -45,7 +47,7 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
             db.refresh(existing)
             logger.info("Device updated by '%s': %s", 
                        payload.created_by, existing.ingestion_id)
-            return existing.to_dict()
+            return success_response(existing.to_dict(), "Device updated successfully")
         
         row = Device(
             ingestion_id=payload.ingestion_id,
@@ -59,25 +61,23 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
         db.refresh(row)
         logger.info("Device registered by '%s': %s", 
                    payload.created_by, row.ingestion_id)
-        return row.to_dict()
-    except HTTPException:
-        raise
+        return success_response(row.to_dict(), "Device registered successfully")
     except Exception as e:
         logger.error("Error registering device: %s", e)
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to register device", str(e))
 
 
-@router.patch("/{device_id}", response_model=DeviceResponse)
+@router.patch("/devices/{device_id}", response_model=ApiResponse[DeviceResponse])
 def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(get_db)):
     try:
         # Validate user is provided
         if not payload.updated_by or not payload.updated_by.strip():
-            raise HTTPException(status_code=400, detail="User information required (updated_by)")
+            bad_request_error("User information required (updated_by)")
         
         row = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
-            raise HTTPException(status_code=404, detail="Device not found")
+            not_found_error("Device not found")
         
         changes = []
         if payload.name is not None and payload.name != row.name:
@@ -103,46 +103,40 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
             logger.info("Device %d touched by '%s' (no changes)", 
                        row.id, payload.updated_by)
         
-        return row.to_dict()
-    except HTTPException:
-        raise
+        return success_response(row.to_dict(), "Device updated successfully")
     except Exception as e:
         logger.error("Error updating device: %s", e)
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to update device", str(e))
 
 
-@router.delete("/{device_id}", response_model=ApiResponse)
+@router.delete("/devices/{device_id}", response_model=ApiResponse)
 def delete_device(device_id: int, db: Session = Depends(get_db)):
     try:
         row = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
-            raise HTTPException(status_code=404, detail="Device not found")
+            not_found_error("Device not found")
         db.delete(row)
         db.commit()
-        return {"status": "success", "message": "Device deleted"}
-    except HTTPException:
-        raise
+        return success_response({"message": "Device deleted"}, "Device deleted successfully")
     except Exception as e:
         logger.error("Error deleting device: %s", e)
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to delete device", str(e))
 
 
-@router.post("/{device_id}/toggle", response_model=DeviceResponse)
+@router.post("/devices/{device_id}/toggle", response_model=ApiResponse[DeviceResponse])
 def toggle_device(device_id: int, db: Session = Depends(get_db)):
     try:
         row = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
-            raise HTTPException(status_code=404, detail="Device not found")
+            not_found_error("Device not found")
         row.enabled = not row.enabled
         db.add(row)
         db.commit()
         db.refresh(row)
-        return row.to_dict()
-    except HTTPException:
-        raise
+        return success_response(row.to_dict(), "Device toggled successfully")
     except Exception as e:
         logger.error("Error toggling device: %s", e)
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        internal_server_error("Failed to toggle device", str(e))

@@ -2,8 +2,11 @@
 Pydantic models for API request/response schemas.
 """
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Generic, TypeVar
 from datetime import datetime
+
+# Type variable for generic response types
+T = TypeVar('T')
 
 
 class BuildingCreate(BaseModel):
@@ -79,12 +82,28 @@ class SparkTestResult(BaseModel):
     results: Optional[Dict[str, Any]] = None
 
 
-class ApiResponse(BaseModel):
-    """Generic API response wrapper."""
-    status: str
-    data: Optional[Any] = None
-    message: Optional[str] = None
-    error: Optional[str] = None
+class ApiResponse(BaseModel, Generic[T]):
+    """
+    Standard API response wrapper that matches frontend expectations.
+    Used to ensure consistent response structure across all endpoints.
+    """
+    status: str = Field(..., description="Response status: 'success', 'error', 'warning'")
+    data: Optional[T] = Field(None, description="Response data payload")
+    message: Optional[str] = Field(None, description="Human-readable message")
+    detail: Optional[str] = Field(None, description="Detailed error information")
+
+
+class ApiListResponse(BaseModel, Generic[T]):
+    """
+    Standard API response wrapper for list endpoints.
+    """
+    status: str = Field(..., description="Response status: 'success', 'error', 'warning'")
+    data: List[T] = Field(default_factory=list, description="List of response data items")
+    total: Optional[int] = Field(None, description="Total number of items available")
+    page: Optional[int] = Field(None, description="Current page number (for pagination)")
+    page_size: Optional[int] = Field(None, description="Number of items per page")
+    message: Optional[str] = Field(None, description="Human-readable message")
+    detail: Optional[str] = Field(None, description="Detailed error information")
 
 
 # ===============================

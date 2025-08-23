@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Button, Table, Badge, Tabs, Tab, Row, Col } from 'react-bootstrap';
-import { getConfig } from '../config';
 import { flushErrorQueue } from '../errors';
 import { useError } from '../context/ErrorContext';
 import DataTroubleshootingTool from '../components/DataTroubleshootingTool';
@@ -8,24 +7,9 @@ import EnrichmentDiagnosticCard from '../components/sensor-data/EnrichmentDiagno
 import EnrichmentStatusCard from '../components/EnrichmentStatusCard';
 import SparkApplicationsCard from '../components/SparkApplicationsCard';
 import ConnectionStatus from '../components/ConnectionStatus';
-import { fetchSparkMasterStatus, SparkMasterStatus } from '../api/backendRequests';
-
-interface ClientErrorRow {
-  id: number;
-  message: string;
-  stack?: string | null;
-  url?: string | null;
-  component?: string | null;
-  context?: string | null;
-  severity?: string | null;
-  user_agent?: string | null;
-  session_id?: string | null;
-  extra?: Record<string, unknown> | null;
-  created_at?: string | null;
-}
+import { fetchSparkMasterStatus, SparkMasterStatus, fetchErrors, ClientErrorRow } from '../api/backendRequests';
 
 const TroubleshootingPage: React.FC = () => {
-  const { backendUrl } = getConfig();
   const { setError } = useError();
   const [rows, setRows] = useState<ClientErrorRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -37,8 +21,7 @@ const TroubleshootingPage: React.FC = () => {
     setLoading(true);
     try {
       await flushErrorQueue();
-      const res = await fetch(`${backendUrl}/errors/?limit=200`);
-      const data = await res.json();
+      const data = await fetchErrors(200);
       setRows(data || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : (e as any));

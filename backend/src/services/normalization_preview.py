@@ -118,14 +118,7 @@ class DataNormalizationPreview:
         """
         try:
             if sample_data.empty:
-                return {
-                    "status": "error",
-                    "message": "No sample data available for preview",
-                    "original_data": [],
-                    "normalized_data": [],
-                    "applied_rules": [],
-                    "unmapped_columns": []
-                }
+                raise ValueError("No sample data available for preview")
             
             # Get existing normalization rules
             query = db.query(NormalizationRule).filter(NormalizationRule.enabled == True)
@@ -205,7 +198,6 @@ class DataNormalizationPreview:
             normalized_sample = normalized_data.head(10).to_dict('records')
             
             return {
-                "status": "success",
                 "summary": {
                     "total_records": len(sample_data),
                     "total_columns": len(sample_data.columns),
@@ -222,15 +214,10 @@ class DataNormalizationPreview:
             }
             
         except Exception as e:
+            if isinstance(e, ValueError):
+                raise
             logger.error(f"Error previewing normalization: {e}")
-            return {
-                "status": "error",
-                "message": str(e),
-                "original_data": [],
-                "normalized_data": [],
-                "applied_rules": [],
-                "unmapped_columns": []
-            }
+            raise RuntimeError(f"Failed to preview normalization: {str(e)}")
     
     def compare_normalization_scenarios(
         self,
@@ -258,7 +245,6 @@ class DataNormalizationPreview:
             scenario_b = self.preview_normalization(db, sample_data, ingestion_id, scenario_b_rules)
             
             return {
-                "status": "success",
                 "scenario_a": scenario_a,
                 "scenario_b": scenario_b,
                 "comparison": {
@@ -275,10 +261,7 @@ class DataNormalizationPreview:
             
         except Exception as e:
             logger.error(f"Error comparing normalization scenarios: {e}")
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+            raise RuntimeError(f"Failed to compare scenarios: {str(e)}")
     
     def validate_normalization_rules(
         self,
@@ -344,7 +327,6 @@ class DataNormalizationPreview:
             invalid_rules = [r for r in validation_results if not r["valid"]]
             
             return {
-                "status": "success",
                 "overall_valid": len(invalid_rules) == 0,
                 "total_rules": len(rules),
                 "valid_rules": len(valid_rules),
@@ -354,10 +336,7 @@ class DataNormalizationPreview:
             
         except Exception as e:
             logger.error(f"Error validating normalization rules: {e}")
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+            raise RuntimeError(f"Failed to validate rules: {str(e)}")
     
     def _extract_ingestion_id_from_path(self, file_path: str) -> Optional[str]:
         """Extract ingestion ID from file path."""

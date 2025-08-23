@@ -24,10 +24,7 @@ class SparkDiagnostics:
         """Test basic Spark functionality."""
         try:
             if not self.session_manager.is_connected():
-                return {
-                    "status": "error",
-                    "message": "Spark connection not available"
-                }
+                raise ConnectionError("Spark connection not available")
             
             # Execute simple SQL test
             result = self.session_manager.spark.sql("SELECT 1 as test_value, 'hello' as test_string").collect()
@@ -35,7 +32,6 @@ class SparkDiagnostics:
             if result and len(result) > 0:
                 row = result[0]
                 return {
-                    "status": "success",
                     "message": "Spark is working correctly",
                     "results": {
                         "spark_version": self.session_manager.spark.version,
@@ -48,26 +44,19 @@ class SparkDiagnostics:
                     }
                 }
             else:
-                return {
-                    "status": "error",
-                    "message": "Spark SQL execution returned no results"
-                }
+                raise RuntimeError("Spark SQL execution returned no results")
                 
         except Exception as e:
+            if isinstance(e, (ConnectionError, RuntimeError)):
+                raise
             logger.error(f"Spark basic computation test failed: {e}")
-            return {
-                "status": "error",
-                "message": f"Spark test failed: {str(e)}"
-            }
+            raise RuntimeError(f"Spark test failed: {str(e)}")
 
     def test_sensor_data_access(self) -> Dict[str, Any]:
         """Test access to sensor data in MinIO."""
         try:
             if not self.session_manager.is_connected():
-                return {
-                    "status": "error",
-                    "message": "Spark connection not available"
-                }
+                raise ConnectionError("Spark connection not available")
             
             try:
                 # Attempt to read sensor data
@@ -87,7 +76,6 @@ class SparkDiagnostics:
                     ]
                     
                     return {
-                        "status": "success",
                         "message": "Successfully accessed sensor data",
                         "results": {
                             "total_sensor_records": count,
@@ -96,22 +84,21 @@ class SparkDiagnostics:
                         }
                     }
                 else:
+                    logger.warning("Sensor data directory exists but contains no data")
                     return {
-                        "status": "warning",
                         "message": "Sensor data directory exists but contains no data",
                         "results": {"total_sensor_records": 0}
                     }
                     
             except Exception as data_error:
+                logger.warning(f"Cannot access sensor data: {str(data_error)}")
                 return {
-                    "status": "warning", 
                     "message": f"Cannot access sensor data: {str(data_error)}",
                     "results": {"data_path": self.bronze_path}
                 }
                 
         except Exception as e:
+            if isinstance(e, ConnectionError):
+                raise
             logger.error(f"Sensor data access test failed: {e}")
-            return {
-                "status": "error",
-                "message": f"Test failed: {str(e)}"
-            }
+            raise RuntimeError(f"Test failed: {str(e)}")

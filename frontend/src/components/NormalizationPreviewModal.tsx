@@ -93,7 +93,7 @@ const NormalizationPreviewModal: React.FC<{
         sample_limit: sampleLimit
       });
       
-      setPreviewResult(result.preview);
+      setPreviewResult(result.data.preview);
       setActiveTab('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run preview');

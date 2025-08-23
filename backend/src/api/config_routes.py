@@ -1,3 +1,6 @@
+from src.api.models import ApiResponse
+from src.api.response_utils import success_response, internal_server_error
+
 """
 Configuration API routes for runtime settings.
 """
@@ -12,7 +15,7 @@ from .dependencies import SparkManagerDep
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/config", tags=["configuration"])
+router = APIRouter(prefix="/api", tags=["configuration"])
 
 
 class SchemaConfigResponse(BaseModel):
@@ -27,8 +30,8 @@ class SchemaConfigRequest(BaseModel):
     use_union_schema: bool
 
 
-@router.get("/schema", response_model=SchemaConfigResponse)
-async def get_schema_config(spark_manager: SparkManagerDep) -> SchemaConfigResponse:
+@router.get("/config/schema", response_model=ApiResponse)
+async def get_schema_config(spark_manager: SparkManagerDep) -> ApiResponse:
     """
     Get current schema configuration.
     
@@ -36,22 +39,20 @@ async def get_schema_config(spark_manager: SparkManagerDep) -> SchemaConfigRespo
         Current schema configuration (always union schema)
     """
     try:
-        return SchemaConfigResponse(
-            use_union_schema=True,
-            schema_type="union",
+        return success_response(
+            data={
+                "use_union_schema": True,
+                "schema_type": "union"
+            },
             message="Using union schema format for flexible data storage"
         )
     except Exception as e:
         logger.error(f"Error getting schema config: {e}")
-        return SchemaConfigResponse(
-            use_union_schema=True,
-            schema_type="union",
-            message="Using union schema format"
-        )
+        internal_server_error("Failed to retrieve schema configuration", str(e))
 
 
-@router.get("/", response_model=Dict[str, Any])
-async def get_system_config(spark_manager: SparkManagerDep) -> Dict[str, Any]:
+@router.get("/config/", response_model=ApiResponse)
+async def get_system_config(spark_manager: SparkManagerDep) -> ApiResponse:
     """
     Get comprehensive system configuration.
     
@@ -62,7 +63,7 @@ async def get_system_config(spark_manager: SparkManagerDep) -> Dict[str, Any]:
         # Get Spark master status
         spark_status = spark_manager.get_spark_master_status()
         
-        return {
+        config_data = {
             "schema": {
                 "use_union_schema": True,
                 "schema_type": "union"
@@ -75,24 +76,47 @@ async def get_system_config(spark_manager: SparkManagerDep) -> Dict[str, Any]:
                 "gold_alerts_path": f"s3a://{spark_manager.minio_bucket}/{SparkConfig.GOLD_ALERTS_PATH}/"
             },
             "spark": {
-                "status": spark_status.get("status", "unknown"),
-                "master_host": spark_status.get("master", "unknown"),
-                "workers": spark_status.get("workers", [])
+                "status": spark_status.status if spark_status else "unknown",
+                "master_host": spark_status.url if spark_status else "unknown",
+                "workers": [
+                    {
+                        "id": worker.id,
+                        "host": worker.host,
+                        "cores": worker.cores,
+                        "coresused": worker.coresused,
+                        "state": worker.state
+                    } for worker in spark_status.workers
+                ] if spark_status else []
             },
             "streaming": {
-                "enrichment_active": spark_manager.streaming_manager.enrich_query.isActive if spark_manager.streaming_manager.enrich_query else False,
-                "temperature_active": spark_manager.streaming_manager.avg_query.isActive if spark_manager.streaming_manager.avg_query else False,
-                "alert_active": spark_manager.streaming_manager.alert_query.isActive if spark_manager.streaming_manager.alert_query else False
+                "enrichment_active": (
+                    spark_manager.streaming_manager.enrich_query.isActive 
+                    if spark_manager.streaming_manager and spark_manager.streaming_manager.enrich_query 
+                    else False
+                ),
+                "temperature_active": (
+                    spark_manager.streaming_manager.avg_query.isActive 
+                    if spark_manager.streaming_manager and spark_manager.streaming_manager.avg_query 
+                    else False
+                ),
+                "alert_active": (
+                    spark_manager.streaming_manager.alert_query.isActive 
+                    if spark_manager.streaming_manager and spark_manager.streaming_manager.alert_query 
+                    else False
+                )
             }
         }
+        
+        return success_response(
+            data=config_data,
+            message="System configuration retrieved successfully"
+        )
     except Exception as e:
         logger.error(f"Error getting system config: {e}")
-        return {
-            "error": f"Failed to retrieve system configuration: {str(e)}"
-        }
+        internal_server_error("Failed to retrieve system configuration", str(e))
 
 
-@router.get("/features", response_model=Dict[str, Any])
+@router.get("/config/features", response_model=Dict[str, Any])
 async def get_feature_flags() -> Dict[str, Any]:
     """
     Get current feature flags and capabilities.
