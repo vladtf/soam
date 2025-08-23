@@ -30,15 +30,15 @@ class BatchProcessor:
         if batch_df.rdd.isEmpty():
             return
             
-        logger.info("=== RAW BATCH DATA SAMPLE ===")
+        logger.debug("=== RAW BATCH DATA SAMPLE ===")
         raw_sample = batch_df.limit(2).collect()
         for i, row in enumerate(raw_sample):
             row_dict = row.asDict()
-            logger.info(f"Raw data sample {i+1}: {row_dict}")
+            logger.debug(f"Raw data sample {i+1}: {row_dict}")
             # Specifically check temperature field in raw data
             if 'temperature' in row_dict:
                 logger.info(f"Raw data sample {i+1}: temperature = '{row_dict['temperature']}' (type: {type(row_dict['temperature'])})")
-        logger.info("=== END RAW BATCH DATA SAMPLE ===")
+        logger.debug("=== END RAW BATCH DATA SAMPLE ===")
 
     def log_normalized_data_sample(self, filtered_df: DataFrame) -> None:
         """Log sample of normalized data for debugging.
@@ -54,15 +54,15 @@ class BatchProcessor:
                 normalized_data = row["normalized_data"]
                 sensor_data = row["sensor_data"]
 
-                logger.info("Enrichment sample %d: ingestion_id=%s", i+1, ingestion_id)
+                logger.debug("Enrichment sample %d: ingestion_id=%s", i+1, ingestion_id)
 
                 # Log normalized fields and values
                 if normalized_data:
                     # normalized_data is already a dict, not a Row object
                     norm_fields = [f"{k}={v}" for k, v in normalized_data.items() if v is not None]
-                    logger.info("Enrichment sample %d: normalized fields: %s", i+1, norm_fields)
+                    logger.debug("Enrichment sample %d: normalized fields: %s", i+1, norm_fields)
                 else:
-                    logger.info("Enrichment sample %d: no normalized data", i+1)
+                    logger.debug("Enrichment sample %d: no normalized data", i+1)
 
                 # Log sensor data keys for context
                 if sensor_data:
@@ -70,10 +70,10 @@ class BatchProcessor:
                     sensor_keys = list(sensor_data.keys())
                     # Also show some actual sensor data values
                     sensor_sample = {k: v for k, v in sensor_data.items() if k in ['sensorId', 'temperature', 'humidity', 'timestamp']}
-                    logger.info("Enrichment sample %d: sensor_data keys: %s", i+1, sensor_keys)
-                    logger.info("Enrichment sample %d: sensor_data sample: %s", i+1, sensor_sample)
+                    logger.debug("Enrichment sample %d: sensor_data keys: %s", i+1, sensor_keys)
+                    logger.debug("Enrichment sample %d: sensor_data sample: %s", i+1, sensor_sample)
                 else:
-                    logger.info("Enrichment sample %d: no sensor data", i+1)
+                    logger.debug("Enrichment sample %d: no sensor data", i+1)
 
         except Exception as e:
             logger.warning(f"Could not log sample normalized data: {e}")
@@ -89,7 +89,8 @@ class BatchProcessor:
             logger.info("Union enrichment batch started: batch_id=%s", batch_id)
 
             # Debug: Log sample raw data BEFORE any processing
-            self.log_raw_batch_sample(batch_df)
+            if logger.isEnabledFor(logging.DEBUG):
+                self.log_raw_batch_sample(batch_df)
 
             # Get device filtering information
             allowed_ids, has_wildcard = self.device_filter.get_allowed_ingestion_ids()
@@ -110,7 +111,7 @@ class BatchProcessor:
 
             # Log normalized field information for debugging
             total_after = filtered_df.count()
-            if total_after > 0:
+            if total_after > 0 and logger.isEnabledFor(logging.DEBUG):
                 self.log_normalized_data_sample(filtered_df)
 
             # Write to Delta with partitioning by ingestion_id
