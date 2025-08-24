@@ -68,7 +68,7 @@ class EnrichmentManager:
             time.sleep(2)
 
     def _get_streaming_schema(self) -> StructType:
-        """Get the schema for streaming reads with robust dynamic analysis.
+        """Get the schema for streaming reads with simplified inference.
         
         Returns:
             Spark schema for reading streaming data
@@ -76,31 +76,18 @@ class EnrichmentManager:
         Raises:
             Exception: If no data is available for schema inference
         """
-        logger.info(f"Starting dynamic schema inference from path: {self.bronze_path}")
+        logger.info(f"Starting schema inference from path: {self.bronze_path}")
         
         # Check if any data exists first
         if not self._has_bronze_data():
             raise Exception("No data available in bronze layer for schema inference. Please ensure data ingestion is working.")
         
-        # Try multiple strategies for schema inference
-        schema = None
-        
-        # Strategy 1: Try with mergeSchema on all available data
-        schema = self._try_merge_schema_inference()
+        # Try simplified schema inference
+        schema = self._try_schema_inference()
         if schema:
             return schema
             
-        # Strategy 2: Try with single partition if merge fails
-        schema = self._try_single_partition_inference()
-        if schema:
-            return schema
-            
-        # Strategy 3: Try with specific ingestion_id patterns
-        schema = self._try_ingestion_specific_inference()
-        if schema:
-            return schema
-            
-        # If all strategies fail, this is a real issue that needs to be addressed
+        # If inference fails, this is a real issue that needs to be addressed
         raise Exception("Unable to infer schema from any available data. Check data format and structure in bronze layer.")
 
     def _has_bronze_data(self) -> bool:
@@ -155,111 +142,55 @@ class EnrichmentManager:
             logger.info("Bronze layer data check: unknown (assuming data exists)")
             return True
 
-    def _try_merge_schema_inference(self) -> Optional[StructType]:
-        """Try schema inference with mergeSchema=true."""
-        try:
-            logger.info("Attempting schema inference with mergeSchema=true")
-            static_df = (
-                self.spark.read
-                .option("basePath", self.bronze_path)
-                .option("mergeSchema", "true")
-                .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
-            )
-            
-            schema = static_df.schema
-            schema_field_names = [field.name for field in schema.fields]
-            
-            logger.info(f"Merge schema inference successful: {len(schema_field_names)} fields found")
-            logger.info(f"Schema fields: {schema_field_names}")
-            
-            # Validate essential fields
-            if self._validate_schema(schema):
-                return schema
-                
-        except Exception as e:
-            logger.warning(f"Merge schema inference failed: {e}")
+    def _try_schema_inference(self) -> Optional[StructType]:
+        """Try schema inference with simplified, robust approach."""
+        logger.info("Starting schema inference")
         
-        return None
-
-    def _try_single_partition_inference(self) -> Optional[StructType]:
-        """Try schema inference from a single partition."""
-        try:
-            logger.info("Attempting schema inference from single partition")
-            
-            # Try different partition patterns to find any available data
-            patterns = [
-                f"{self.bronze_path}ingestion_id=*/date=*/hour=*",
-                f"{self.bronze_path}ingestion_id=*/*/*",
-                f"{self.bronze_path}ingestion_id=*/*",
-                f"{self.bronze_path}*/*/*",
-                f"{self.bronze_path}*/*"
-            ]
-            
-            for pattern in patterns:
-                try:
-                    logger.debug(f"Trying single partition pattern: {pattern}")
-                    static_df = self.spark.read.parquet(pattern)
-                    schema = static_df.schema
-                    
-                    if self._validate_schema(schema):
-                        logger.info(f"Single partition inference successful with pattern: {pattern}")
-                        schema_field_names = [field.name for field in schema.fields]
-                        logger.info(f"Schema fields: {schema_field_names}")
-                        return schema
-                        
-                except Exception as e:
-                    logger.debug(f"Pattern {pattern} failed: {e}")
-                    continue
-                    
-            # Last resort: try reading from base path
+        # Define search patterns in order of preference
+        patterns = [
+            # Most specific pattern first (includes partitioning structure)
+            f"{self.bronze_path}ingestion_id=*/date=*/hour=*",
+            # Fallback patterns for different partition structures
+            f"{self.bronze_path}ingestion_id=*/*/*",
+            f"{self.bronze_path}ingestion_id=*/*",
+            # General patterns if specific partition structure isn't found
+            f"{self.bronze_path}*/*/*",
+            f"{self.bronze_path}*/*",
+            # Base path as last resort
+            self.bronze_path
+        ]
+        
+        for i, pattern in enumerate(patterns):
             try:
-                logger.debug("Trying base path read as last resort")
-                static_df = self.spark.read.parquet(self.bronze_path)
+                logger.debug(f"Trying pattern {i+1}/{len(patterns)}: {pattern}")
+                
+                # Use mergeSchema for the first pattern to handle schema evolution
+                if i == 0:
+                    static_df = (
+                        self.spark.read
+                        .option("basePath", self.bronze_path)
+                        .option("mergeSchema", "true")
+                        .parquet(pattern)
+                    )
+                else:
+                    static_df = self.spark.read.parquet(pattern)
+                
                 schema = static_df.schema
                 
                 if self._validate_schema(schema):
-                    logger.info("Single partition inference successful (base path method)")
+                    schema_field_names = [field.name for field in schema.fields]
+                    logger.info(f"Schema inference successful with pattern {i+1}: {len(schema_field_names)} fields found")
+                    logger.info(f"Schema fields: {schema_field_names}")
                     return schema
                     
             except Exception as e:
-                logger.debug(f"Base path read failed: {e}")
-                
-        except Exception as e:
-            logger.warning(f"Single partition inference failed: {e}")
+                logger.debug(f"Pattern {i+1} failed: {e}")
+                continue
         
+        logger.error("All schema inference patterns failed")
         return None
 
-    def _try_ingestion_specific_inference(self) -> Optional[StructType]:
-        """Try to infer schema from specific ingestion patterns."""
-        try:
-            logger.info("Attempting ingestion-specific schema inference")
-            
-            # Try different glob patterns that might exist
-            patterns = [
-                f"{self.bronze_path}ingestion_id=*/*/*",
-                f"{self.bronze_path}*/*/*",
-                f"{self.bronze_path}*/*",
-                f"{self.bronze_path}*"
-            ]
-            
-            for pattern in patterns:
-                try:
-                    logger.debug(f"Trying pattern: {pattern}")
-                    static_df = self.spark.read.parquet(pattern)
-                    schema = static_df.schema
-                    
-                    if self._validate_schema(schema):
-                        logger.info(f"Ingestion-specific inference successful with pattern: {pattern}")
-                        return schema
-                        
-                except Exception as e:
-                    logger.debug(f"Pattern {pattern} failed: {e}")
-                    continue
-                    
-        except Exception as e:
-            logger.warning(f"Ingestion-specific inference failed: {e}")
-            
-        return None
+
 
     def _validate_schema(self, schema: StructType) -> bool:
         """Validate that the inferred schema has required fields."""
