@@ -35,9 +35,10 @@ class BatchProcessor:
         for i, row in enumerate(raw_sample):
             row_dict = row.asDict()
             logger.debug(f"Raw data sample {i+1}: {row_dict}")
-            # Specifically check temperature field in raw data
-            if 'temperature' in row_dict:
-                logger.info(f"Raw data sample {i+1}: temperature = '{row_dict['temperature']}' (type: {type(row_dict['temperature'])})")
+            # Log all fields generically without assuming specific field names
+            field_count = len(row_dict)
+            non_null_fields = {k: v for k, v in row_dict.items() if v is not None}
+            logger.debug(f"Raw data sample {i+1}: {field_count} total fields, {len(non_null_fields)} non-null")
         logger.debug("=== END RAW BATCH DATA SAMPLE ===")
 
     def log_normalized_data_sample(self, filtered_df: DataFrame) -> None:
@@ -68,9 +69,10 @@ class BatchProcessor:
                 if sensor_data:
                     # sensor_data is already a dict, not a Row object
                     sensor_keys = list(sensor_data.keys())
-                    # Also show some actual sensor data values
-                    sensor_sample = {k: v for k, v in sensor_data.items() if k in ['sensorId', 'temperature', 'humidity', 'timestamp']}
-                    logger.debug("Enrichment sample %d: sensor_data keys: %s", i+1, sensor_keys)
+                    # Show sample of actual sensor data values (first few fields)
+                    sample_keys = list(sensor_data.keys())[:4]  # Show first 4 fields regardless of names
+                    sensor_sample = {k: sensor_data[k] for k in sample_keys if k in sensor_data}
+                    logger.debug("Enrichment sample %d: sensor_data keys (%d total): %s", i+1, len(sensor_keys), sensor_keys)
                     logger.debug("Enrichment sample %d: sensor_data sample: %s", i+1, sensor_sample)
                 else:
                     logger.debug("Enrichment sample %d: no sensor data", i+1)

@@ -9,8 +9,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import StructType, StructField, StringType, TimestampType, MapType, DoubleType
-import json
+from pyspark.sql.types import StringType, MapType, DoubleType
 
 logger = logging.getLogger(__name__)
 

@@ -146,15 +146,6 @@ class DataCleaner:
                 canonical_key = effective_map[raw_key]
                 logger.info(f"Normalization rule: '{raw_key}' -> '{canonical_key}' for ingestion_id='{ingestion_id or 'global'}'")
                 
-            # Special debug for temperature field
-            temp_related = [k for k in lowered.columns if 'temp' in k.lower()]
-            if temp_related:
-                logger.info(f"Temperature-related columns found in raw data: {temp_related}")
-                for temp_col in temp_related:
-                    if temp_col in effective_map:
-                        logger.info(f"Temperature column '{temp_col}' will be normalized to '{effective_map[temp_col]}'")
-                    else:
-                        logger.warning(f"Temperature column '{temp_col}' has no normalization rule!")
         else:
             logger.info("No normalization rules found; leaving columns as-is (lower-cased)")
 

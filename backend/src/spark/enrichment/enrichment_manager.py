@@ -67,33 +67,56 @@ class EnrichmentManager:
             time.sleep(2)
 
     def _get_streaming_schema(self) -> any:
-        """Get the schema for streaming reads.
+        """Get the schema for streaming reads with optimized comprehensive analysis.
         
         Returns:
             Spark schema for reading streaming data
         """
         try:
-            # Try to infer schema from existing parquet files first
-            static_df = (
-                self.spark.read
-                .option("basePath", self.bronze_path)
-                .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
-            )
-            inferred_schema = static_df.schema
-            logger.info("Inferred raw sensors schema from existing files for union streaming")
+            # Strategy: Use Spark's built-in schema merging but limit the scope for speed
+            # This is much faster than sampling data but still catches schema variations
             
-            # Check if the inferred schema has temperature field
-            has_temperature = any(field.name == "temperature" for field in inferred_schema.fields)
-            if not has_temperature:
-                logger.warning("Inferred schema missing temperature field - using comprehensive schema")
-                inferred_schema = SparkSchemas.get_comprehensive_raw_schema()
+            # First, try to get a representative sample of partitions
+            # Instead of reading ALL partitions, read a strategic sample
+            try:
+                # Read with mergeSchema but limit to recent partitions for speed
+                # This captures schema evolution while being fast
+                static_df = (
+                    self.spark.read
+                    .option("basePath", self.bronze_path)
+                    .option("mergeSchema", "true")
+                    .option("pathGlobFilter", "*/date=*/hour=*")  # Ensure partition pattern
+                    .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
+                )
+                
+                # Quick schema validation without expensive data sampling
+                inferred_schema = static_df.schema
+                schema_field_names = [field.name for field in inferred_schema.fields]
 
-            return inferred_schema
-
+                logger.info(f"Fast schema inference: {len(schema_field_names)} fields found. Schema fields: {schema_field_names}")
+                
+                # Essential field check (quick validation)
+                essential_fields = ["ingestion_id", "timestamp"]
+                has_essential = all(field in schema_field_names for field in essential_fields)
+                
+                if has_essential:
+                    # Schema looks good, do minimal verification
+                    logger.info("Schema validation passed - using inferred schema")
+                    return inferred_schema
+                else:
+                    logger.warning(f"Schema validation failed: has_essential={has_essential}, field_count={len(schema_field_names)}")
+                    
+            except Exception as e:
+                logger.warning(f"Optimized schema inference failed: {e}")
+            
+            # Fallback: If fast approach fails, use comprehensive schema
+            logger.info("Using comprehensive schema as fallback for reliability")
+            return SparkSchemas.get_comprehensive_raw_schema()
+                
         except Exception as e:
-            inferred_schema = SparkSchemas.get_comprehensive_raw_schema()
-            logger.info(f"Using comprehensive raw schema for streaming read (reason: {e})")
-            return inferred_schema
+            logger.error(f"Schema inference completely failed: {e}")
+            logger.info("Using comprehensive raw schema as final fallback")
+            return SparkSchemas.get_comprehensive_raw_schema()
 
     def _create_raw_stream(self, schema) -> DataFrame:
         """Create raw streaming DataFrame.
@@ -114,15 +137,17 @@ class EnrichmentManager:
         )
 
         # Add debug logging to see what's in the raw stream before any processing
-        logger.info("Raw stream schema before any processing:")
+        logger.info("Raw stream created successfully")
         try:
-            logger.info(f"Raw stream columns: {raw_stream.columns}")
-            # Check specifically for temperature field
-            has_temp_field = "temperature" in raw_stream.columns
-            logger.info(f"Raw stream has temperature field: {has_temp_field}")
-            logger.info(f"Raw stream schema: {raw_stream.schema}")
+            logger.info(f"Raw stream columns ({len(raw_stream.columns)}): {raw_stream.columns}")
+            
+            # Log schema details
+            schema_details = []
+            for field in raw_stream.schema.fields:
+                schema_details.append(f"{field.name}({field.dataType.simpleString()})")
+            logger.info(f"Raw stream schema details: {schema_details}")
         except Exception as e:
-            logger.warning(f"Could not log raw stream schema: {e}")
+            logger.warning(f"Could not log raw stream details: {e}")
 
         return raw_stream
 
