@@ -21,64 +21,59 @@ class BatchProcessor:
         self.enriched_path: str = enriched_path
         self.device_filter: DeviceFilter = DeviceFilter()
 
-    def log_raw_batch_sample(self, batch_df: DataFrame) -> None:
-        """Log sample of raw batch data for debugging.
+    def log_batch_sample(self, batch_df: DataFrame, stage: str = "raw") -> None:
+        """Log sample batch data for debugging.
         
         Args:
-            batch_df: Input DataFrame
+            batch_df: Input DataFrame  
+            stage: Processing stage ("raw" or "processed")
         """
         if batch_df.rdd.isEmpty():
+            logger.debug(f"=== {stage.upper()} BATCH SAMPLE: EMPTY ===")
             return
             
-        logger.debug("=== RAW BATCH DATA SAMPLE ===")
-        raw_sample = batch_df.limit(2).collect()
-        for i, row in enumerate(raw_sample):
-            row_dict = row.asDict()
-            logger.debug(f"Raw data sample {i+1}: {row_dict}")
-            # Log all fields generically without assuming specific field names
-            field_count = len(row_dict)
-            non_null_fields = {k: v for k, v in row_dict.items() if v is not None}
-            logger.debug(f"Raw data sample {i+1}: {field_count} total fields, {len(non_null_fields)} non-null")
-        logger.debug("=== END RAW BATCH DATA SAMPLE ===")
-
-    def log_normalized_data_sample(self, filtered_df: DataFrame) -> None:
-        """Log sample of normalized data for debugging.
-        
-        Args:
-            filtered_df: Filtered DataFrame
-        """
         try:
-            # Sample normalized data to show what fields and values are being processed
-            sample_rows = filtered_df.select("ingestion_id", "normalized_data", "sensor_data").limit(3).collect()
+            logger.debug(f"=== {stage.upper()} BATCH SAMPLE ===")
+            
+            # Get sample data
+            sample_rows = batch_df.limit(2).collect()
+            
             for i, row in enumerate(sample_rows):
-                ingestion_id = row["ingestion_id"]
-                normalized_data = row["normalized_data"]
-                sensor_data = row["sensor_data"]
-
-                logger.debug("Enrichment sample %d: ingestion_id=%s", i+1, ingestion_id)
-
-                # Log normalized fields and values
-                if normalized_data:
-                    # normalized_data is already a dict, not a Row object
-                    norm_fields = [f"{k}={v}" for k, v in normalized_data.items() if v is not None]
-                    logger.debug("Enrichment sample %d: normalized fields: %s", i+1, norm_fields)
+                row_dict = row.asDict()
+                sample_num = i + 1
+                
+                # Common info for both raw and processed stages
+                ingestion_id = row_dict.get("ingestion_id", "unknown")
+                field_count = len(row_dict)
+                non_null_count = len([v for v in row_dict.values() if v is not None])
+                
+                logger.debug(f"Sample {sample_num}: ingestion_id={ingestion_id}, fields={field_count}, non-null={non_null_count}")
+                
+                # Stage-specific logging
+                if stage == "processed" and "normalized_data" in row_dict and "sensor_data" in row_dict:
+                    # Log normalized and sensor data for processed stage
+                    normalized_data = row_dict["normalized_data"]
+                    sensor_data = row_dict["sensor_data"]
+                    
+                    if normalized_data:
+                        norm_fields = [f"{k}={v}" for k, v in normalized_data.items() if v is not None][:5]  # Limit to first 5
+                        logger.debug(f"Sample {sample_num}: normalized fields: {norm_fields}")
+                    
+                    if sensor_data:
+                        sensor_keys = list(sensor_data.keys())[:5]  # Limit to first 5 keys
+                        logger.debug(f"Sample {sample_num}: sensor_data keys: {sensor_keys}")
                 else:
-                    logger.debug("Enrichment sample %d: no normalized data", i+1)
-
-                # Log sensor data keys for context
-                if sensor_data:
-                    # sensor_data is already a dict, not a Row object
-                    sensor_keys = list(sensor_data.keys())
-                    # Show sample of actual sensor data values (first few fields)
-                    sample_keys = list(sensor_data.keys())[:4]  # Show first 4 fields regardless of names
-                    sensor_sample = {k: sensor_data[k] for k in sample_keys if k in sensor_data}
-                    logger.debug("Enrichment sample %d: sensor_data keys (%d total): %s", i+1, len(sensor_keys), sensor_keys)
-                    logger.debug("Enrichment sample %d: sensor_data sample: %s", i+1, sensor_sample)
-                else:
-                    logger.debug("Enrichment sample %d: no sensor data", i+1)
-
+                    # For raw stage, just show a few key fields
+                    key_fields = {k: v for k, v in row_dict.items() if k in ["timestamp", "ingestion_id"] or not k.startswith("_")}
+                    if len(key_fields) > 5:
+                        # Show only first 5 non-internal fields
+                        key_fields = dict(list(key_fields.items())[:5])
+                    logger.debug(f"Sample {sample_num}: key fields: {key_fields}")
+            
+            logger.debug(f"=== END {stage.upper()} BATCH SAMPLE ===")
+                
         except Exception as e:
-            logger.warning(f"Could not log sample normalized data: {e}")
+            logger.warning(f"Could not log {stage} batch sample: {e}")
 
     def process_batch(self, batch_df: DataFrame, batch_id: int) -> None:
         """Process a batch of enrichment data.
@@ -92,7 +87,7 @@ class BatchProcessor:
 
             # Debug: Log sample raw data BEFORE any processing
             if logger.isEnabledFor(logging.DEBUG):
-                self.log_raw_batch_sample(batch_df)
+                self.log_batch_sample(batch_df, "raw")
 
             # Get device filtering information
             allowed_ids: Set[str]
@@ -116,7 +111,7 @@ class BatchProcessor:
             # Log normalized field information for debugging
             total_after: int = filtered_df.count()
             if total_after > 0 and logger.isEnabledFor(logging.DEBUG):
-                self.log_normalized_data_sample(filtered_df)
+                self.log_batch_sample(filtered_df, "processed")
 
             # Write to Delta with partitioning by ingestion_id
             self._write_to_delta(filtered_df)

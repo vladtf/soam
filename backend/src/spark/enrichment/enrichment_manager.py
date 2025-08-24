@@ -391,8 +391,20 @@ class EnrichmentManager:
         """Stop enrichment stream gracefully."""
         try:
             if self.enrich_query and self.enrich_query.isActive:
+                logger.info("Gracefully stopping enrichment stream...")
                 self.enrich_query.stop()
-                logger.info("Enrichment stream stopped successfully")
+                
+                # Wait for graceful shutdown with timeout
+                max_wait_seconds = 30
+                waited = 0
+                while self.enrich_query.isActive and waited < max_wait_seconds:
+                    time.sleep(1)
+                    waited += 1
+                
+                if self.enrich_query.isActive:
+                    logger.warning(f"Enrichment stream did not stop gracefully within {max_wait_seconds}s")
+                else:
+                    logger.info("Enrichment stream stopped successfully")
         except Exception as e:
             logger.error(f"Error stopping enrichment stream: {e}")
 

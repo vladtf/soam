@@ -75,10 +75,22 @@ class StreamingManager:
         """Stop existing streaming query by name if active."""
         existing_query = self._get_query_by_name(query_name)
         if existing_query and existing_query.isActive:
-            logger.info(f"Stopping existing query: {query_name}")
+            logger.info(f"Gracefully stopping existing query: {query_name}")
             try:
                 existing_query.stop()
-                time.sleep(2)
+                
+                # Wait for graceful shutdown with shorter timeout for individual queries
+                max_wait_seconds = 15
+                waited = 0
+                while existing_query.isActive and waited < max_wait_seconds:
+                    time.sleep(1)
+                    waited += 1
+                
+                if existing_query.isActive:
+                    logger.warning(f"Query {query_name} did not stop gracefully within {max_wait_seconds}s")
+                else:
+                    logger.info(f"Query {query_name} stopped successfully")
+                    
             except Exception as e:
                 logger.warning(f"Error stopping existing query {query_name}: {e}")
 
@@ -356,13 +368,26 @@ class StreamingManager:
         for stream_name, query in streams:
             try:
                 if query and query.isActive:
+                    logger.info(f"Gracefully stopping {stream_name.lower()}...")
                     query.stop()
-                    logger.info(f"{stream_name} stopped successfully")
+                    
+                    # Wait for graceful shutdown with timeout
+                    max_wait_seconds = 30
+                    waited = 0
+                    while query.isActive and waited < max_wait_seconds:
+                        time.sleep(1)
+                        waited += 1
+                    
+                    if query.isActive:
+                        logger.warning(f"{stream_name} did not stop gracefully within {max_wait_seconds}s")
+                    else:
+                        logger.info(f"{stream_name} stopped successfully")
             except Exception as e:
                 logger.error(f"Error stopping {stream_name.lower()}: {e}")
 
-        # Stop enrichment stream
+        # Stop enrichment stream with same graceful approach
         try:
+            logger.info("Gracefully stopping enrichment stream...")
             self.enrichment_manager.stop_enrichment_stream()
         except Exception as e:
             logger.error(f"Error stopping enrichment stream: {e}")
