@@ -2,6 +2,8 @@
 FastAPI application with proper dependency injection for the SOAM smart city platform.
 """
 import logging
+import signal
+import sys
 from contextlib import asynccontextmanager
 from collections import deque
 from typing import Dict, Any, AsyncGenerator
@@ -43,6 +45,44 @@ app_state: Dict[str, Any] = {
     "thread_counter": 1,
     "last_connection_error": None
 }
+
+
+def signal_handler(signum: int, frame) -> None:
+    """Handle shutdown signals gracefully."""
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    
+    try:
+        # Get cached instances for cleanup
+        config = get_config()
+        spark_manager = get_spark_manager(config)
+        neo4j_manager = get_neo4j_manager(config)
+        
+        # Stop Spark streams and close manager
+        if spark_manager:
+            logger.info("Signal handler stopping SparkManager...")
+            spark_manager.close()
+            
+        # Close Neo4j connection
+        if neo4j_manager:
+            logger.info("Signal handler stopping Neo4jManager...")
+            neo4j_manager.close()
+            
+        # Stop usage aggregator
+        try:
+            NormalizationRuleUsageTracker.stop()
+        except Exception as e:
+            logger.warning("Error stopping normalization usage aggregator in signal handler: %s", e)
+            
+    except Exception as e:
+        logger.error(f"Error in signal handler: {e}")
+    
+    logger.info("Signal handler cleanup complete, exiting...")
+    sys.exit(0)
+
+
+# Register signal handlers for graceful shutdown
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
 
 @asynccontextmanager
@@ -127,13 +167,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     logger.info("Shutting down SOAM Smart City Backend...")
 
-    # Stop and join all threads stored in the map
-    for key, thread in app_state["threads"].items():
-        if thread.is_alive():
-            logger.info(f"Stopping thread {key}")
-            thread.join(timeout=5)  # join with timeout for safety
-
-    # Clean shutdown of managers
+    # Clean shutdown of managers first (to stop streaming queries)
     try:
         # Get cached instances for cleanup
         config = get_config()
@@ -142,16 +176,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # Stop Spark streams and close manager
         if spark_manager:
+            logger.info("Stopping SparkManager...")
             spark_manager.close()
             logger.info("SparkManager stopped successfully")
 
         # Close Neo4j connection
         if neo4j_manager:
+            logger.info("Stopping Neo4jManager...")
             neo4j_manager.close()
             logger.info("Neo4jManager stopped successfully")
 
     except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
+        logger.error(f"Error during manager shutdown: {e}")
+
+    # Stop and join all threads stored in the map
+    for key, thread in app_state["threads"].items():
+        if thread.is_alive():
+            logger.info(f"Stopping thread {key}")
+            thread.join(timeout=5)  # join with timeout for safety
 
     # Stop usage aggregator
     try:

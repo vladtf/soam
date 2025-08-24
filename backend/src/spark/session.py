@@ -5,6 +5,7 @@ import os
 import logging
 from typing import Optional
 from pyspark.sql import SparkSession
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +90,28 @@ class SparkSessionManager:
             return False
     
     def stop(self) -> None:
-        """Stop the Spark session."""
+        """Stop the Spark session and all active streaming queries."""
         try:
             if self._spark is not None:
+                # First, stop all active streaming queries
+                logger.info("Stopping all active streaming queries...")
+                try:
+                    active_queries = self._spark.streams.active
+                    for query in active_queries:
+                        try:
+                            query_name = getattr(query, 'name', 'unnamed')
+                            logger.info(f"Stopping streaming query: {query_name}")
+                            query.stop()
+                        except Exception as e:
+                            logger.warning(f"Error stopping query: {e}")
+                    
+                    # Give time for queries to fully stop
+                    if active_queries:
+                        time.sleep(2)
+                except Exception as e:
+                    logger.warning(f"Error stopping streaming queries: {e}")
+                
+                # Then stop the Spark session
                 self._spark.stop()
                 self._spark = None
                 logger.info("Spark session stopped successfully")
