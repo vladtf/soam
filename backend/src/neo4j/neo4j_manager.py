@@ -1,19 +1,20 @@
 from neo4j import GraphDatabase
 import logging
 import time
+from typing import List, Dict, Any, Optional
 from neo4j.exceptions import ServiceUnavailable, AuthError
 
 logger = logging.getLogger(__name__)
 
 class Neo4jManager:
-    def __init__(self, uri, user, password):
-        self.uri = uri
-        self.user = user
-        self.password = password
+    def __init__(self, uri: str, user: str, password: str) -> None:
+        self.uri: str = uri
+        self.user: str = user
+        self.password: str = password
         self.driver = None
         self._connect_with_retry()
 
-    def _connect_with_retry(self, max_retries=30, retry_delay=2):
+    def _connect_with_retry(self, max_retries: int = 30, retry_delay: int = 2) -> None:
         """Connect to Neo4j with retry logic for startup scenarios."""
         logger.info(f"Attempting to connect to Neo4j at {self.uri}")
         
@@ -37,7 +38,7 @@ class Neo4jManager:
                 logger.error(f"Unexpected error connecting to Neo4j: {e}")
                 raise
 
-    def _wait_for_database_ready(self, max_retries=30, retry_delay=2):
+    def _wait_for_database_ready(self, max_retries: int = 30, retry_delay: int = 2) -> bool:
         """Wait for the database to be ready for operations."""
         logger.info("Waiting for Neo4j database to be ready...")
         
@@ -59,14 +60,14 @@ class Neo4jManager:
         
         return False
 
-    def get_buildings(self):
+    def get_buildings(self) -> List[Dict[str, Any]]:
         """Query Neo4j for all buildings with their address coordinates."""
         if not self.driver:
             logger.error("No database connection available")
             return []
         
         # If a building is linked to multiple addresses, pick the first deterministically to avoid duplicates in UI
-        query = """
+        query: str = """
         MATCH (b:Building)-[:hasAddress]->(a:Address)
         WITH b, a ORDER BY a.location.latitude, a.location.longitude
         WITH b, head(collect(a)) AS a1
@@ -75,7 +76,7 @@ class Neo4jManager:
         try:
             with self.driver.session() as session:
                 result = session.run(query)
-                buildings = [{"name": record["name"], "lat": record["lat"], "lng": record["lng"]} for record in result]
+                buildings: List[Dict[str, Any]] = [{"name": record["name"], "lat": record["lat"], "lng": record["lng"]} for record in result]
 
             logging.info("Fetched buildings from Neo4j. Count: %s", len(buildings))
             return buildings
@@ -83,7 +84,7 @@ class Neo4jManager:
             logger.error(f"Error fetching buildings: {e}")
             return []
 
-    def add_building(self, data):
+    def add_building(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Add a building and its address to Neo4j."""
         if not self.driver:
             raise ConnectionError("No database connection available")

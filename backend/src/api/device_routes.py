@@ -17,10 +17,10 @@ router = APIRouter(prefix="/api", tags=["devices"])
 
 
 @router.get("/devices", response_model=ApiListResponse[DeviceResponse])
-def list_devices(db: Session = Depends(get_db)):
+def list_devices(db: Session = Depends(get_db)) -> ApiListResponse[DeviceResponse]:
     try:
-        rows = db.query(Device).order_by(Device.created_at.desc()).all()
-        devices = [r.to_dict() for r in rows]
+        rows: List[Device] = db.query(Device).order_by(Device.created_at.desc()).all()
+        devices: List[dict] = [r.to_dict() for r in rows]
         return list_response(devices, message="Devices retrieved successfully")
     except Exception as e:
         logger.error("Error listing devices: %s", e)
@@ -28,7 +28,7 @@ def list_devices(db: Session = Depends(get_db)):
 
 
 @router.post("/devices", response_model=ApiResponse[DeviceResponse])
-def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
+def register_device(payload: DeviceCreate, db: Session = Depends(get_db)) -> ApiResponse[DeviceResponse]:
     try:
         # Validate user is provided
         if not payload.created_by or not payload.created_by.strip():
@@ -36,7 +36,7 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
         
         # Initial registration should only require ingestion_id.
         # If a device with the same ingestion_id exists, update its metadata; otherwise create it.
-        existing = db.query(Device).filter(Device.ingestion_id == payload.ingestion_id).one_or_none()
+        existing: Device | None = db.query(Device).filter(Device.ingestion_id == payload.ingestion_id).one_or_none()
         if existing:
             existing.name = payload.name
             existing.description = payload.description
@@ -49,7 +49,7 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
                        payload.created_by, existing.ingestion_id)
             return success_response(existing.to_dict(), "Device updated successfully")
         
-        row = Device(
+        row: Device = Device(
             ingestion_id=payload.ingestion_id,
             name=payload.name,
             description=payload.description,
@@ -69,17 +69,17 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)):
 
 
 @router.patch("/devices/{device_id}", response_model=ApiResponse[DeviceResponse])
-def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(get_db)):
+def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(get_db)) -> ApiResponse[DeviceResponse]:
     try:
         # Validate user is provided
         if not payload.updated_by or not payload.updated_by.strip():
             bad_request_error("User information required (updated_by)")
         
-        row = db.query(Device).filter(Device.id == device_id).one_or_none()
+        row: Device | None = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
             not_found_error("Device not found")
         
-        changes = []
+        changes: List[str] = []
         if payload.name is not None and payload.name != row.name:
             changes.append(f"name: '{row.name or ''}' -> '{payload.name}'")
             row.name = payload.name
@@ -111,9 +111,9 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
 
 
 @router.delete("/devices/{device_id}", response_model=ApiResponse)
-def delete_device(device_id: int, db: Session = Depends(get_db)):
+def delete_device(device_id: int, db: Session = Depends(get_db)) -> ApiResponse:
     try:
-        row = db.query(Device).filter(Device.id == device_id).one_or_none()
+        row: Device | None = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
             not_found_error("Device not found")
         db.delete(row)
@@ -126,9 +126,9 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/devices/{device_id}/toggle", response_model=ApiResponse[DeviceResponse])
-def toggle_device(device_id: int, db: Session = Depends(get_db)):
+def toggle_device(device_id: int, db: Session = Depends(get_db)) -> ApiResponse[DeviceResponse]:
     try:
-        row = db.query(Device).filter(Device.id == device_id).one_or_none()
+        row: Device | None = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
             not_found_error("Device not found")
         row.enabled = not row.enabled

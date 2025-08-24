@@ -4,6 +4,7 @@ FastAPI application with proper dependency injection for the SOAM smart city pla
 import logging
 from contextlib import asynccontextmanager
 from collections import deque
+from typing import Dict, Any, AsyncGenerator
 from src.api import health_routes, feedback_routes
 from src.api import error_routes
 from src.api import device_routes
@@ -34,7 +35,7 @@ setup_logging(service_name="backend", log_file="backend.log")
 logger = logging.getLogger(__name__)
 
 # Global state for thread management (if needed for future features)
-app_state = {
+app_state: Dict[str, Any] = {
     "data_buffer": deque(maxlen=100),
     "connection_configs": [],
     "active_connection": None,
@@ -45,7 +46,7 @@ app_state = {
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan manager for startup and shutdown events.
     """
@@ -208,7 +209,7 @@ app = create_app()
 
 # Root endpoint
 @app.get("/")
-async def root():
+async def root() -> Dict[str, str]:
     """Root endpoint with basic API information."""
     return {
         "message": "SOAM Smart City Backend API",

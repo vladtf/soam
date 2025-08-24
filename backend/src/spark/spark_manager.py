@@ -27,7 +27,7 @@ class SparkManager:
 
     def __init__(self, spark_host: str, spark_port: str, minio_endpoint: str,
                  minio_access_key: str, minio_secret_key: str, minio_bucket: str,
-                 spark_ui_port: str):
+                 spark_ui_port: str) -> None:
         """Initialize SparkManager with all components.
 
         Args:
@@ -40,15 +40,15 @@ class SparkManager:
             spark_ui_port: Spark UI port
         """
         # Store configuration
-        self.minio_bucket = minio_bucket
+        self.minio_bucket: str = minio_bucket
 
         # Initialize core components
-        self.session_manager = SparkSessionManager(
+        self.session_manager: SparkSessionManager = SparkSessionManager(
             spark_host, spark_port, minio_endpoint,
             minio_access_key, minio_secret_key
         )
 
-        self.streaming_manager = StreamingManager(
+        self.streaming_manager: StreamingManager = StreamingManager(
             self.session_manager, minio_bucket)
         self.data_access = DataAccessManager(
             self.session_manager, minio_bucket)

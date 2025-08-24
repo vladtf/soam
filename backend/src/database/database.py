@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 
 # Database URL
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./feedback.db")
+DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./feedback.db")
 
 # Create SQLAlchemy engine
 engine = create_engine(
@@ -27,27 +27,27 @@ def get_db() -> Generator[Session, None, None]:
     """
     Dependency to get database session.
     """
-    db = SessionLocal()
+    db: Session = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
 
-def create_tables():
+def create_tables() -> None:
     """
     Create all tables in the database.
     """
     Base.metadata.create_all(bind=engine)
 
 
-def ensure_rule_metrics_columns():
+def ensure_rule_metrics_columns() -> None:
     """Ensure applied_count and last_applied_at columns exist on normalization_rules.
 
     This is a lightweight, idempotent migration mainly for SQLite.
     """
     try:
-        dialect = engine.url.get_backend_name()
+        dialect: str = engine.url.get_backend_name()
         with engine.connect() as conn:
             if 'sqlite' in dialect:
                 rows = conn.exec_driver_sql("PRAGMA table_info('normalization_rules')").fetchall()

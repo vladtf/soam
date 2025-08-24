@@ -82,8 +82,8 @@ class UnionSchemaTransformer:
     @staticmethod
     def _create_sensor_data_map(df: DataFrame, ingestion_id_col: str):
         """Create sensor_data map with all columns as strings."""
-        sensor_data_cols = []
-        sensor_cols_for_map = []
+        sensor_data_cols: List = []
+        sensor_cols_for_map: List[str] = []
         
         for col_name in df.columns:
             if col_name not in [ingestion_id_col, "timestamp"]:
@@ -98,8 +98,8 @@ class UnionSchemaTransformer:
     @staticmethod
     def _create_normalized_data_map(df: DataFrame, ingestion_id_col: str, schema: Optional[StructType] = None):
         """Create normalized_data map with numeric values, using schema optimization when available."""
-        normalized_data_cols = []
-        numeric_columns = []
+        normalized_data_cols: List = []
+        numeric_columns: List[str] = []
         
         for col_name in df.columns:
             if col_name not in [ingestion_id_col, "timestamp"]:
@@ -135,8 +135,8 @@ class UnionSchemaTransformer:
         try:
             field = next((f for f in schema.fields if f.name == col_name), None)
             if field:
-                field_type = field.dataType.simpleString().lower()
-                is_numeric = any(numeric_type in field_type for numeric_type in 
+                field_type: str = field.dataType.simpleString().lower()
+                is_numeric: bool = any(numeric_type in field_type for numeric_type in 
                                ['double', 'float', 'int', 'long', 'decimal', 'number'])
                 return is_numeric
         except Exception as e:
@@ -172,7 +172,7 @@ class UnionSchemaTransformer:
                 extract_columns = []
 
         # Start with base columns
-        result_df = df.select("ingestion_id", "timestamp")
+        result_df: DataFrame = df.select("ingestion_id", "timestamp")
 
         # Extract specific columns from sensor_data map
         for col_name in extract_columns:
@@ -208,7 +208,7 @@ class UnionSchemaTransformer:
             DataFrame with normalized keys in both sensor_data and normalized_data maps
         """
         # Group normalization rules by canonical key to avoid duplicates
-        canonical_to_raw_keys = {}
+        canonical_to_raw_keys: Dict[str, List[str]] = {}
         for raw_key, canonical_key in normalization_rules.items():
             if canonical_key not in canonical_to_raw_keys:
                 canonical_to_raw_keys[canonical_key] = []
@@ -225,13 +225,13 @@ class UnionSchemaTransformer:
             logger.info(f"Union normalization: {raw_keys} -> '{canonical_key}'")
 
         # Create new sensor_data map with normalized keys (no duplicates)
-        sensor_data_cols = []
-        normalized_data_cols = []
+        sensor_data_cols: List = []
+        normalized_data_cols: List = []
 
         # Process each canonical key only once
         for canonical_key, raw_keys in canonical_to_raw_keys.items():
             # Create coalesce expression for all raw key variants
-            raw_key_options = [df.sensor_data.getItem(raw_key) for raw_key in raw_keys]
+            raw_key_options: List = [df.sensor_data.getItem(raw_key) for raw_key in raw_keys]
             raw_key_options.append(df.sensor_data.getItem(canonical_key))  # include canonical key itself
             
             # Update sensor_data map

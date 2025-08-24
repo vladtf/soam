@@ -3,7 +3,7 @@ Main enrichment manager for Spark streaming enrichment processes.
 """
 import logging
 import time
-from typing import Optional
+from typing import Optional, List
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class EnrichmentManager:
     """Manages Spark enrichment streaming processes."""
 
-    def __init__(self, spark: SparkSession, minio_bucket: str, bronze_path: str, enriched_path: str):
+    def __init__(self, spark: SparkSession, minio_bucket: str, bronze_path: str, enriched_path: str) -> None:
         """Initialize the enrichment manager.
         
         Args:
@@ -28,14 +28,14 @@ class EnrichmentManager:
             bronze_path: Path to bronze layer data
             enriched_path: Path to enriched layer data
         """
-        self.spark = spark
-        self.minio_bucket = minio_bucket
-        self.bronze_path = bronze_path
-        self.enriched_path = enriched_path
-        self.batch_processor = BatchProcessor(enriched_path)
+        self.spark: SparkSession = spark
+        self.minio_bucket: str = minio_bucket
+        self.bronze_path: str = bronze_path
+        self.enriched_path: str = enriched_path
+        self.batch_processor: BatchProcessor = BatchProcessor(enriched_path)
         
         # Query management
-        self.ENRICH_QUERY_NAME = "enrich_stream"
+        self.ENRICH_QUERY_NAME: str = "enrich_stream"
         self.enrich_query: Optional[StreamingQuery] = None
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
@@ -266,11 +266,11 @@ class EnrichmentManager:
         if not schema or not schema.fields:
             return False
             
-        schema_field_names = [field.name for field in schema.fields]
+        schema_field_names: List[str] = [field.name for field in schema.fields]
         
         # Essential field check - only ingestion_id is truly required
-        essential_fields = ["ingestion_id"]
-        has_essential = all(field in schema_field_names for field in essential_fields)
+        essential_fields: List[str] = ["ingestion_id"]
+        has_essential: bool = all(field in schema_field_names for field in essential_fields)
         
         if not has_essential:
             logger.warning(f"Schema validation failed - missing essential fields. Found: {schema_field_names}")
@@ -294,7 +294,7 @@ class EnrichmentManager:
             Raw streaming DataFrame
         """
         # Read raw parquet with schema
-        raw_stream = (
+        raw_stream: DataFrame = (
             self.spark.readStream
             .schema(schema)
             .option("basePath", self.bronze_path)
@@ -308,7 +308,7 @@ class EnrichmentManager:
             logger.info(f"Raw stream columns ({len(raw_stream.columns)}): {raw_stream.columns}")
             
             # Log schema details
-            schema_details = []
+            schema_details: List[str] = []
             for field in raw_stream.schema.fields:
                 schema_details.append(f"{field.name}({field.dataType.simpleString()})")
             logger.info(f"Raw stream schema details: {schema_details}")
@@ -327,13 +327,13 @@ class EnrichmentManager:
         Returns:
             Union schema DataFrame
         """
-        cleaner = DataCleaner()
+        cleaner: DataCleaner = DataCleaner()
         
         # Transform to union schema with normalization
         # Pass schema information to avoid redundant schema inference
         # Use the actual ingestion_id column if present
-        ingestion_id_col = "ingestion_id" if "ingestion_id" in raw_stream.columns else None
-        union_stream = cleaner.normalize_to_union_schema(raw_stream, ingestion_id=ingestion_id_col, schema=schema)
+        ingestion_id_col: Optional[str] = "ingestion_id" if "ingestion_id" in raw_stream.columns else None
+        union_stream: DataFrame = cleaner.normalize_to_union_schema(raw_stream, ingestion_id=ingestion_id_col, schema=schema)
 
         # Add debug logging to see what's in the union stream
         logger.info("Union stream schema after normalization:")

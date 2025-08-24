@@ -16,7 +16,7 @@ class Feedback(Base):
     message = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """Convert the model to a dictionary."""
         return {
             "id": self.id,
@@ -44,7 +44,7 @@ class NormalizationRule(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "ingestion_id": self.ingestion_id,
@@ -77,7 +77,7 @@ class Computation(Base):
     created_by = Column(String(255), nullable=False)
     updated_by = Column(String(255), nullable=True)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         import json as _json
         try:
             parsed_def = _json.loads(self.definition) if isinstance(self.definition, str) else (self.definition or {})
@@ -111,7 +111,7 @@ class DashboardTile(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         import json as _json
         try:
             cfg = _json.loads(self.config) if isinstance(self.config, str) else (self.config or {})
@@ -153,7 +153,7 @@ class Device(Base):
     created_by = Column(String(255), nullable=False)
     updated_by = Column(String(255), nullable=True)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "ingestion_id": self.ingestion_id,
@@ -190,7 +190,7 @@ class Setting(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "key": self.key,
@@ -225,7 +225,7 @@ class ClientError(Base):
     extra = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "message": self.message,

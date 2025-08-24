@@ -49,10 +49,10 @@ class DataCleaner:
         If multiple columns differ only by case (e.g., "sensorId" and "SENSORID"),
         keep the first occurrence and drop the rest to avoid duplicate names.
         """
-        seen = set()
-        cols = []
+        seen: set = set()
+        cols: List = []
         for c in df.columns:
-            lc = c.lower()
+            lc: str = c.lower()
             if lc in seen:
                 # skip duplicates that collide after lower-casing
                 continue
@@ -70,7 +70,7 @@ class DataCleaner:
         try:
             db: Session = SessionLocal()
             # Use a single query to fetch all enabled rules for the given ingestion_id or global
-            dynamic_map = {}
+            dynamic_map: Dict[str, str] = {}
             query = db.query(NormalizationRule).filter(NormalizationRule.enabled == True)
             if ingestion_id:
                 query = query.filter(
@@ -79,11 +79,11 @@ class DataCleaner:
                 )
             else:
                 query = query.filter(NormalizationRule.ingestion_id.is_(None))
-            rules = query.all()
+            rules: List[NormalizationRule] = query.all()
 
             # Apply precedence: ingestion-specific rules override global rules
             for r in rules:
-                raw_key_lower = r.raw_key.lower()
+                raw_key_lower: str = r.raw_key.lower()
                 # Only override if not already set, or if this rule is ingestion-specific
                 if (r.ingestion_id == ingestion_id) or (raw_key_lower not in dynamic_map):
                     dynamic_map[raw_key_lower] = r.canonical_key
@@ -140,10 +140,10 @@ class DataCleaner:
         Unknown columns are preserved (kept lower-case) to avoid data loss.
         Ingestion-specific rules override global rules when both exist.
         """
-        lowered = self.lower_columns(df)
+        lowered: DataFrame = self.lower_columns(df)
         # Load rules from DB with ingestion_id specificity
-        effective_map = self._load_dynamic_rules(ingestion_id)
-        matched_keys = [c for c in lowered.columns if c in effective_map]
+        effective_map: Dict[str, str] = self._load_dynamic_rules(ingestion_id)
+        matched_keys: List[str] = [c for c in lowered.columns if c in effective_map]
         
         if effective_map:
             logger.info("Applying %d normalization rules for ingestion_id='%s' (matched %d keys)", 
@@ -162,19 +162,19 @@ class DataCleaner:
             self._increment_rule_usage(matched_keys)
 
         # Build column selections, handling potential duplicates from mapping multiple raw keys to same canonical key
-        canonical_to_raw = {}
+        canonical_to_raw: Dict[str, List[str]] = {}
         for c in lowered.columns:
-            canonical_name = effective_map.get(c, c)
+            canonical_name: str = effective_map.get(c, c)
             if canonical_name not in canonical_to_raw:
                 canonical_to_raw[canonical_name] = []
             canonical_to_raw[canonical_name].append(c)
 
         # Select columns, using coalesce for canonical names that have multiple raw key sources
-        select_cols = []
+        select_cols: List = []
         for canonical_name, raw_keys in canonical_to_raw.items():
             if len(raw_keys) == 1:
                 # Single source - check if alias is needed to avoid redundant operations
-                raw_key = raw_keys[0]
+                raw_key: str = raw_keys[0]
                 if raw_key == canonical_name:
                     # Column name is already correct, no alias needed
                     select_cols.append(F.col(raw_key))
@@ -183,7 +183,7 @@ class DataCleaner:
                     select_cols.append(F.col(raw_key).alias(canonical_name))
             else:
                 # Multiple sources, use coalesce to pick first non-null value
-                coalesce_cols = [F.col(raw_key) for raw_key in raw_keys]
+                coalesce_cols: List = [F.col(raw_key) for raw_key in raw_keys]
                 select_cols.append(F.coalesce(*coalesce_cols).alias(canonical_name))
                 logger.debug(f"Merged {len(raw_keys)} columns into '{canonical_name}': {raw_keys}")
 
@@ -208,12 +208,12 @@ class DataCleaner:
 
         Returns the number of rules inserted. No-op for existing entries.
         """
-        inserted = 0
+        inserted: int = 0
         try:
             db: Session = SessionLocal()
             try:
                 for raw_key, canonical_key in cls.KEY_NORMALIZATION_MAP.items():
-                    rk = raw_key.strip().lower()
+                    rk: str = raw_key.strip().lower()
                     exists = (
                         db.query(NormalizationRule.id)
                         .filter(func.lower(NormalizationRule.raw_key) == rk)

@@ -2,7 +2,7 @@
 Batch processing logic for enrichment streams.
 """
 import logging
-from typing import Optional
+from typing import Optional, Tuple, Set
 from pyspark.sql import DataFrame
 from .device_filter import DeviceFilter
 
@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 class BatchProcessor:
     """Handles batch processing for enrichment streams."""
 
-    def __init__(self, enriched_path: str):
+    def __init__(self, enriched_path: str) -> None:
         """Initialize the batch processor.
         
         Args:
             enriched_path: Path to enriched data storage
         """
-        self.enriched_path = enriched_path
-        self.device_filter = DeviceFilter()
+        self.enriched_path: str = enriched_path
+        self.device_filter: DeviceFilter = DeviceFilter()
 
     def log_raw_batch_sample(self, batch_df: DataFrame) -> None:
         """Log sample of raw batch data for debugging.
@@ -95,6 +95,8 @@ class BatchProcessor:
                 self.log_raw_batch_sample(batch_df)
 
             # Get device filtering information
+            allowed_ids: Set[str]
+            has_wildcard: bool
             allowed_ids, has_wildcard = self.device_filter.get_allowed_ingestion_ids()
             
             # Check if we should process this batch
@@ -102,7 +104,7 @@ class BatchProcessor:
                 return
 
             # Filter the dataframe
-            filtered_df = self.device_filter.filter_dataframe(batch_df, allowed_ids, has_wildcard)
+            filtered_df: DataFrame = self.device_filter.filter_dataframe(batch_df, allowed_ids, has_wildcard)
 
             if filtered_df.rdd.isEmpty():
                 logger.info("Union enrichment: no rows after filtering - skipping write to avoid empty parquet files")
@@ -112,14 +114,14 @@ class BatchProcessor:
             self.device_filter.log_filtering_stats(batch_df, filtered_df, allowed_ids, has_wildcard)
 
             # Log normalized field information for debugging
-            total_after = filtered_df.count()
+            total_after: int = filtered_df.count()
             if total_after > 0 and logger.isEnabledFor(logging.DEBUG):
                 self.log_normalized_data_sample(filtered_df)
 
             # Write to Delta with partitioning by ingestion_id
             self._write_to_delta(filtered_df)
 
-            kept = filtered_df.count()
+            kept: int = filtered_df.count()
             logger.info("Union enrichment: wrote %d rows to enriched", kept)
 
         except Exception as e:

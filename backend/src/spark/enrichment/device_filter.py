@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class DeviceFilter:
     """Handles device registration filtering for enrichment processing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the device filter."""
         self.SessionLocal = sessionmaker(bind=engine)
 
@@ -28,15 +28,15 @@ class DeviceFilter:
         session = self.SessionLocal()
         try:
             # Get allowed ingestion IDs
-            rows = session.query(Device.ingestion_id).filter(Device.enabled == True).all()
-            raw_allowed = [r[0] for r in rows]
+            rows: List = session.query(Device.ingestion_id).filter(Device.enabled == True).all()
+            raw_allowed: List[str] = [r[0] for r in rows]
             logger.info("Device filter: registered ingestion_ids: %s", raw_allowed)
             
             # Check for wildcard registration (None ingestion_id means accept all)
-            has_wildcard = any(iid is None for iid in raw_allowed)
+            has_wildcard: bool = any(iid is None for iid in raw_allowed)
             
             # Normalize allowed ingestion IDs
-            normalized_allowed = {
+            normalized_allowed: Set[str] = {
                 str(iid).strip().lower()
                 for iid in raw_allowed
                 if iid is not None and str(iid).strip().lower() not in ("", "unknown")
@@ -90,7 +90,7 @@ class DeviceFilter:
         
         return filtered
 
-    def log_filtering_stats(self, batch_df, filtered_df, allowed_ids: Set[str], has_wildcard: bool):
+    def log_filtering_stats(self, batch_df, filtered_df, allowed_ids: Set[str], has_wildcard: bool) -> None:
         """Log filtering statistics for debugging.
         
         Args:
@@ -101,12 +101,12 @@ class DeviceFilter:
         """
         # Debug: Log sample of ingestion_ids in the batch
         if "ingestion_id" in batch_df.columns:
-            sample_ids = [r[0] for r in batch_df.select("ingestion_id").distinct().limit(5).collect()]
+            sample_ids: List[str] = [r[0] for r in batch_df.select("ingestion_id").distinct().limit(5).collect()]
             logger.info("Device filter: sample ingestion_ids in batch: %s", sample_ids)
 
         # Additional debug: count before and after filtering
-        total_before = batch_df.count()
-        total_after = filtered_df.count()
+        total_before: int = batch_df.count()
+        total_after: int = filtered_df.count()
         logger.info("Device filter: %d rows before filter, %d rows after filter", total_before, total_after)
 
         # If we expected filtering but nothing was filtered out, there might be a data mismatch
