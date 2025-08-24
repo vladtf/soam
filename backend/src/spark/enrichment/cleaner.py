@@ -10,7 +10,7 @@ from sqlalchemy import func
 from src.database import SessionLocal
 from src.database.models import NormalizationRule
 import logging
-from datetime import datetime, timezone
+from pyspark.sql.types import StructType
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +24,17 @@ class DataCleaner:
     """
 
     # Seed-only: default rules to initialize the database on startup.
-    # At runtime, mapping is loaded from DB and these are NOT applied directly.
+    # At runtime, mapping is loaded from DB dynamically and is device-agnostic.
+    # These seed rules provide common sensor field mappings but additional rules
+    # can be added via the API for any device type.
     KEY_NORMALIZATION_MAP: Dict[str, str] = {
         # sensor id variants
         "sensorid": "sensorId",
         "sensor_id": "sensorId",
         "sensor-id": "sensorId",
-        # temperature
+        # temperature (example field - works for any numeric sensor field)
         "temperature": "temperature",
-        # humidity
+        # humidity (example field - works for any numeric sensor field) 
         "humidity": "humidity",
         # event timestamp from device
         "timestamp": "timestamp",
@@ -97,28 +99,34 @@ class DataCleaner:
             except Exception:
                 pass
 
-    def normalize_to_union_schema(self, df: DataFrame, ingestion_id: Optional[str] = None) -> DataFrame:
+    def normalize_to_union_schema(self, df: DataFrame, ingestion_id: Optional[str], schema: Optional[StructType]) -> DataFrame:
         """Transform DataFrame to union schema format with normalization applied.
         
         Args:
             df: Input DataFrame with raw sensor data
             ingestion_id: Source identifier for loading specific normalization rules
+            schema: Optional schema from inference (for optimization/logging)
             
         Returns:
             DataFrame with union schema structure (ingestion_id, timestamp, sensor_data, normalized_data)
         """
         from .union_schema import UnionSchemaTransformer
         
+        # Log schema information if provided (for debugging/optimization tracking)
+        if schema:
+            schema_field_names = [field.name for field in schema.fields]
+            logger.info(f"Union transformation using inferred schema with {len(schema_field_names)} fields: {schema_field_names}")
+        
         # First apply legacy normalization to get clean column names
         normalized_legacy = self.normalize_sensor_columns(df, ingestion_id)
         
         # Convert to union schema format
-        union_df = UnionSchemaTransformer.legacy_to_union(normalized_legacy, "ingestion_id")
+        union_df = UnionSchemaTransformer.legacy_to_union(normalized_legacy, "ingestion_id", schema)
         
         # Apply additional normalization rules specific to union schema
         normalization_rules = self._load_dynamic_rules(ingestion_id)
         if normalization_rules:
-            union_df = UnionSchemaTransformer.apply_normalization_to_union(union_df, normalization_rules)
+            union_df = UnionSchemaTransformer.apply_normalization_to_union(union_df, normalization_rules, schema)
         
         return union_df
 
@@ -165,8 +173,14 @@ class DataCleaner:
         select_cols = []
         for canonical_name, raw_keys in canonical_to_raw.items():
             if len(raw_keys) == 1:
-                # Single source, simple alias
-                select_cols.append(F.col(raw_keys[0]).alias(canonical_name))
+                # Single source - check if alias is needed to avoid redundant operations
+                raw_key = raw_keys[0]
+                if raw_key == canonical_name:
+                    # Column name is already correct, no alias needed
+                    select_cols.append(F.col(raw_key))
+                else:
+                    # Column needs to be renamed
+                    select_cols.append(F.col(raw_key).alias(canonical_name))
             else:
                 # Multiple sources, use coalesce to pick first non-null value
                 coalesce_cols = [F.col(raw_key) for raw_key in raw_keys]
