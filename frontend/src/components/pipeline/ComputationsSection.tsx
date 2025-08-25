@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Table, Badge, Modal, Form, Row, Col } from 'react-bootstrap';
+import { toast } from 'react-toastify';
 import {
   ComputationDef,
   createComputation,
@@ -7,9 +8,11 @@ import {
   deleteComputation,
   previewComputation,
   fetchComputationExamples,
+  previewExampleComputation,
   ComputationExample,
 } from '../../api/backendRequests';
 import { useAuth } from '../../context/AuthContext';
+import { extractComputationErrorMessage, extractPreviewErrorMessage, extractDeleteErrorMessage } from '../../utils/errorHandling';
 
 interface ComputationsSectionProps {
   computations: ComputationDef[];
@@ -37,6 +40,8 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
   const [previewData, setPreviewData] = useState<unknown[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [examples, setExamples] = useState<ComputationExample[]>([]);
+  const [examplePreviewData, setExamplePreviewData] = useState<{ result: unknown[]; row_count: number } | null>(null);
+  const [previewingExample, setPreviewingExample] = useState<string | null>(null);
 
   useEffect(() => {
     const loadExamples = async () => {
@@ -58,11 +63,13 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
           ...form,
           updated_by: username,
         });
+        toast.success('Computation updated successfully');
       } else {
         await createComputation({
           ...form,
           created_by: username,
         });
+        toast.success('Computation created successfully');
       }
       setShowModal(false);
       setForm(emptyComputation);
@@ -70,6 +77,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
       onComputationsChange();
     } catch (error) {
       console.error('Error saving computation:', error);
+      toast.error(extractComputationErrorMessage(error));
     }
   };
 
@@ -83,9 +91,11 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     if (window.confirm('Are you sure you want to delete this computation?')) {
       try {
         await deleteComputation(id);
+        toast.success('Computation deleted successfully');
         onComputationsChange();
       } catch (error) {
         console.error('Error deleting computation:', error);
+        toast.error(extractDeleteErrorMessage(error));
       }
     }
   };
@@ -100,6 +110,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     } catch (error) {
       console.error('Error previewing computation:', error);
       setPreviewData(null);
+      toast.error(extractPreviewErrorMessage(error));
     } finally {
       setPreviewLoading(false);
     }
@@ -118,9 +129,24 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     setForm({
       ...form,
       name: example.title,
+      dataset: example.dataset,
       definition: example.definition,
       description: example.description || '',
     });
+  };
+
+  const handlePreviewExample = async (exampleId: string) => {
+    setPreviewingExample(exampleId);
+    try {
+      const response = await previewExampleComputation(exampleId);
+      setExamplePreviewData({ result: response.result, row_count: response.row_count });
+    } catch (error) {
+      console.error('Error previewing example:', error);
+      setExamplePreviewData(null);
+      toast.error(extractPreviewErrorMessage(error));
+    } finally {
+      setPreviewingExample(null);
+    }
   };
 
   // Helper function to render 'Updated by' info
@@ -274,6 +300,9 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                     <option value="gold">Gold</option>
                     <option value="silver">Silver</option>
                     <option value="bronze">Bronze</option>
+                    <option value="enriched">Enriched</option>
+                    <option value="alerts">Alerts</option>
+                    <option value="sensors">Sensors</option>
                   </Form.Control>
                 </Form.Group>
               </Col>
@@ -334,16 +363,35 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                   <h6>Examples:</h6>
                   <div className="d-flex flex-wrap gap-2">
                     {examples.map((example, idx) => (
-                      <Button
-                        key={idx}
-                        variant="outline-secondary"
-                        size="sm"
-                        onClick={() => useExample(example)}
-                      >
-                        {example.title}
-                      </Button>
+                      <div key={idx} className="d-flex gap-1">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => useExample(example)}
+                        >
+                          {example.title}
+                        </Button>
+                        <Button
+                          variant="outline-info"
+                          size="sm"
+                          disabled={previewingExample === example.id}
+                          onClick={() => handlePreviewExample(example.id)}
+                        >
+                          👁️
+                        </Button>
+                      </div>
                     ))}
                   </div>
+                  {examplePreviewData && (
+                    <Card className="mt-3">
+                      <Card.Header className="py-2">
+                        <small>Example Preview ({examplePreviewData.row_count} rows)</small>
+                      </Card.Header>
+                      <Card.Body style={{ maxHeight: '200px', overflow: 'auto', fontSize: '0.85rem' }}>
+                        <pre className="mb-0">{JSON.stringify(examplePreviewData.result, null, 2)}</pre>
+                      </Card.Body>
+                    </Card>
+                  )}
                 </Col>
               </Row>
             )}

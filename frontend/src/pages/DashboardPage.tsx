@@ -3,6 +3,7 @@ import { Container, Row, Col, Button, Modal, Form, Spinner, Alert, ButtonGroup }
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+import { toast } from 'react-toastify';
 import { useDashboardData } from '../hooks/useDashboardData';
 import StatisticsCards from '../components/StatisticsCards';
 import TemperatureChart from '../components/TemperatureChart';
@@ -15,6 +16,7 @@ import { DashboardTileDef, fetchDashboardTileExamples, listDashboardTiles, creat
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import WithTooltip from '../components/WithTooltip';
 import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
+import { extractDashboardTileErrorMessage } from '../utils/errorHandling';
 
 // Default refresh interval in milliseconds
 const DEFAULT_REFRESH_INTERVAL_MS = 30000;
@@ -151,14 +153,16 @@ const DashboardPage: React.FC = () => {
           config: editing.config,
           enabled: editing.enabled,
         });
+        toast.success('Dashboard tile updated successfully');
+        toast.success('Dashboard tile updated successfully');
       } else {
         await createDashboardTile(editing);
+        toast.success('Dashboard tile created successfully');
       }
       setShowTileModal(false);
       await loadTiles();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(msg);
+      toast.error(extractDashboardTileErrorMessage(e));
     }
   };
 
@@ -283,7 +287,17 @@ const DashboardPage: React.FC = () => {
           {tiles.filter(t => t.enabled !== false).map((t) => (
             <div key={String(t.id)} data-grid={layouts[String(t.id)] || { i: String(t.id), x: 0, y: 0, w: 4, h: 4 }}>
               <TileWithData tile={t} dragEnabled={dragEnabled}
-                onDelete={async () => { if (t.id) { await deleteDashboardTile(t.id); await loadTiles(); } }}
+                onDelete={async () => { 
+                  if (t.id) { 
+                    try {
+                      await deleteDashboardTile(t.id); 
+                      toast.success('Dashboard tile deleted successfully');
+                      await loadTiles(); 
+                    } catch (error) {
+                      toast.error(extractDashboardTileErrorMessage(error));
+                    }
+                  } 
+                }}
                 onEdit={() => openEditTile(t)}
               />
             </div>

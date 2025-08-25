@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Row, Col, Form, Alert, Button } from 'react-bootstrap';
+import { Modal, Row, Col, Form, Alert, Button, Card, Spinner } from 'react-bootstrap';
+import { toast } from 'react-toastify';
 import WithTooltip from '../../components/WithTooltip';
 import type { ComputationDef, ComputationExample } from '../../api/backendRequests';
+import { previewExampleComputation } from '../../api/backendRequests';
 import type { SchemaMap } from './DefinitionValidator';
 import { validateDefinition } from './DefinitionValidator';
+import { extractPreviewErrorMessage } from '../../utils/errorHandling';
 
 interface Props {
   show: boolean;
@@ -20,13 +23,30 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
   const [defText, setDefText] = useState<string>('{}');
   const [defValid, setDefValid] = useState<boolean>(true);
   const [defErrors, setDefErrors] = useState<string[]>([]);
+  const [previewData, setPreviewData] = useState<{ result: unknown[]; row_count: number } | null>(null);
+  const [previewingExample, setPreviewingExample] = useState<string | null>(null);
 
   // sync defText from editing
   useEffect(() => {
     setDefText(JSON.stringify(editing?.definition ?? {}, null, 2));
     setDefValid(true);
     setDefErrors([]);
+    setPreviewData(null); // Clear preview when editing changes
   }, [editing]);
+
+  const handlePreviewExample = async (exampleId: string) => {
+    setPreviewingExample(exampleId);
+    try {
+      const response = await previewExampleComputation(exampleId);
+      setPreviewData({ result: response.result, row_count: response.row_count });
+    } catch (error) {
+      console.error('Error previewing example:', error);
+      setPreviewData(null);
+      toast.error(extractPreviewErrorMessage(error));
+    } finally {
+      setPreviewingExample(null);
+    }
+  };
 
   const datasetColumns = useMemo(() => {
     if (!editing?.dataset) return [] as { name: string; type: string }[];
@@ -42,30 +62,60 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
         <Row className="g-3">
           {examples.length > 0 && (
             <Col md={12}>
-              <div className="d-flex flex-wrap gap-2 align-items-center">
+              <div className="mb-3">
                 <span className="text-body-secondary small">Examples:</span>
-                {examples.map((ex) => (
-                  <WithTooltip key={ex.id} tip={`Load example: ${ex.title}`}>
-                    <Button
-                      size="sm"
-                      variant="outline-secondary"
-                      onClick={() => {
-                        setDefText(JSON.stringify(ex.definition, null, 2));
-                        setDefValid(true);
-                        setEditing((s) => ({ ...(s as ComputationDef), dataset: ex.dataset, definition: ex.definition }));
-                        try {
-                          const errs = validateDefinition(ex.definition, ex.dataset, schemas);
-                          setDefErrors(errs);
-                        } catch {
-                          setDefErrors([]);
-                        }
-                      }}
-                    >
-                      {ex.title}
-                    </Button>
-                  </WithTooltip>
-                ))}
+                <div className="d-flex flex-wrap gap-2 mt-2">
+                  {examples.map((ex) => (
+                    <div key={ex.id} className="d-flex gap-1">
+                      <WithTooltip tip={`Load example: ${ex.title}`}>
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          onClick={() => {
+                            setDefText(JSON.stringify(ex.definition, null, 2));
+                            setDefValid(true);
+                            setEditing((s) => ({ 
+                              ...(s as ComputationDef), 
+                              name: ex.title,
+                              dataset: ex.dataset, 
+                              definition: ex.definition,
+                              description: ex.description || ''
+                            }));
+                            try {
+                              const errs = validateDefinition(ex.definition, ex.dataset, schemas);
+                              setDefErrors(errs);
+                            } catch {
+                              setDefErrors([]);
+                            }
+                          }}
+                        >
+                          {ex.title}
+                        </Button>
+                      </WithTooltip>
+                      <WithTooltip tip={`Preview example: ${ex.title}`}>
+                        <Button
+                          size="sm"
+                          variant="outline-info"
+                          disabled={previewingExample === ex.id}
+                          onClick={() => handlePreviewExample(ex.id)}
+                        >
+                          {previewingExample === ex.id ? <Spinner animation="border" size="sm" /> : '👁️'}
+                        </Button>
+                      </WithTooltip>
+                    </div>
+                  ))}
+                </div>
               </div>
+              {previewData && (
+                <Card className="mb-3">
+                  <Card.Header className="py-2">
+                    <small>Preview Results ({previewData.row_count} rows)</small>
+                  </Card.Header>
+                  <Card.Body style={{ maxHeight: '200px', overflow: 'auto', fontSize: '0.85rem' }}>
+                    <pre className="mb-0">{JSON.stringify(previewData.result, null, 2)}</pre>
+                  </Card.Body>
+                </Card>
+              )}
             </Col>
           )}
           <Col md={6}>
@@ -93,7 +143,7 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
                   }
                 }}
               >
-                {(sources.length ? sources : ['gold', 'alerts', 'bronze']).map((s) => (
+                {(sources.length ? sources : ['gold', 'silver', 'bronze', 'enriched', 'alerts', 'sensors']).map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

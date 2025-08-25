@@ -7,7 +7,7 @@ from src.api.models import DashboardTileCreate, DashboardTileUpdate, DashboardTi
 from src.api.response_utils import success_response, not_found_error, bad_request_error
 from src.database.database import get_db
 from src.database.models import DashboardTile, Computation
-from src.computations.computation_routes import _execute_definition
+from src.computations.executor import ComputationExecutor
 from src.api.dependencies import get_spark_manager
 from src.spark.spark_manager import SparkManager
 
@@ -129,6 +129,8 @@ def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManage
         defn = json.loads(comp.definition)
     except Exception:
         defn = {}
-    # Execute computation
-    data = _execute_definition(defn, comp.dataset, spark)
+    
+    # Execute computation using the new executor
+    executor = ComputationExecutor(spark)
+    data = executor.execute_definition(defn, comp.dataset)
     return success_response(data, "Dashboard tile preview executed successfully")

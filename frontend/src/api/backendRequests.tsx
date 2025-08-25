@@ -583,6 +583,13 @@ export const fetchComputationExamples = (): Promise<ComputationExamplesResponse>
   return doFetch<ComputationExamplesResponse>(`${backendUrl}/api/computations/examples`);
 };
 
+export const previewExampleComputation = (exampleId: string): Promise<{ example: ComputationExample; result: unknown[]; row_count: number }> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{ example: ComputationExample; result: unknown[]; row_count: number }>(`${backendUrl}/api/computations/examples/${encodeURIComponent(exampleId)}/preview`, {
+    method: 'POST',
+  });
+};
+
 export const fetchComputationSources = (): Promise<{ sources: string[] }> => {
   const { backendUrl } = getConfig();
   return doFetch<{ sources: string[] }>(`${backendUrl}/api/computations/sources`);
