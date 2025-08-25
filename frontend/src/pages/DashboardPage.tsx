@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Button, Modal, Form, Spinner, Alert, ButtonGroup } from 'react-bootstrap';
+import { Container, Row, Col, Button, Modal, Form, Spinner, Alert, ButtonGroup, Card, Badge } from 'react-bootstrap';
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -12,7 +12,7 @@ import TemperatureAlertsCard from '../components/TemperatureAlertsCard';
 import PageHeader from '../components/PageHeader';
 import EnrichmentStatusCard from '../components/EnrichmentStatusCard';
 import { DashboardTile } from '../components/DashboardTile';
-import { DashboardTileDef, fetchDashboardTileExamples, listDashboardTiles, createDashboardTile, listComputations, previewDashboardTile, deleteDashboardTile, updateDashboardTile } from '../api/backendRequests';
+import { DashboardTileDef, fetchDashboardTileExamples, listDashboardTiles, createDashboardTile, listComputations, previewDashboardTile, previewComputation, deleteDashboardTile, updateDashboardTile } from '../api/backendRequests';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import WithTooltip from '../components/WithTooltip';
 import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
@@ -53,6 +53,8 @@ const DashboardPage: React.FC = () => {
   const [configValid, setConfigValid] = useState<boolean>(true);
   const [configErrors, setConfigErrors] = useState<string[]>([]);
   const [dragEnabled, setDragEnabled] = useState<boolean>(false);
+  const [previewData, setPreviewData] = useState<unknown[] | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [enableStaticCards, setEnableStaticCards] = useState<boolean>(() => {
     try {
       return localStorage.getItem('enableStaticCards') === '1';
@@ -80,6 +82,31 @@ const DashboardPage: React.FC = () => {
     return errs;
   };
 
+  const handlePreviewComputation = async () => {
+    if (!editing?.computation_id) {
+      toast.error('Please select a computation first');
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const result = await previewComputation(editing.computation_id);
+      setPreviewData(result);
+    } catch (error) {
+      console.error('Error previewing computation:', error);
+      setPreviewData(null);
+      toast.error(extractDashboardTileErrorMessage(error));
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowTileModal(false);
+    setPreviewData(null);
+    setPreviewLoading(false);
+  };
+
   const loadTiles = async () => {
     setTileLoading(true);
     try {
@@ -95,9 +122,9 @@ const DashboardPage: React.FC = () => {
         const lay = (t.layout as any) || {};
         nextLayouts[String(t.id)] = {
           i: String(t.id),
-          x: Number(lay.x ?? (idx % 3) * 4),
-          y: Number(lay.y ?? Math.floor(idx / 3) * 4),
-          w: Number(lay.w ?? 4),
+          x: Number(lay.x ?? 0), // Default to left edge
+          y: Number(lay.y ?? idx * 4), // Stack tiles vertically
+          w: Number(lay.w ?? 12), // Default to full width
           h: Number(lay.h ?? 4),
           static: false,
         } as Layout;
@@ -145,6 +172,7 @@ const DashboardPage: React.FC = () => {
     try {
       const errs = validateTile(editing as Omit<DashboardTileDef, 'id'>, computations);
       if (errs.length) { setConfigErrors(errs); return; }
+      
       if (editing.id) {
         await updateDashboardTile(editing.id, {
           name: editing.name,
@@ -156,10 +184,24 @@ const DashboardPage: React.FC = () => {
         toast.success('Dashboard tile updated successfully');
         toast.success('Dashboard tile updated successfully');
       } else {
-        await createDashboardTile(editing);
+        // Create new tile with default layout
+        const currentTileCount = tiles.length;
+        const defaultLayout = {
+          w: 12, // Full width container (12 columns)
+          h: 24, // Fixed height
+          x: 0, // Start at left edge
+          y: currentTileCount * 6 // Stack tiles vertically
+        };
+        
+        const tileData = {
+          ...editing,
+          layout: defaultLayout
+        };
+        await createDashboardTile(tileData);
         toast.success('Dashboard tile created successfully');
       }
       setShowTileModal(false);
+      setPreviewData(null); // Clear preview data
       await loadTiles();
     } catch (e) {
       toast.error(extractDashboardTileErrorMessage(e));
@@ -306,7 +348,7 @@ const DashboardPage: React.FC = () => {
       )}
 
       {/* Builder modal */}
-      <Modal show={showTileModal} onHide={() => setShowTileModal(false)} size="lg">
+      <Modal show={showTileModal} onHide={handleCloseModal} size="xl">
         <Modal.Header closeButton><Modal.Title>New Dashboard Tile</Modal.Title></Modal.Header>
         <Modal.Body>
           {examples.length > 0 && (
@@ -332,10 +374,28 @@ const DashboardPage: React.FC = () => {
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Computation</Form.Label>
-                <Form.Select value={editing?.computation_id ?? 0} onChange={(e) => setEditing(s => ({ ...(s as DashboardTileDef), computation_id: Number(e.target.value) }))}>
-                  <option value={0}>Select…</option>
-                  {computations.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                </Form.Select>
+                <div className="d-flex gap-2">
+                  <Form.Select 
+                    value={editing?.computation_id ?? 0} 
+                    onChange={(e) => {
+                      setEditing(s => ({ ...(s as DashboardTileDef), computation_id: Number(e.target.value) }));
+                      setPreviewData(null); // Clear preview when computation changes
+                    }}
+                    className="flex-grow-1"
+                  >
+                    <option value={0}>Select…</option>
+                    {computations.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  </Form.Select>
+                  <Button 
+                    variant="outline-info" 
+                    size="sm" 
+                    onClick={handlePreviewComputation}
+                    disabled={!editing?.computation_id || previewLoading}
+                    style={{ minWidth: '80px' }}
+                  >
+                    {previewLoading ? <Spinner size="sm" /> : '👁️ Preview'}
+                  </Button>
+                </div>
               </Form.Group>
             </Col>
             <Col md={6}>
@@ -389,6 +449,83 @@ const DashboardPage: React.FC = () => {
                 }} 
               />
             </Col>
+            
+            {/* Preview Section */}
+            {previewData && (
+              <Col md={12}>
+                <Card className="mb-3">
+                  <Card.Header className="d-flex justify-content-between align-items-center py-2">
+                    <span className="fw-bold">Computation Preview</span>
+                    <Badge bg="info">{previewData.length} rows</Badge>
+                  </Card.Header>
+                  <Card.Body>
+                    {previewData.length > 0 ? (
+                      <div>
+                        {/* Column Information */}
+                        <div className="mb-3">
+                          <h6 className="mb-2">Available Columns:</h6>
+                          <div className="d-flex flex-wrap gap-2 mb-2">
+                            {Object.keys(previewData[0] || {}).map(colName => {
+                              const sampleValue = (previewData[0] as any)?.[colName];
+                              const valueType = Array.isArray(sampleValue) ? 'array' : typeof sampleValue;
+                              return (
+                                <Button
+                                  key={colName}
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(colName);
+                                    toast.success(`Copied "${colName}" to clipboard`);
+                                  }}
+                                  className="text-start"
+                                >
+                                  <div>
+                                    <strong>{colName}</strong>
+                                    <br />
+                                    <small className="text-muted">{valueType}</small>
+                                  </div>
+                                </Button>
+                              );
+                            })}
+                          </div>
+                          <small className="text-muted mb-2 d-block">
+                            💡 Click column names to copy them for use in the config below
+                          </small>
+                          {editing?.viz_type === 'table' && (
+                            <div className="alert alert-info py-2 mb-2">
+                              <small>
+                                📏 <strong>Layout:</strong> Table tiles will be created at full width 
+                                (showing {previewData.length} rows). You can resize and reposition them afterwards.
+                              </small>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Sample Data */}
+                        <div>
+                          <h6 className="mb-2">Sample Data:</h6>
+                          <div style={{ fontSize: '0.85rem', maxHeight: '200px', overflowY: 'auto' }}>
+                            <pre className="mb-0" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                              {JSON.stringify(previewData.slice(0, 3), null, 2)}
+                            </pre>
+                            {previewData.length > 3 && (
+                              <div className="text-muted text-center mt-2">
+                                <small>... showing first 3 rows of {previewData.length}</small>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-muted text-center py-3">
+                        <small>No data returned from computation</small>
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            )}
+            
             <Col md={12}>
               <Form.Group>
                 <Form.Label>Config (JSON)</Form.Label>
@@ -426,7 +563,7 @@ const DashboardPage: React.FC = () => {
           </Row>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowTileModal(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={handleCloseModal}>Cancel</Button>
           <Button onClick={onSaveTile} disabled={!editing || !configValid || configErrors.length > 0 || !editing?.name?.trim() || !editing?.computation_id}>Save</Button>
         </Modal.Footer>
       </Modal>
@@ -554,20 +691,26 @@ const TileWithData: React.FC<{ tile: DashboardTileDef; dragEnabled: boolean; onD
         </span>
       </div>
 
-      <div className="flex-grow-1 border rounded p-2 bg-body-tertiary">
+      <div className="flex-grow-1 d-flex flex-column" style={{ minHeight: 0 }}>
         {loading && rows === null ? (
-          <div className="text-body-secondary"><Spinner animation="border" size="sm" className="me-2" />Loading…</div>
+          <div className="text-body-secondary border rounded p-2 bg-body-tertiary">
+            <Spinner animation="border" size="sm" className="me-2" />Loading…
+          </div>
         ) : tile.viz_type === 'timeseries' ? (
-          <ResponsiveContainer width="100%" height={Math.max(120, Number((tile.config as any)?.chartHeight ?? 200))}>
-            <LineChart data={(rows as any[]) || []}>
-              <XAxis dataKey={(tile.config as any)?.timeField || 'time_start'} hide={false} tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey={(tile.config as any)?.valueField || 'avg_temp'} stroke="#3388ff" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="border rounded p-2 bg-body-tertiary">
+            <ResponsiveContainer width="100%" height={Math.max(120, Number((tile.config as any)?.chartHeight ?? 200))}>
+              <LineChart data={(rows as any[]) || []}>
+                <XAxis dataKey={(tile.config as any)?.timeField || 'time_start'} hide={false} tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey={(tile.config as any)?.valueField || 'avg_temp'} stroke="#3388ff" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
-          <DashboardTile title={''} viz={tile.viz_type as 'table' | 'stat' | 'timeseries'} data={rows || []} config={tile.config} />
+          <div className="flex-grow-1" style={{ minHeight: 0 }}>
+            <DashboardTile title={''} viz={tile.viz_type as 'table' | 'stat' | 'timeseries'} data={rows || []} config={tile.config} />
+          </div>
         )}
       </div>
     </div>

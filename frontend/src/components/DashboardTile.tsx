@@ -19,31 +19,32 @@ export const DashboardTile: React.FC<{ title: string; viz: VizType; data: any[];
     const valueField = (config?.valueField as string) || Object.keys(data?.[0] || {})[1];
     const val = data?.[0]?.[valueField];
     return (
-      <Card className="shadow-sm border-body">
-        <Card.Body>
-          <div className="text-body-secondary small">{title}</div>
-          <div className="display-6">{val ?? '—'}</div>
+      <Card className="shadow-sm border-body h-100 d-flex flex-column">
+        <Card.Body className="d-flex flex-column justify-content-center text-center">
+          <div className="text-body-secondary small mb-2">{title}</div>
+          <div className="display-6" style={{ fontSize: 'clamp(1.5rem, 4vw, 3rem)' }}>{val ?? '—'}</div>
         </Card.Body>
       </Card>
     );
   }
   // default: table
   const columns = (config?.columns as string[]) || Object.keys(data?.[0] || {});
+  
   return (
-    <Card className="shadow-sm border-body">
-      <Card.Header className="fw-semibold">{title}</Card.Header>
-      <Card.Body>
-        <div style={{ maxHeight: 300, overflow: 'auto' }}>
-          <Table size="sm" responsive>
-            <thead>
+    <Card className="shadow-sm border-body h-100 d-flex flex-column">
+      <Card.Header className="fw-semibold flex-shrink-0">{title}</Card.Header>
+      <Card.Body className="flex-grow-1 p-0 d-flex flex-column" style={{ minHeight: 0 }}>
+        <div className="flex-grow-1" style={{ overflow: 'auto' }}>
+          <Table size="sm" responsive className="mb-0">
+            <thead className="sticky-top bg-light">
               <tr>
-                {columns.map((c) => (<th key={c}>{c}</th>))}
+                {columns.map((c) => (<th key={c} className="px-3 py-2 border-bottom">{c}</th>))}
               </tr>
             </thead>
             <tbody>
               {data?.map((r, idx) => (
                 <tr key={idx}>
-                  {columns.map((c) => (<td key={c}>{String((r as any)[c] ?? '')}</td>))}
+                  {columns.map((c) => (<td key={c} className="px-3 py-2">{String((r as any)[c] ?? '')}</td>))}
                 </tr>
               ))}
             </tbody>
