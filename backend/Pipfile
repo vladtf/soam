@@ -16,6 +16,8 @@ requests = "*"
 httpx = "*"
 sqlalchemy = "==2.0.23"
 colorlog = "*"
+openai = "*"
+python-dotenv = "*"
 
 [dev-packages]
 

@@ -8,3 +8,4 @@
 *.exe
 node_modules/
 __pycache__/
+backend/.env

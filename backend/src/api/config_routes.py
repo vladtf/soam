@@ -51,7 +51,7 @@ async def get_schema_config(spark_manager: SparkManagerDep) -> ApiResponse:
         internal_server_error("Failed to retrieve schema configuration", str(e))
 
 
-@router.get("/config/", response_model=ApiResponse)
+@router.get("/config", response_model=ApiResponse)
 async def get_system_config(spark_manager: SparkManagerDep) -> ApiResponse:
     """
     Get comprehensive system configuration.

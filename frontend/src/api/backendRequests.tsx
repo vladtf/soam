@@ -1072,3 +1072,39 @@ export const tracePipeline = (
     })
   });
 };
+
+// Copilot API interfaces and functions
+export interface ComputationRequest {
+  user_prompt: string;
+  context?: string;
+  preferred_dataset?: string;
+}
+
+export interface ComputationSuggestion {
+  title: string;
+  description: string;
+  dataset: string;
+  definition: Record<string, unknown>; // Changed from string to object to match backend
+  confidence: number;
+  explanation: string;
+  suggested_columns: string[];
+}
+
+export const generateComputationWithCopilot = (request: ComputationRequest): Promise<ComputationSuggestion> => {
+  const { backendUrl } = getConfig();
+  return doFetch<ComputationSuggestion>(`${backendUrl}/api/copilot/generate-computation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+};
+
+export const getCopilotContext = (): Promise<any> => {
+  const { backendUrl } = getConfig();
+  return doFetch<any>(`${backendUrl}/api/copilot/context`);
+};
+
+export const getCopilotHealth = (): Promise<{available: boolean; reason?: string; endpoint?: string}> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{available: boolean; reason?: string; endpoint?: string}>(`${backendUrl}/api/copilot/health`);
+};

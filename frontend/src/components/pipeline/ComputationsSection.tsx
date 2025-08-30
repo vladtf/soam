@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Table, Badge, Modal, Form, Row, Col } from 'react-bootstrap';
+import { Card, Button, Table, Badge, Modal, Form, Row, Col, Spinner } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import {
   ComputationDef,
@@ -10,9 +10,12 @@ import {
   fetchComputationExamples,
   previewExampleComputation,
   ComputationExample,
+  ComputationSuggestion,
+  getCopilotHealth,
 } from '../../api/backendRequests';
 import { useAuth } from '../../context/AuthContext';
 import { extractComputationErrorMessage, extractPreviewErrorMessage, extractDeleteErrorMessage } from '../../utils/errorHandling';
+import CopilotAssistant from '../computations/CopilotAssistant';
 
 interface ComputationsSectionProps {
   computations: ComputationDef[];
@@ -35,10 +38,13 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
 }) => {
   const { username } = useAuth();
   const [showModal, setShowModal] = useState(false);
+  const [showCopilot, setShowCopilot] = useState(false);
+  const [copilotAvailable, setCopilotAvailable] = useState(false);
   const [form, setForm] = useState<ComputationDef>(emptyComputation);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [previewData, setPreviewData] = useState<unknown[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewingComputationId, setPreviewingComputationId] = useState<number | null>(null);
   const [examples, setExamples] = useState<ComputationExample[]>([]);
   const [examplePreviewData, setExamplePreviewData] = useState<{ result: unknown[]; row_count: number } | null>(null);
   const [previewingExample, setPreviewingExample] = useState<string | null>(null);
@@ -52,7 +58,20 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
         console.error('Error loading examples:', error);
       }
     };
+
+    const checkCopilotHealth = async () => {
+      try {
+        const health = await getCopilotHealth();
+        console.log('Copilot health:', health);
+        setCopilotAvailable(health.available);
+      } catch (error) {
+        console.error('Error checking copilot health:', error);
+        setCopilotAvailable(false);
+      }
+    };
+
     loadExamples();
+    checkCopilotHealth();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -102,17 +121,34 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
 
   const handlePreview = async (computation: ComputationDef) => {
     if (!computation.id) return;
-    
+
     setPreviewLoading(true);
+    setPreviewingComputationId(computation.id);
+    setPreviewData(null); // Clear previous preview data
+    
+    // Show loading toast
+    toast.info(`🔄 Loading preview for "${computation.name}"...`, {
+      toastId: `preview-${computation.id}`, // Prevent duplicate toasts
+      autoClose: false, // Keep it until we dismiss it manually
+    });
+
     try {
       const preview = await previewComputation(computation.id);
       setPreviewData(preview);
+      
+      // Dismiss loading toast and show success
+      toast.dismiss(`preview-${computation.id}`);
+      toast.success(`✅ Preview loaded for "${computation.name}"`);
     } catch (error) {
       console.error('Error previewing computation:', error);
       setPreviewData(null);
+      
+      // Dismiss loading toast and show error
+      toast.dismiss(`preview-${computation.id}`);
       toast.error(extractPreviewErrorMessage(error));
     } finally {
       setPreviewLoading(false);
+      setPreviewingComputationId(null);
     }
   };
 
@@ -147,6 +183,18 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     } finally {
       setPreviewingExample(null);
     }
+  };
+
+  // Handler for copilot suggestions
+  const handleCopilotSuggestion = (suggestion: ComputationSuggestion) => {
+    setForm({
+      ...emptyComputation,
+      name: suggestion.title,
+      dataset: suggestion.dataset,
+      definition: suggestion.definition,
+      description: suggestion.description,
+    });
+    setShowModal(true);
   };
 
   // Helper function to render 'Updated by' info
@@ -203,7 +251,15 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
               <tbody>
                 {computations.map((comp) => (
                   <tr key={comp.id}>
-                    <td><strong>{comp.name}</strong></td>
+                    <td>
+                      <strong>{comp.name}</strong>
+                      {previewLoading && previewingComputationId === comp.id && (
+                        <span className="ms-2 text-primary">
+                          <Spinner as="span" animation="border" size="sm" />
+                          <small className="ms-1">Previewing...</small>
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <Badge bg="info">{comp.dataset}</Badge>
                     </td>
@@ -222,8 +278,8 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                       {renderUpdatedBy(comp)}
                     </td>
                     <td className="small text-muted">
-                      {comp.updated_at ? new Date(comp.updated_at).toLocaleString() : 
-                       comp.created_at ? new Date(comp.created_at).toLocaleString() : '-'}
+                      {comp.updated_at ? new Date(comp.updated_at).toLocaleString() :
+                        comp.created_at ? new Date(comp.created_at).toLocaleString() : '-'}
                     </td>
                     <td>
                       <Button
@@ -233,7 +289,14 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                         onClick={() => handlePreview(comp)}
                         disabled={previewLoading}
                       >
-                        Preview
+                        {previewLoading && previewingComputationId === comp.id ? (
+                          <>
+                            <Spinner as="span" animation="border" size="sm" className="me-1" />
+                            Loading...
+                          </>
+                        ) : (
+                          'Preview'
+                        )}
                       </Button>
                       <Button
                         variant="outline-primary"
@@ -257,13 +320,35 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
             </Table>
           )}
 
-          {previewData && (
+          {(previewData || previewLoading) && (
             <Card className="mt-3">
-              <Card.Header>Preview Results</Card.Header>
+              <Card.Header>
+                {previewLoading ? (
+                  <span className="d-flex align-items-center">
+                    <Spinner as="span" animation="border" size="sm" className="me-2" />
+                    Loading Preview Results...
+                  </span>
+                ) : (
+                  'Preview Results'
+                )}
+              </Card.Header>
               <Card.Body>
-                <pre style={{ maxHeight: '300px', overflow: 'auto' }}>
-                  {JSON.stringify(previewData, null, 2)}
-                </pre>
+                {previewLoading ? (
+                  <div className="text-center py-4">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3 text-muted">
+                      Executing computation and fetching results...
+                    </p>
+                  </div>
+                ) : previewData ? (
+                  <pre style={{ maxHeight: '300px', overflow: 'auto' }}>
+                    {JSON.stringify(previewData, null, 2)}
+                  </pre>
+                ) : (
+                  <div className="text-center py-4 text-muted">
+                    No preview data available
+                  </div>
+                )}
               </Card.Body>
             </Card>
           )}
@@ -397,15 +482,37 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
             )}
           </Modal.Body>
           <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit">
-              {editingId ? 'Update' : 'Create'} Computation
-            </Button>
+            <div className="d-flex justify-content-between w-100">
+              <div>
+                {!editingId && copilotAvailable && (
+                  <Button
+                    variant="info"
+                    onClick={() => setShowCopilot(true)}
+                    className="me-2"
+                  >
+                    🤖 Generate with Copilot
+                  </Button>
+                )}
+              </div>
+              <div>
+                <Button variant="secondary" onClick={() => setShowModal(false)} className="me-2">
+                  Cancel
+                </Button>
+                <Button variant="primary" type="submit">
+                  {editingId ? 'Update' : 'Create'} Computation
+                </Button>
+              </div>
+            </div>
           </Modal.Footer>
         </Form>
       </Modal>
+
+      {/* Copilot Assistant */}
+      <CopilotAssistant
+        show={showCopilot}
+        onHide={() => setShowCopilot(false)}
+        onAcceptSuggestion={handleCopilotSuggestion}
+      />
     </>
   );
 };

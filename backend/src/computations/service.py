@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from src.database.models import Computation
 from src.api.models import ComputationCreate, ComputationUpdate, ComputationResponse
-from src.api.response_utils import not_found_error, conflict_error
+from src.api.response_utils import not_found_error, conflict_error, bad_request_error
 from src.computations.validation import validate_dataset, validate_username, validate_computation_definition
 from src.computations.executor import ComputationExecutor
 from src.spark.spark_manager import SparkManager
@@ -34,7 +34,11 @@ class ComputationService:
         
         validated_dataset = validate_dataset(payload.dataset)
         validated_username = validate_username(payload.created_by)
-        validate_computation_definition(payload.definition)
+        
+        # Validate computation definition
+        validation_result = validate_computation_definition(payload.definition)
+        if not validation_result.get("valid", False):
+            bad_request_error(validation_result.get("message", "Invalid computation definition"))
         
         # Check for unique name
         if self.db.query(Computation).filter(Computation.name == payload.name).first():
@@ -83,7 +87,9 @@ class ComputationService:
             computation.dataset = new_dataset
         
         if payload.definition is not None:
-            validate_computation_definition(payload.definition)
+            validation_result = validate_computation_definition(payload.definition)
+            if not validation_result.get("valid", False):
+                bad_request_error(validation_result.get("message", "Invalid computation definition"))
             import hashlib
             old_def = json.loads(computation.definition) if computation.definition else {}
             

@@ -7,11 +7,13 @@ import sys
 from contextlib import asynccontextmanager
 from collections import deque
 from typing import Dict, Any, AsyncGenerator
+from dotenv import load_dotenv
 from src.api import health_routes, feedback_routes
 from src.api import error_routes
 from src.api import device_routes
 from src.api import normalization_routes
 from src.api import normalization_preview_routes
+from src.copilot import copilot_routes
 from src.api import dashboard_tiles_routes
 from src.api import minio_routes
 from src.api import config_routes
@@ -92,6 +94,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup
     logger.info("Starting SOAM Smart City Backend...")
+
+    # Load environment variables from .env file
+    load_dotenv()
 
     # Initialize database tables
     try:
@@ -237,6 +242,7 @@ def create_app() -> FastAPI:
     app.include_router(normalization_preview_routes.router)
     app.include_router(error_routes.router)
     app.include_router(computation_routes.router)
+    app.include_router(copilot_routes.router)
     app.include_router(dashboard_tiles_routes.router)
     app.include_router(config_routes.router)
     app.include_router(settings_routes.router)
