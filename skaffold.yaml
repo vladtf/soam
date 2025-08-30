@@ -4,7 +4,7 @@ metadata:
   name: soam
 build:
   local:
-    push: false
+    push: true
   tagPolicy:
     envTemplate:
       template: "{{.IMAGE_NAME}}:latest"
@@ -50,13 +50,14 @@ deploy:
       before:
         - host:
             command: ["pwsh", "-c", "./utils/cleanup-images.ps1"]
-  helm:
-    releases:
-      - name: soam
-        remoteChart: oci://registry-1.docker.io/bitnamicharts/spark
-        version: 6.3.16
-        valuesFiles:
-          - spark-values.yaml
+  # install manually: helm install soam oci://registry-1.docker.io/bitnamicharts/spark --version 6.3.16 -f spark-values.yaml
+  # helm:
+  #   releases:
+  #     - name: soam
+  #       remoteChart: oci://registry-1.docker.io/bitnamicharts/spark
+  #       version: 6.3.16
+  #       valuesFiles:
+  #         - spark-values.yaml
 portForward:
   - resourceType: service
     resourceName: soam-spark-master-svc
