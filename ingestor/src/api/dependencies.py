@@ -11,6 +11,7 @@ from prometheus_client import Counter, Histogram
 from src.config import ConnectionConfig, MINIO_BUCKET
 from src.storage.minio_client import MinioClient
 from src.mqtt_client import MQTTClientHandler
+from src.metadata.service import MetadataService
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ class IngestorState:
 _config_instance = None
 _minio_client_instance = None
 _ingestor_state_instance = None
+_metadata_service_instance = None
 
 
 def get_config() -> IngestorConfig:
@@ -143,7 +145,16 @@ def get_ingestor_state(config: Annotated[IngestorConfig, Depends(get_config)]) -
     return _ingestor_state_instance
 
 
+def get_metadata_service() -> MetadataService:
+    """Get MetadataService instance (singleton)."""
+    global _metadata_service_instance
+    if _metadata_service_instance is None:
+        _metadata_service_instance = MetadataService()
+    return _metadata_service_instance
+
+
 # Type aliases for dependency injection
 ConfigDep = Annotated[IngestorConfig, Depends(get_config)]
 MinioClientDep = Annotated[MinioClient, Depends(get_minio_client)]
 IngestorStateDep = Annotated[IngestorState, Depends(get_ingestor_state)]
+MetadataServiceDep = Annotated[MetadataService, Depends(get_metadata_service)]

@@ -1108,3 +1108,111 @@ export const getCopilotHealth = (): Promise<{available: boolean; reason?: string
   const { backendUrl } = getConfig();
   return doFetch<{available: boolean; reason?: string; endpoint?: string}>(`${backendUrl}/api/copilot/health`);
 };
+
+// Metadata API interfaces and functions
+export interface SchemaField {
+  name: string;
+  type: string;
+  nullable: boolean;
+  sample_values: string[];
+}
+
+export interface DatasetMetadata {
+  ingestion_id: string;
+  topic: string;
+  record_count: number;
+  first_seen?: string;
+  last_seen?: string;
+  unique_sensor_count: number;
+  unique_sensor_ids: string[];
+  data_size_bytes: number;
+  schema_fields: SchemaField[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TopicSummary {
+  topic: string;
+  dataset_count: number;
+  total_records: number;
+  total_size_bytes: number;
+  total_unique_sensors: number;
+  earliest_data?: string;
+  latest_data?: string;
+}
+
+export interface QualityMetric {
+  metric_name: string;
+  metric_value: number;
+  measurement_time: string;
+}
+
+export interface MetadataStats {
+  dataset_count: number;
+  topic_count: number;
+  active_datasets: number;
+  total_records: number;
+  total_size_bytes: number;
+  total_unique_sensors: number;
+  size_mb: number;
+}
+
+// Get metadata from ingestor service
+export const getIngestorMetadataStats = (): Promise<MetadataStats> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ stats: MetadataStats }>(`${ingestorUrl}/api/metadata/stats`)
+    .then(response => response.stats);
+};
+
+export const getIngestorDatasets = (): Promise<DatasetMetadata[]> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ datasets: DatasetMetadata[] }>(`${ingestorUrl}/api/metadata/datasets`)
+    .then(response => response.datasets);
+};
+
+export const getIngestorDataset = (ingestionId: string): Promise<DatasetMetadata> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ dataset: DatasetMetadata }>(`${ingestorUrl}/api/metadata/datasets/${ingestionId}`)
+    .then(response => response.dataset);
+};
+
+export const getIngestorDatasetSchema = (ingestionId: string): Promise<{ingestion_id: string; schema_fields: SchemaField[]; field_count: number}> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ingestion_id: string; schema_fields: SchemaField[]; field_count: number}>(`${ingestorUrl}/api/metadata/datasets/${ingestionId}/schema`);
+};
+
+export const getIngestorSchemaEvolution = (ingestionId: string): Promise<any[]> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ evolution: any[] }>(`${ingestorUrl}/api/metadata/datasets/${ingestionId}/evolution`)
+    .then(response => response.evolution);
+};
+
+export const getIngestorTopicsSummary = (): Promise<TopicSummary[]> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ topics: TopicSummary[] }>(`${ingestorUrl}/api/metadata/topics`)
+    .then(response => response.topics);
+};
+
+export const getIngestorCurrentMetadata = (): Promise<Record<string, DatasetMetadata>> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ current_metadata: Record<string, DatasetMetadata> }>(`${ingestorUrl}/api/metadata/current`)
+    .then(response => response.current_metadata);
+};
+
+export const getIngestorQualityMetrics = (ingestionId: string): Promise<QualityMetric[]> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ metrics: QualityMetric[] }>(`${ingestorUrl}/api/metadata/datasets/${ingestionId}/quality`)
+    .then(response => response.metrics);
+};
+
+export const storeIngestorQualityMetric = (ingestionId: string, metricName: string, metricValue: number): Promise<void> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<void>(`${ingestorUrl}/api/metadata/datasets/${ingestionId}/quality`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      metric_name: metricName,
+      metric_value: metricValue
+    })
+  });
+};

@@ -13,12 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class MQTTClientHandler:
-    def __init__(self, broker, port, topic, state, minio_client, messages_received, messages_processed, processing_latency):
+    def __init__(self, broker, port, topic, state, minio_client, messages_received, messages_processed, processing_latency, metadata_service=None):
         self.broker = broker
         self.port = port
         self.topic = topic
         self.state = state
         self.minio_client = minio_client
+        self.metadata_service = metadata_service
         self.messages_received = messages_received
         self.messages_processed = messages_processed
         self.processing_latency = processing_latency
@@ -77,6 +78,12 @@ class MQTTClientHandler:
                 # Add to MinIO buffer (may not upload immediately)
                 self.minio_client.add_row(payload)
                 logger.debug("Added data to MinIO buffer")
+                
+                # Extract metadata if metadata service is available
+                if self.metadata_service:
+                    self.metadata_service.process_data(payload)
+                    logger.debug("Processed metadata extraction")
+                
                 self.messages_processed.inc()  # Increment processed messages counter
             except S3Error as s3e:
                 logger.error("MinIO error: %s", s3e)

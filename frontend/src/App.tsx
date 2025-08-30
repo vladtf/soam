@@ -17,6 +17,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import TroubleshootingPage from './pages/TroubleshootingPage';
 import DataPipelinePage from './pages/DataPipelinePage';
+import MetadataPage from './pages/MetadataPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import DebugFloatingButton from './components/DebugFloatingButton';
 import './utils/devTools'; // Initialize dev tools
@@ -42,6 +43,7 @@ function App() {
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/minio" element={<MinioBrowserPage />} />
                 <Route path="/troubleshooting" element={<TroubleshootingPage />} />
+                <Route path="/metadata" element={<MetadataPage />} />
                 <Route path="/new-events" element={<NewEventsPage />} /> {/* new route */}
               </Routes>
               <AppFooter />

@@ -18,6 +18,9 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8001
+          volumeMounts:
+            - name: ingestor-db
+              mountPath: /data
           resources:
             requests:
               cpu: 50m
@@ -34,6 +37,10 @@ spec:
               value: minio
             - name: MINIO_SECRET_KEY
               value: minio123
+      volumes:
+        - name: ingestor-db
+          persistentVolumeClaim:
+            claimName: ingestor-db-pvc
 ---
 apiVersion: v1
 kind: Service
