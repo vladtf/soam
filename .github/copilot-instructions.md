@@ -1,10 +1,14 @@
-# SOAM Development Guide for GitHub Copilot
+---
+applyTo: '**'
+---
+
+# SOAM Development Guide for AI Coding Assistants
 
 ## Project Overview
 
 SOAM is a smart city IoT platform built with Python/FastAPI backend, React/TypeScript frontend, and microservices architecture. The system ingests MQTT sensor data, processes it with Spark streaming, stores in MinIO/Neo4j, and provides real-time dashboards. Development uses Skaffold + Kubernetes for local deployment with Docker containers.
 
-The architecture includes: MQTT broker (Mosquitto), data ingestion service, Spark-based enrichment pipeline, schema inference system, Neo4j graph database, MinIO object storage, and monitoring stack (Grafana/Prometheus). All services run in Kubernetes with StatefulSets for stateful components.
+The architecture follows a **data lake pattern** with Bronze (raw) → Silver (normalized) → Gold (aggregated) layers, all orchestrated through Kubernetes. **Core Data Flow**: MQTT sensors → Ingestor → MinIO (Bronze) → Spark Streaming → Schema Inference → Enrichment → Neo4j/Gold Layer → Dashboard
 
 ## Tech Map / Key Files
 
@@ -20,7 +24,7 @@ The architecture includes: MQTT broker (Mosquitto), data ingestion service, Spar
 - `backend/Pipfile` - Python dependencies (pipenv managed)
 - `backend/src/main.py` - FastAPI app with lifecycle management
 - `backend/src/api/` - API routers organized by feature
-- `backend/src/schema_inference/` - Schema inference package (new modular system)
+- `backend/src/schema_inference/` - Schema inference package (modular system)
 - `backend/src/spark/` - Spark streaming and enrichment logic
 - `backend/src/neo4j/` - Graph database interactions
 
@@ -33,6 +37,48 @@ The architecture includes: MQTT broker (Mosquitto), data ingestion service, Spar
 - `ingestor/` - MQTT-to-storage ingestion service
 - `simulator/` - IoT device simulators (temperature, air quality, smart bins)
 - `mosquitto/` - MQTT broker configuration
+
+## Critical Development Patterns
+
+### 1. Dependency Injection Architecture
+All services use FastAPI's DI pattern. Key dependencies are in `src/api/dependencies.py`:
+```python
+# Always use these patterns for new endpoints
+from src.api.dependencies import get_spark_manager, get_neo4j_manager
+from fastapi import Depends
+
+@router.get("/endpoint")
+async def handler(spark_manager = Depends(get_spark_manager)):
+    # Spark session available via spark_manager.session_manager.spark
+```
+
+### 2. Schema Inference System (Critical)
+**Location**: `backend/src/schema_inference/` - This is a modular package that automatically infers schemas from bronze files.
+
+**Key Pattern**: Never read parquet files with Spark streaming directly - use batch processing:
+```python
+# ❌ Wrong - causes "Schema must be specified" error
+stream = spark.readStream.parquet(path)
+
+# ✅ Correct - use rate trigger for periodic processing
+stream = spark.readStream.format("rate").trigger(processingTime="30 seconds")
+```
+
+### 3. Data Layer Patterns
+- **Bronze**: Raw sensor data in `s3a://lake/bronze/ingestion_id=*/date=*/hour=*/*.parquet`
+- **Silver**: Normalized data via Spark enrichment pipeline
+- **Gold**: Aggregated data and alerts stored in Neo4j
+- **Schema Storage**: SQLite database with `SchemaInfo` and `SchemaInferenceLog` tables
+
+### 4. API Response Pattern
+```python
+from src.api.response_utils import success_response, internal_server_error
+from src.api.models import ApiResponse
+
+@router.get("/endpoint", response_model=ApiResponse)
+async def handler():
+    return success_response(data={"result": data}, message="Success")
+```
 
 ## Dev Workflow (Windows PowerShell)
 
@@ -117,6 +163,10 @@ curl -s http://localhost:8000/openapi.json | ConvertFrom-Json | Select-Object -E
 curl -s http://localhost:8000/api/devices | ConvertFrom-Json
 curl -s http://localhost:8000/api/dashboard/tiles | ConvertFrom-Json
 curl -s http://localhost:8000/api/minio/buckets | ConvertFrom-Json
+
+# Schema inference APIs
+curl -s http://localhost:8000/api/schema/ | ConvertFrom-Json
+curl -s http://localhost:8000/api/schema/stream/status | ConvertFrom-Json
 ```
 
 ### Service-Specific Probes
@@ -204,6 +254,34 @@ pipenv shell
 # pipenv run pytest tests/
 ```
 
+### Error Handling & Logging
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+# Structured logging with emojis for quick scanning
+logger.info("✅ Operation completed successfully")
+logger.error("❌ Operation failed")
+logger.warning("⚠️ Potential issue detected")
+```
+
+### Spark Integration Patterns
+**Critical**: All Spark operations use the session manager pattern:
+```python
+# Get Spark session through dependency injection
+spark = spark_manager.session_manager.spark
+# Spark context available via spark.sparkContext
+
+# Use batch-triggered approach for file processing
+def start_stream():
+    return (spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "1")
+        .trigger(processingTime="30 seconds")
+        .foreachBatch(process_batch)
+        .start())
+```
+
 ### Frontend
 ```powershell
 cd frontend
@@ -258,6 +336,9 @@ When implementing new features, always:
 - `docker system prune -a` (use project cleanup script instead)
 - Modify StatefulSet volumes without data backup
 - Change Spark cluster configuration without understanding impact
+- Run skaffold on another terminal. I'm using another terminal for hot reloading.
+- Duplicate code that could be reused
+- Use `readStream.parquet()` without schema specification
 
 ### ALWAYS:
 - Show commands before execution in destructive operations
@@ -266,6 +347,24 @@ When implementing new features, always:
 - Check resource limits when adding new containers
 - Use `pipenv shell` before running Python scripts
 - Verify port-forwarding is active before API testing
+- Scan uncommitted changes with `git status` to understand the current state.
+- Clean up unused code and dependencies.
+- Use dependency injection pattern for new endpoints
+- Test schema changes with `/api/schema/stream/status` endpoint
+
+## AI Copilot Integration
+
+**Feature**: Natural language → SQL computation generation using Azure OpenAI
+**Config**: Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_API_VERSION`
+**Location**: `backend/src/copilot/` - includes context analysis and computation generation
+
+## Data Processing Flow Understanding
+
+1. **Ingestion**: MQTT sensors → `ingestor` → MinIO bronze layer (partitioned by ingestion_id/date/hour)
+2. **Schema Inference**: `SchemaInferenceStream` runs every 30s, discovers new parquet files, infers schemas → SQLite
+3. **Enrichment**: Spark reads bronze → applies normalization rules → writes silver/gold layers
+4. **Normalization**: Uses `SchemaService` for dynamic field mapping based on inferred schemas
+5. **Analytics**: Neo4j stores graph relationships, dashboard APIs serve aggregated data
 
 ## Templates/Snippets
 
