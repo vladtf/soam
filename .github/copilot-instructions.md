@@ -353,6 +353,7 @@ When implementing new features, always:
 - Clean up unused code and dependencies.
 - Use dependency injection pattern for new endpoints
 - Test schema changes with `/api/schema/stream/status` endpoint
+- Use PowerShell for CLI commands
 
 ## AI Copilot Integration
 
