@@ -339,6 +339,8 @@ When implementing new features, always:
 - Run skaffold on another terminal. I'm using another terminal for hot reloading.
 - Duplicate code that could be reused
 - Use `readStream.parquet()` without schema specification
+- Use blocking commands in CLI, like `kubectl logs -f statefulset/backend`
+- Try to restart the pods. Skaffold dev is handling this automatically.
 
 ### ALWAYS:
 - Show commands before execution in destructive operations
