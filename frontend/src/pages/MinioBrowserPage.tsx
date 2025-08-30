@@ -5,6 +5,8 @@ import { minioList, minioPreviewParquet, MinioListResponse, ParquetPreview, mini
 import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy, FaTable, FaCode } from 'react-icons/fa';
 import ThemedReactJson from '../components/ThemedReactJson';
 
+const AUTO_DRILL_DELAY = 200;
+
 const MinioBrowserPage: React.FC = () => {
   const [prefix, setPrefix] = useState<string>('');
   const [listing, setListing] = useState<MinioListResponse>({ prefixes: [], files: [] });
@@ -15,18 +17,31 @@ const MinioBrowserPage: React.FC = () => {
   const [limit, setLimit] = useState<number>(50);
   const [filter, setFilter] = useState<string>('');
   const [onlyParquet, setOnlyParquet] = useState<boolean>(true);
+  const [autoDrill, setAutoDrill] = useState<boolean>(true);
+  const [isDrilling, setIsDrilling] = useState<boolean>(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [foldersPage, setFoldersPage] = useState<number>(1);
   const [filesPage, setFilesPage] = useState<number>(1);
   const [foldersPageSize, setFoldersPageSize] = useState<number>(10);
   const [filesPageSize, setFilesPageSize] = useState<number>(10);
 
-  const load = async (p: string) => {
+  const load = async (p: string, enableAutoDrill = true) => {
     setLoading(true);
     setError(null);
     try {
       const res = await minioList(p);
       setListing(res);
+      
+      // Auto-drill down if enabled and folder contains only one subfolder and no files
+      if (enableAutoDrill && autoDrill && res.files.length === 0 && res.prefixes.length === 1) {
+        const singleFolder = res.prefixes[0];
+        setIsDrilling(true);
+        // Small delay to show the intermediate folder briefly
+        setTimeout(() => {
+          setIsDrilling(false);
+          setPrefix(singleFolder);
+        }, AUTO_DRILL_DELAY);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -44,6 +59,19 @@ const MinioBrowserPage: React.FC = () => {
     setPreview(null);
     setPrefix(p);
     setSelected({});
+    // Load will be called automatically by useEffect when prefix changes
+  };
+
+  const goToManual = (p: string) => {
+    setPreviewKey(null);
+    setPreview(null);
+    setIsDrilling(false); // Clear drilling state for manual navigation
+    setPrefix(p);
+    setSelected({});
+    // Disable auto-drill for manual navigation (like breadcrumb clicks)
+    setTimeout(() => {
+      load(p, false);
+    }, 0);
   };
 
   const enterPrefix = (folder: string) => {
@@ -56,7 +84,7 @@ const MinioBrowserPage: React.FC = () => {
     const parts = prefix.split('/').filter(Boolean);
     parts.pop();
     const up = parts.length ? parts.join('/') + '/' : '';
-    goTo(up);
+    goToManual(up);
   };
 
   const previewParquet = async (key: string) => {
@@ -185,7 +213,7 @@ const MinioBrowserPage: React.FC = () => {
     return filteredFiles.slice(start, start + filesPageSize);
   }, [filteredFiles, filesPage, filesPageSize]);
 
-  const refresh = () => load(prefix);
+  const refresh = () => load(prefix, true); // Enable auto-drill on refresh
 
   return (
     <Container className="pt-3 pb-4">
@@ -212,11 +240,11 @@ const MinioBrowserPage: React.FC = () => {
       <Row className="g-2 mb-3">
         <Col>
           <Breadcrumb>
-            <Breadcrumb.Item onClick={() => goTo('')} role="button" aria-label="Root" title="Root">
+            <Breadcrumb.Item onClick={() => goToManual('')} role="button" aria-label="Root" title="Root">
               <FaHome className="me-1" /> /
             </Breadcrumb.Item>
             {breadcrumbParts.map((b, i) => (
-              <Breadcrumb.Item key={b.path} active={i === breadcrumbParts.length - 1} onClick={() => goTo(b.path)} role="button">
+              <Breadcrumb.Item key={b.path} active={i === breadcrumbParts.length - 1} onClick={() => goToManual(b.path)} role="button">
                 {b.label}
               </Breadcrumb.Item>
             ))}
@@ -238,7 +266,15 @@ const MinioBrowserPage: React.FC = () => {
         <Col md={4}>
           <Card className="shadow-sm border-body">
             <Card.Header className="d-flex align-items-center justify-content-between">
-              <div>Browse</div>
+              <div className="d-flex align-items-center">
+                <span>Browse</span>
+                {isDrilling && (
+                  <Badge bg="info" className="ms-2 d-flex align-items-center">
+                    <Spinner animation="border" size="sm" className="me-1" />
+                    Auto-navigating...
+                  </Badge>
+                )}
+              </div>
               {loading && (
                 <span role="status" aria-live="polite" className="d-inline-flex align-items-center">
                   <Spinner animation="border" size="sm" aria-hidden="true" />
@@ -261,7 +297,16 @@ const MinioBrowserPage: React.FC = () => {
                 label="Only .parquet files"
                 checked={onlyParquet}
                 onChange={(e) => setOnlyParquet(e.target.checked)}
+                className="mb-2"
+              />
+              <Form.Check
+                type="checkbox"
+                id="autoDrill"
+                label="Auto-navigate through folders with single child"
+                checked={autoDrill}
+                onChange={(e) => setAutoDrill(e.target.checked)}
                 className="mb-3"
+                title="Automatically navigate through folders that contain only one subfolder"
               />
 
               <div className="mb-2 fw-semibold d-flex align-items-center justify-content-between">
