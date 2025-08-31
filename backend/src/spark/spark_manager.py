@@ -9,6 +9,7 @@ from .streaming import StreamingManager
 from .data_access import DataAccessManager
 from .diagnostics import SparkDiagnostics
 from .master_client import SparkMasterClient
+from ..schema_inference.manager import SchemaInferenceManager
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class SparkManager:
     - Data access operations
     - Diagnostic and testing capabilities
     - Spark master status monitoring
+    - Schema inference operations (async)
     """
 
     def __init__(self, spark_host: str, spark_port: str, minio_endpoint: str,
@@ -55,6 +57,10 @@ class SparkManager:
         self.diagnostics = SparkDiagnostics(self.session_manager, minio_bucket)
         self.master_client = SparkMasterClient(spark_host, spark_ui_port)
 
+        # Initialize async schema inference manager
+        self.schema_inference_manager = SchemaInferenceManager(
+            self.session_manager.spark)
+
         # Initialize streaming if data is available
         self._initialize_streaming()
 
@@ -65,6 +71,13 @@ class SparkManager:
         else:
             logger.warning(
                 "Sensors data directory not ready. Streaming will be started when data becomes available.")
+        
+        # Start async schema inference stream
+        try:
+            self.schema_inference_manager.start_inference_stream_sync()
+            logger.info("✅ Async schema inference stream started")
+        except Exception as e:
+            logger.error(f"❌ Failed to start schema inference stream: {e}")
 
     def get_spark_master_status(self) -> Dict[str, Any]:
         """Fetch Spark master status from the web UI API."""

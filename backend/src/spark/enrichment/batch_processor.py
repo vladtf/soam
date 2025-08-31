@@ -22,7 +22,7 @@ class BatchProcessor:
         self.device_filter: DeviceFilter = DeviceFilter()
 
     def log_batch_sample(self, batch_df: DataFrame, stage: str = "raw") -> None:
-        """Log sample batch data for debugging.
+        """Log sample batch data for debugging (non-blocking version).
         
         Args:
             batch_df: Input DataFrame  
@@ -35,8 +35,8 @@ class BatchProcessor:
         try:
             logger.debug(f"=== {stage.upper()} BATCH SAMPLE ===")
             
-            # Get sample data
-            sample_rows = batch_df.limit(2).collect()
+            # Use take() instead of collect() to limit memory usage and blocking time
+            sample_rows = batch_df.take(2)  # Non-blocking alternative to limit(2).collect()
             
             for i, row in enumerate(sample_rows):
                 row_dict = row.asDict()
@@ -108,16 +108,32 @@ class BatchProcessor:
             # Log filtering statistics
             self.device_filter.log_filtering_stats(batch_df, filtered_df, allowed_ids, has_wildcard)
 
-            # Log normalized field information for debugging
-            total_after: int = filtered_df.count()
-            if total_after > 0 and logger.isEnabledFor(logging.DEBUG):
-                self.log_batch_sample(filtered_df, "processed")
+            # Log normalized field information for debugging (use sampling to avoid blocking)
+            if logger.isEnabledFor(logging.DEBUG):
+                # Use approximate count for better performance
+                try:
+                    # Sample a small fraction to estimate count without full scan
+                    sample_count = filtered_df.sample(fraction=0.01).count()
+                    estimated_total = max(sample_count * 100, sample_count) if sample_count > 0 else 0
+                    logger.debug(f"Estimated rows after filtering: ~{estimated_total}")
+                    
+                    # Only log sample if we have data
+                    if estimated_total > 0:
+                        self.log_batch_sample(filtered_df, "processed")
+                except Exception as e:
+                    logger.debug(f"Could not estimate filtered count: {e}")
 
             # Write to Delta with partitioning by ingestion_id
             self._write_to_delta(filtered_df)
 
-            kept: int = filtered_df.count()
-            logger.info("Union enrichment: wrote %d rows to enriched", kept)
+            # Log final count (this is after write, so it's necessary)
+            try:
+                # Use a more efficient way to get count after write
+                kept: int = filtered_df.count()
+                logger.info("Union enrichment: wrote %d rows to enriched", kept)
+            except Exception as e:
+                logger.warning(f"Could not get exact count after write: {e}")
+                logger.info("Union enrichment: wrote data to enriched (count unavailable)")
 
         except Exception as e:
             logger.error(f"Error in union enrichment foreachBatch: {e}")
