@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from src.computations.examples import EXAMPLE_DEFINITIONS
 from src.computations.validation import validate_computation_definition
 from src.spark.spark_manager import SparkManager
+from src.services.ingestor_schema_client import IngestorSchemaClient
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -36,6 +37,8 @@ class CopilotService:
             api_version=api_version
         )
         self.model = "gpt-4"  # or your deployed model name
+        # Initialize schema client for fetching metadata from ingestor
+        self.schema_client = IngestorSchemaClient()
     
     def _safe_json_serialize(self, obj: Any) -> str:
         """Safely serialize objects to JSON, handling non-serializable types."""
@@ -136,6 +139,30 @@ class CopilotService:
         logger.info("🔧 Building comprehensive data context...")
         
         try:
+            # Try to get schema information from ingestor first
+            logger.info("📊 Attempting to fetch schema from ingestor...")
+            try:
+                # Use async context from ingestor
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    context = loop.run_until_complete(self.schema_client.build_data_context())
+                    if context.get("sources") and context.get("total_sources", 0) > 0:
+                        logger.info("✅ Successfully built context from ingestor: %d sources", context["total_sources"])
+                        
+                        # Add example computations and syntax guide
+                        context["example_computations"] = EXAMPLE_DEFINITIONS[:5]
+                        context["computation_syntax"] = self._get_computation_syntax_guide()
+                        return context
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.warning("⚠️ Failed to get context from ingestor, falling back to direct detection: %s", e)
+            
+            # Fallback: Direct detection and schema inference (legacy approach)
+            logger.info("🔍 Falling back to direct data source detection...")
+            
             # Get available data sources
             logger.info("🔍 Detecting available data sources...")
             sources = self._detect_available_sources(minio_client)

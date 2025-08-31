@@ -10,7 +10,9 @@ from .streaming import StreamingManager
 from .data_access import DataAccessManager
 from .diagnostics import SparkDiagnostics
 from .master_client import SparkMasterClient
-from ..schema_inference.manager import SchemaInferenceManager
+from src.spark import enrichment
+from ..services.ingestor_schema_client import IngestorSchemaClient
+from src.utils.logging import get_logger
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ class SparkManager:
     - Data access operations
     - Diagnostic and testing capabilities
     - Spark master status monitoring
-    - Schema inference operations (async)
+    - Schema metadata access (via ingestor API)
     """
 
     def __init__(self, spark_host: str, spark_port: str, minio_endpoint: str,
@@ -58,9 +60,8 @@ class SparkManager:
         self.diagnostics = SparkDiagnostics(self.session_manager, minio_bucket)
         self.master_client = SparkMasterClient(spark_host, spark_ui_port)
 
-        # Initialize async schema inference manager
-        self.schema_inference_manager = SchemaInferenceManager(
-            self.session_manager.spark)
+        # Initialize ingestor schema client for metadata access
+        self.schema_client = IngestorSchemaClient()
 
         # Initialize streaming if data is available
         self._initialize_streaming()
@@ -73,12 +74,7 @@ class SparkManager:
             logger.warning(
                 "Sensors data directory not ready. Streaming will be started when data becomes available.")
         
-        # Start async schema inference stream
-        try:
-            self.schema_inference_manager.start_inference_stream_sync()
-            logger.info("✅ Async schema inference stream started")
-        except Exception as e:
-            logger.error(f"❌ Failed to start schema inference stream: {e}")
+        logger.info("✅ Schema inference handled by ingestor - no additional setup needed")
 
     def get_spark_master_status(self) -> Dict[str, Any]:
         """Fetch Spark master status from the web UI API."""
@@ -160,16 +156,13 @@ class SparkManager:
                         "type": "enrichment"
                     }
             
-            # Check schema inference stream
-            if hasattr(self, 'schema_inference_manager') and self.schema_inference_manager:
-                schema_query = getattr(self.schema_inference_manager, 'query', None)
-                if schema_query:
-                    managed_streams["schema_inference"] = {
-                        "id": schema_query.id,
-                        "name": schema_query.name or "bronze_layer_schema_discovery",
-                        "isActive": schema_query.isActive,
-                        "type": "schema_inference"
-                    }
+            # Check schema inference stream (ingestor-based - always active)
+            managed_streams["schema_inference"] = {
+                "id": "ingestor-schema-client", 
+                "name": "ingestor_metadata_api",
+                "isActive": True,
+                "type": "schema_inference"
+            }
             
             return {
                 "totalActiveStreams": len(active_streams),
