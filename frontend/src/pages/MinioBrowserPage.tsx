@@ -5,8 +5,6 @@ import { minioList, minioPreviewParquet, MinioListResponse, ParquetPreview, mini
 import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy, FaTable, FaCode } from 'react-icons/fa';
 import ThemedReactJson from '../components/ThemedReactJson';
 
-const AUTO_DRILL_DELAY = 200;
-
 const MinioBrowserPage: React.FC = () => {
   const [prefix, setPrefix] = useState<string>('');
   const [listing, setListing] = useState<MinioListResponse>({ prefixes: [], files: [] });
@@ -24,29 +22,65 @@ const MinioBrowserPage: React.FC = () => {
   const [filesPage, setFilesPage] = useState<number>(1);
   const [foldersPageSize, setFoldersPageSize] = useState<number>(10);
   const [filesPageSize, setFilesPageSize] = useState<number>(10);
+  const [disableAutoDrillOnce, setDisableAutoDrillOnce] = useState<boolean>(false);
+
+  // Pre-calculate the final folder destination by following single-folder chains
+  const findFinalDestination = async (startPath: string): Promise<string> => {
+    let currentPath = startPath;
+    const visited = new Set<string>(); // Prevent infinite loops
+    
+    while (visited.size < 50) { // Safety limit
+      if (visited.has(currentPath)) break;
+      visited.add(currentPath);
+      
+      try {
+        const res = await minioList(currentPath);
+        // If folder has files or multiple subfolders, this is the final destination
+        if (res.files.length > 0 || res.prefixes.length !== 1) {
+          return currentPath;
+        }
+        // Continue to the single subfolder
+        currentPath = res.prefixes[0];
+      } catch (e) {
+        // If we can't load, return the current path
+        return currentPath;
+      }
+    }
+    return currentPath;
+  };
 
   const load = async (p: string, enableAutoDrill = true) => {
     setLoading(true);
     setError(null);
+    setIsDrilling(false);
     try {
-      const res = await minioList(p);
-      setListing(res);
+      let finalPath = p;
       
-      // Auto-drill down if enabled and folder contains only one subfolder and no files
-      if (enableAutoDrill && autoDrill && res.files.length === 0 && res.prefixes.length === 1) {
-        const singleFolder = res.prefixes[0];
+      // If auto-drill is enabled and not disabled for this navigation, find the final destination
+      if (enableAutoDrill && autoDrill && !disableAutoDrillOnce) {
         setIsDrilling(true);
-        // Small delay to show the intermediate folder briefly
-        setTimeout(() => {
+        finalPath = await findFinalDestination(p);
+        if (finalPath !== p) {
+          // Update the prefix to the final destination
+          setPrefix(finalPath);
           setIsDrilling(false);
-          setPrefix(singleFolder);
-        }, AUTO_DRILL_DELAY);
+          return; // The useEffect will trigger and load the final path
+        }
       }
+      
+      // Reset the disable flag after checking
+      if (disableAutoDrillOnce) {
+        setDisableAutoDrillOnce(false);
+      }
+      
+      const res = await minioList(finalPath);
+      setListing(res);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
     } finally {
       setLoading(false);
+      setIsDrilling(false);
     }
   };
 
@@ -66,12 +100,9 @@ const MinioBrowserPage: React.FC = () => {
     setPreviewKey(null);
     setPreview(null);
     setIsDrilling(false); // Clear drilling state for manual navigation
+    setDisableAutoDrillOnce(true); // Disable auto-drill for this navigation
     setPrefix(p);
     setSelected({});
-    // Disable auto-drill for manual navigation (like breadcrumb clicks)
-    setTimeout(() => {
-      load(p, false);
-    }, 0);
   };
 
   const enterPrefix = (folder: string) => {
