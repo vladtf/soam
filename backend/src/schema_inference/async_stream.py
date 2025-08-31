@@ -165,7 +165,7 @@ class AsyncSchemaInferenceStream:
             self.query = (
                 dummy_df
                 .writeStream
-                .queryName("Schema Inference Stream")
+                .queryName("bronze_layer_schema_discovery")
                 .trigger(processingTime=self.processing_interval)
                 .option("checkpointLocation", self.checkpoint_path)
                 .foreachBatch(self._discover_files_batch)

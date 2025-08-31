@@ -35,7 +35,7 @@ class EnrichmentManager:
         self.batch_processor: BatchProcessor = BatchProcessor(enriched_path)
         
         # Query management
-        self.ENRICH_QUERY_NAME: str = "enrich_stream"
+        self.ENRICH_QUERY_NAME: str = "sensor_data_enrichment"
         self.enrich_query: Optional[StreamingQuery] = None
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:

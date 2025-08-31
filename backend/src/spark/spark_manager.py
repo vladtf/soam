@@ -155,7 +155,7 @@ class SparkManager:
                 if enrich_query:
                     managed_streams["enrichment"] = {
                         "id": enrich_query.id,
-                        "name": enrich_query.name or "Enrichment Stream",
+                        "name": enrich_query.name or "Sensor Data Enrichment",
                         "isActive": enrich_query.isActive,
                         "type": "enrichment"
                     }
@@ -166,7 +166,7 @@ class SparkManager:
                 if schema_query:
                     managed_streams["schema_inference"] = {
                         "id": schema_query.id,
-                        "name": schema_query.name or "Schema Inference Stream",
+                        "name": schema_query.name or "bronze_layer_schema_discovery",
                         "isActive": schema_query.isActive,
                         "type": "schema_inference"
                     }

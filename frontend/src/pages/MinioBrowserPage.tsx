@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, ListGroup, Button, Breadcrumb, Spinner, Form, Card, InputGroup, Alert, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import PageHeader from '../components/PageHeader';
-import { minioList, minioPreviewParquet, MinioListResponse, ParquetPreview, minioDeleteObjects, minioDeletePrefix } from '../api/backendRequests';
+import { minioList, minioFind, minioPreviewParquet, MinioListResponse, MinioObjectInfo, ParquetPreview, minioDeleteObjects, minioDeletePrefix, MinioPaginatedResponse, MinioFindOptions } from '../api/backendRequests';
 import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy, FaTable, FaCode } from 'react-icons/fa';
 import ThemedReactJson from '../components/ThemedReactJson';
 
@@ -19,10 +19,96 @@ const MinioBrowserPage: React.FC = () => {
   const [isDrilling, setIsDrilling] = useState<boolean>(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [foldersPage, setFoldersPage] = useState<number>(1);
-  const [filesPage, setFilesPage] = useState<number>(1);
   const [foldersPageSize, setFoldersPageSize] = useState<number>(10);
-  const [filesPageSize, setFilesPageSize] = useState<number>(10);
   const [disableAutoDrillOnce, setDisableAutoDrillOnce] = useState<boolean>(false);
+  
+  // File info, sorting, and server-side pagination
+  const [fileInfos, setFileInfos] = useState<MinioObjectInfo[]>([]);
+  const [sortBy, setSortBy] = useState<"name" | "size">("size");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [showOnlyNonEmpty, setShowOnlyNonEmpty] = useState<boolean>(false);
+  const [minFileSize, setMinFileSize] = useState<number>(500);
+  
+  // Server-side pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(0);
+  const [hasNext, setHasNext] = useState<boolean>(false);
+  const [hasPrev, setHasPrev] = useState<boolean>(false);
+  
+  // Client-side caching for preloading
+  const [pageCache, setPageCache] = useState<Map<string, MinioPaginatedResponse>>(new Map());
+  const [preloadingPages, setPreloadingPages] = useState<Set<number>>(new Set());
+
+  // Generate cache key for pagination requests
+  const getCacheKey = (prefix: string, page: number, pageSize: number, sortBy: string, sortOrder: string, minSize: number): string => {
+    return `${prefix}|${page}|${pageSize}|${sortBy}|${sortOrder}|${minSize}`;
+  };
+
+  // Load paginated files with caching
+  const loadFiles = async (targetPrefix: string, page: number = 1): Promise<MinioPaginatedResponse | null> => {
+    const cacheKey = getCacheKey(targetPrefix, page, pageSize, sortBy, sortOrder, showOnlyNonEmpty ? minFileSize : 0);
+    
+    // Check cache first
+    if (pageCache.has(cacheKey)) {
+      return pageCache.get(cacheKey)!;
+    }
+    
+    try {
+      const options: MinioFindOptions = {
+        prefix: targetPrefix,
+        sortBy,
+        minSize: showOnlyNonEmpty ? minFileSize : 0,
+        page,
+        pageSize
+      };
+      
+      const response = await minioFind(options);
+      
+      // Cache the response
+      setPageCache(prev => new Map(prev).set(cacheKey, response));
+      
+      return response;
+    } catch (e) {
+      console.warn("Failed to load paginated files:", e);
+      return null;
+    }
+  };
+
+  // Preload adjacent pages for smooth navigation
+  const preloadAdjacentPages = async (targetPrefix: string, currentPage: number) => {
+    const pagesToPreload = [currentPage - 1, currentPage + 1].filter(p => p > 0);
+    
+    for (const page of pagesToPreload) {
+      const cacheKey = getCacheKey(targetPrefix, page, pageSize, sortBy, sortOrder, showOnlyNonEmpty ? minFileSize : 0);
+      
+      if (!pageCache.has(cacheKey) && !preloadingPages.has(page)) {
+        setPreloadingPages(prev => new Set(prev).add(page));
+        
+        try {
+          const options: MinioFindOptions = {
+            prefix: targetPrefix,
+            sortBy,
+            minSize: showOnlyNonEmpty ? minFileSize : 0,
+            page,
+            pageSize
+          };
+          
+          const response = await minioFind(options);
+          setPageCache(prev => new Map(prev).set(cacheKey, response));
+        } catch (e) {
+          console.warn(`Failed to preload page ${page}:`, e);
+        } finally {
+          setPreloadingPages(prev => {
+            const next = new Set(prev);
+            next.delete(page);
+            return next;
+          });
+        }
+      }
+    }
+  };
 
   // Pre-calculate the final folder destination by following single-folder chains
   const findFinalDestination = async (startPath: string): Promise<string> => {
@@ -49,7 +135,7 @@ const MinioBrowserPage: React.FC = () => {
     return currentPath;
   };
 
-  const load = async (p: string, enableAutoDrill = true) => {
+  const load = async (p: string, enableAutoDrill = true, page = 1) => {
     setLoading(true);
     setError(null);
     setIsDrilling(false);
@@ -75,6 +161,46 @@ const MinioBrowserPage: React.FC = () => {
       
       const res = await minioList(finalPath);
       setListing(res);
+      
+      // Also fetch detailed file information with server-side pagination
+      if (res.files.length > 0) {
+        try {
+          const fileResponse = await loadFiles(finalPath, page);
+          if (fileResponse) {
+            setFileInfos(fileResponse.items);
+            setTotalItems(fileResponse.pagination.total_items);
+            setTotalPages(fileResponse.pagination.total_pages);
+            setCurrentPage(fileResponse.pagination.page);
+            setHasNext(fileResponse.pagination.has_next);
+            setHasPrev(fileResponse.pagination.has_prev);
+            
+            // Preload adjacent pages for smooth navigation
+            preloadAdjacentPages(finalPath, fileResponse.pagination.page);
+          } else {
+            setFileInfos([]);
+            setTotalItems(0);
+            setTotalPages(0);
+            setCurrentPage(1);
+            setHasNext(false);
+            setHasPrev(false);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch file details:", e);
+          setFileInfos([]);
+          setTotalItems(0);
+          setTotalPages(0);
+          setCurrentPage(1);
+          setHasNext(false);
+          setHasPrev(false);
+        }
+      } else {
+        setFileInfos([]);
+        setTotalItems(0);
+        setTotalPages(0);
+        setCurrentPage(1);
+        setHasNext(false);
+        setHasPrev(false);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -87,6 +213,49 @@ const MinioBrowserPage: React.FC = () => {
   useEffect(() => {
     load(prefix);
   }, [prefix]);
+
+  // Reload file details when sorting or pagination options change, debounced to avoid rapid API calls
+  useEffect(() => {
+    if (fileInfos.length > 0) {
+      const handler = setTimeout(() => {
+        load(prefix, false, 1); // Don't auto-drill when just refreshing for sorting, reset to page 1
+      }, 300); // 300ms debounce
+      return () => clearTimeout(handler);
+    }
+  }, [sortBy, sortOrder, showOnlyNonEmpty, minFileSize, pageSize]);
+
+  // Clear cache when settings change
+  useEffect(() => {
+    setPageCache(new Map());
+    setCurrentPage(1);
+  }, [prefix, sortBy, sortOrder, showOnlyNonEmpty, minFileSize, pageSize]);
+
+  // Page navigation handlers
+  const goToPage = async (page: number) => {
+    if (page < 1 || page > totalPages) return;
+    
+    setLoading(true);
+    try {
+      const response = await loadFiles(prefix, page);
+      if (response) {
+        setFileInfos(response.items);
+        setCurrentPage(response.pagination.page);
+        setHasNext(response.pagination.has_next);
+        setHasPrev(response.pagination.has_prev);
+        
+        // Preload adjacent pages
+        preloadAdjacentPages(prefix, response.pagination.page);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const nextPage = () => goToPage(currentPage + 1);
+  const prevPage = () => goToPage(currentPage - 1);
 
   const goTo = (p: string) => {
     setPreviewKey(null);
@@ -140,7 +309,7 @@ const MinioBrowserPage: React.FC = () => {
 
   const toggleSelectAll = (checked: boolean) => {
     const next: Record<string, boolean> = {};
-    if (checked) filteredFiles.forEach((k) => (next[k] = true));
+    if (checked) filteredFiles.forEach((f) => { next[f.key] = true; });
     setSelected(next);
   };
 
@@ -201,48 +370,45 @@ const MinioBrowserPage: React.FC = () => {
 
   const filteredFiles = useMemo(() => {
     const q = filter.toLowerCase();
-    return listing.files.filter((f) => {
-      const name = f.split('/').pop() || f;
+    
+    // Use server-side paginated data directly (already sorted and filtered by backend)
+    return fileInfos.filter((f) => {
+      const name = f.key.split('/').pop() || f.key;
       const parquetOk = !onlyParquet || name.toLowerCase().endsWith('.parquet');
       return parquetOk && name.toLowerCase().includes(q);
     });
-  }, [listing.files, filter, onlyParquet]);
+  }, [fileInfos, filter, onlyParquet]);
 
   const allSelected = useMemo(() => {
-    const keys = filteredFiles;
+    const keys = filteredFiles.map(f => f.key);
     if (keys.length === 0) return false;
     return keys.every((k) => selected[k]);
   }, [filteredFiles, selected]);
 
-  // Pagination calculations and effects
+  // Pagination calculations for folders only (files use server-side pagination)
   const foldersPages = Math.max(1, Math.ceil(filteredFolders.length / Math.max(1, foldersPageSize)));
-  const filesPages = Math.max(1, Math.ceil(filteredFiles.length / Math.max(1, filesPageSize)));
 
   useEffect(() => {
     setFoldersPage(1);
   }, [filter, listing.prefixes, foldersPageSize]);
 
   useEffect(() => {
-    setFilesPage(1);
-  }, [filter, listing.files, filesPageSize, onlyParquet]);
-
-  useEffect(() => {
     if (foldersPage > foldersPages) setFoldersPage(foldersPages);
   }, [foldersPages]);
-
-  useEffect(() => {
-    if (filesPage > filesPages) setFilesPage(filesPages);
-  }, [filesPages]);
 
   const visibleFolders = useMemo(() => {
     const start = (foldersPage - 1) * foldersPageSize;
     return filteredFolders.slice(start, start + foldersPageSize);
   }, [filteredFolders, foldersPage, foldersPageSize]);
 
-  const visibleFiles = useMemo(() => {
-    const start = (filesPage - 1) * filesPageSize;
-    return filteredFiles.slice(start, start + filesPageSize);
-  }, [filteredFiles, filesPage, filesPageSize]);
+  // Utility function to format file sizes
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
 
   const refresh = () => load(prefix, true); // Enable auto-drill on refresh
 
@@ -336,9 +502,54 @@ const MinioBrowserPage: React.FC = () => {
                 label="Auto-navigate through folders with single child"
                 checked={autoDrill}
                 onChange={(e) => setAutoDrill(e.target.checked)}
-                className="mb-3"
+                className="mb-2"
                 title="Automatically navigate through folders that contain only one subfolder"
               />
+              
+              {/* File Sorting and Filtering Controls */}
+              <div className="mb-3 p-2 bg-body-tertiary rounded">
+                <div className="small fw-semibold mb-2">File Options:</div>
+                <Row className="g-2">
+                  <Col sm={6}>
+                    <Form.Check
+                      type="checkbox"
+                      id="showOnlyNonEmpty"
+                      label="Hide small files"
+                      checked={showOnlyNonEmpty}
+                      onChange={(e) => setShowOnlyNonEmpty(e.target.checked)}
+                      className="small"
+                    />
+                  </Col>
+                  <Col sm={6}>
+                    <InputGroup size="sm">
+                      <InputGroup.Text>Min</InputGroup.Text>
+                      <Form.Control
+                        type="number"
+                        min={0}
+                        max={10000}
+                        value={minFileSize}
+                        onChange={(e) => setMinFileSize(Number(e.target.value))}
+                        style={{ maxWidth: '5rem' }}
+                      />
+                      <InputGroup.Text>B</InputGroup.Text>
+                    </InputGroup>
+                  </Col>
+                </Row>
+                <Row className="g-2 mt-1">
+                  <Col sm={6}>
+                    <Form.Select size="sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as "name" | "size")}>
+                      <option value="name">Sort by name</option>
+                      <option value="size">Sort by size</option>
+                    </Form.Select>
+                  </Col>
+                  <Col sm={6}>
+                    <Form.Select size="sm" value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}>
+                      <option value="asc">{sortBy === "size" ? "Smallest first" : "A-Z"}</option>
+                      <option value="desc">{sortBy === "size" ? "Largest first" : "Z-A"}</option>
+                    </Form.Select>
+                  </Col>
+                </Row>
+              </div>
 
               <div className="mb-2 fw-semibold d-flex align-items-center justify-content-between">
                 <span>Folders:</span>
@@ -374,18 +585,25 @@ const MinioBrowserPage: React.FC = () => {
 
               <div className="mb-2 fw-semibold d-flex align-items-center justify-content-between">
                 <span>Files:</span>
-                <InputGroup size="sm" className="flex-shrink-0" style={{ maxWidth: 'min(320px, 100%)' }}>
-                  <Button variant="outline-secondary" size="sm" onClick={() => setFilesPage((p) => Math.max(1, p - 1))} disabled={filesPage <= 1}>Prev</Button>
-                  <InputGroup.Text>Page {filesPage}/{filesPages}</InputGroup.Text>
-                  <Button variant="outline-secondary" size="sm" onClick={() => setFilesPage((p) => Math.min(filesPages, p + 1))} disabled={filesPage >= filesPages}>Next</Button>
-                  <InputGroup.Text>Per page</InputGroup.Text>
-                  <Form.Select size="sm" value={filesPageSize} onChange={(e) => setFilesPageSize(Number(e.target.value))} style={{ minWidth: '5rem', maxWidth: '6rem' }}>
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </Form.Select>
-                </InputGroup>
+                <div className="d-flex align-items-center gap-2">
+                  {totalItems > 0 && (
+                    <Badge bg="secondary" className="fs-6">
+                      {totalItems} total
+                    </Badge>
+                  )}
+                  <InputGroup size="sm" className="flex-shrink-0" style={{ maxWidth: 'min(320px, 100%)' }}>
+                    <Button variant="outline-secondary" size="sm" onClick={prevPage} disabled={!hasPrev || loading}>Prev</Button>
+                    <InputGroup.Text>Page {currentPage}/{totalPages}</InputGroup.Text>
+                    <Button variant="outline-secondary" size="sm" onClick={nextPage} disabled={!hasNext || loading}>Next</Button>
+                    <InputGroup.Text>Size</InputGroup.Text>
+                    <Form.Select size="sm" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} style={{ minWidth: '4rem', maxWidth: '5rem' }}>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={200}>200</option>
+                    </Form.Select>
+                  </InputGroup>
+                </div>
               </div>
               <div className="mb-2 d-flex align-items-center">
                 <Form.Check
@@ -397,28 +615,33 @@ const MinioBrowserPage: React.FC = () => {
                 />
               </div>
               <ListGroup variant="flush">
-                {visibleFiles.length === 0 && (
+                {filteredFiles.length === 0 && (
                   <ListGroup.Item className="text-body-secondary">No files</ListGroup.Item>
                 )}
-                {visibleFiles.map((f) => {
-                  const name = f.split('/').pop() || f;
+                {filteredFiles.map((f) => {
+                  const name = f.key.split('/').pop() || f.key;
                   const isParquet = name.toLowerCase().endsWith('.parquet');
-                  const isPreviewedFile = previewKey === f;
+                  const isPreviewedFile = previewKey === f.key;
                   return (
                     <ListGroup.Item
                       action
-                      key={f}
+                      key={f.key}
                       className={`d-flex align-items-center justify-content-between ${isPreviewedFile ? 'bg-primary-subtle border-primary' : ''}`}
                     >
-                      <div className="d-flex align-items-center flex-grow-1" style={{ minWidth: 0 }} onClick={() => previewParquet(f)}>
-                        <Form.Check className="me-2" checked={!!selected[f]} onChange={(e) => toggleSelect(f, e.target.checked)} onClick={(e) => e.stopPropagation()} />
+                      <div className="d-flex align-items-center flex-grow-1" style={{ minWidth: 0 }} onClick={() => previewParquet(f.key)}>
+                        <Form.Check className="me-2" checked={!!selected[f.key]} onChange={(e) => toggleSelect(f.key, e.target.checked)} onClick={(e) => e.stopPropagation()} />
                         <FaFileAlt className="me-2" />
-                        <OverlayTrigger placement="top" overlay={<Tooltip>{name}</Tooltip>}>
-                          <span className="text-truncate" style={{ minWidth: 0, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{name}</span>
-                        </OverlayTrigger>
+                        <div className="d-flex flex-column" style={{ minWidth: 0 }}>
+                          <OverlayTrigger placement="top" overlay={<Tooltip>{name}</Tooltip>}>
+                            <span className="text-truncate" style={{ minWidth: 0, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{name}</span>
+                          </OverlayTrigger>
+                          <small className="text-body-secondary">{formatFileSize(f.size)}</small>
+                        </div>
                         {isParquet && <Badge bg="secondary" className="ms-2">parquet</Badge>}
+                        {f.size === 0 && <Badge bg="warning" className="ms-2">empty</Badge>}
+                        {f.size > 0 && f.size < 1000 && <Badge bg="info" className="ms-2">small</Badge>}
                       </div>
-                      <Button size="sm" variant="outline-secondary" aria-label={`Preview ${name}`} onClick={(e) => { e.stopPropagation(); previewParquet(f); }}>
+                      <Button size="sm" variant="outline-secondary" aria-label={`Preview ${name}`} onClick={(e) => { e.stopPropagation(); previewParquet(f.key); }}>
                         <FaEye className="me-1" /> Preview
                       </Button>
                     </ListGroup.Item>

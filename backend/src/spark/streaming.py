@@ -55,8 +55,8 @@ class StreamingManager:
         self.alert_query: Optional[StreamingQuery] = None
 
         # Query names (union schema is now default)
-        self.AVG_QUERY_NAME = "five_min_avg_stream"
-        self.ALERT_QUERY_NAME = "alert_stream"
+        self.AVG_QUERY_NAME = "temperature_5min_averages"
+        self.ALERT_QUERY_NAME = "temperature_alert_detector"
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
         """Return active StreamingQuery by name if present."""
