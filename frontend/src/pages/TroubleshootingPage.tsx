@@ -6,7 +6,6 @@ import DataTroubleshootingTool from '../components/DataTroubleshootingTool';
 import EnrichmentDiagnosticCard from '../components/sensor-data/EnrichmentDiagnosticCard';
 import EnrichmentStatusCard from '../components/EnrichmentStatusCard';
 import SparkApplicationsCard from '../components/SparkApplicationsCard';
-import ConnectionStatus from '../components/ConnectionStatus';
 import { fetchSparkMasterStatus, SparkMasterStatus, fetchErrors, ClientErrorRow } from '../api/backendRequests';
 
 const TroubleshootingPage: React.FC = () => {
@@ -89,8 +88,21 @@ const TroubleshootingPage: React.FC = () => {
             </Col>
             <Col md={6}>
               <div className="mb-4">
-                <h5 className="mb-3">Connection Status</h5>
-                <ConnectionStatus />
+                <h5 className="mb-3">Data Sources</h5>
+                <Card className="mb-3 shadow-sm border-body">
+                  <Card.Header className="bg-body-tertiary">Modular Data Source System</Card.Header>
+                  <Card.Body>
+                    <p className="text-muted mb-3">
+                      SOAM now uses a modular data source system. Manage all your data sources from the dedicated page.
+                    </p>
+                    <Button 
+                      variant="primary" 
+                      onClick={() => window.location.href = '/data-sources'}
+                    >
+                      📊 Manage Data Sources
+                    </Button>
+                  </Card.Body>
+                </Card>
               </div>
             </Col>
           </Row>

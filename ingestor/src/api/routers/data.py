@@ -6,14 +6,11 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 
 from src.api.models import (
-    ConnectionConfigCreate,
-    BrokerSwitchRequest,
     ApiResponse,
     ApiListResponse,
 )
 from src.api.response_utils import success_response, list_response
 from src.api.dependencies import IngestorStateDep
-from src.config import ConnectionConfig as ConfigDataclass
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +63,7 @@ async def get_topic_analysis(state: IngestorStateDep):
             "sensor_types_by_partition": {},
             "buffer_status": {
                 "max_rows_per_partition": state.buffer_max_rows,
-                "active_connections": 1 if state.active_connection else 0,
-                "mqtt_handler_active": state.mqtt_handler is not None
+                "note": "Using modular data source system"
             }
         }
         
@@ -115,11 +111,6 @@ async def get_topic_analysis(state: IngestorStateDep):
         
         analysis["buffer_status"]["total_messages_in_buffers"] = total_messages_in_buffers
         
-        # Add MQTT connection info if available
-        if state.active_connection:
-            analysis["buffer_status"]["active_broker"] = f"{state.active_connection.broker}:{state.active_connection.port}"
-            analysis["buffer_status"]["subscribed_topic"] = state.active_connection.topic
-        
         return success_response(
             data=analysis,
             message=f"Topic analysis completed - {len(state.data_buffers)} partitions analyzed, {total_messages_in_buffers} total messages in buffers"
@@ -139,102 +130,3 @@ async def set_buffer_size(payload: dict, state: IngestorStateDep):
     except Exception as e:
         logger.error("Error setting buffer size: %s", str(e))
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/connections", response_model=ApiResponse)
-async def get_connections(state: IngestorStateDep):
-    """Get all connection configurations."""
-    try:
-        logger.debug(
-            "Fetching %d connection configurations", len(state.connection_configs)
-        )
-        return success_response(
-            data={
-                "connections": [
-                    {
-                        "id": c.id,
-                        "broker": c.broker,
-                        "port": c.port,
-                        "topic": c.topic,
-                        "connectionType": c.connectionType
-                    } for c in state.connection_configs
-                ],
-                "active": {
-                    "id": state.active_connection.id,
-                    "broker": state.active_connection.broker,
-                    "port": state.active_connection.port,
-                    "topic": state.active_connection.topic,
-                    "connectionType": state.active_connection.connectionType
-                } if state.active_connection else None
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error fetching connections: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/connections", response_model=ApiResponse)
-async def add_connection(
-    connection: ConnectionConfigCreate, 
-    state: IngestorStateDep
-):
-    """Add a new connection configuration."""
-    try:
-        config_id = len(state.connection_configs) + 1
-        new_config = ConfigDataclass(
-            id=config_id,
-            broker=connection.broker,
-            port=connection.port,
-            topic=connection.topic,
-            connectionType=connection.connectionType
-        )
-        state.connection_configs.append(new_config)
-        
-        if state.active_connection is None:
-            state.active_connection = new_config
-            
-        return success_response(
-            data={"id": config_id},
-            message="Connection configuration added successfully"
-        )
-    except Exception as e:
-        logger.error(f"Error adding connection: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/connections/switch", response_model=ApiResponse)
-async def switch_broker(
-    request: BrokerSwitchRequest, 
-    state: IngestorStateDep
-):
-    """Switch the active broker."""
-    try:
-        target_id = request.id
-        for config in state.connection_configs:
-            if config.id == target_id:
-                state.active_connection = config
-                state.clear_all_buffers()
-                
-                # TODO: Restart MQTT client with new configuration
-                # This would need to be handled in the application lifecycle
-                
-                return success_response(
-                    data={
-                        "id": config.id,
-                        "broker": config.broker,
-                        "port": config.port,
-                        "topic": config.topic,
-                        "connectionType": config.connectionType
-                    },
-                    message=f"Switched to connection {target_id}"
-                )
-        
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Connection id {target_id} not found"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error switching broker: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))

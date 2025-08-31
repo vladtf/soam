@@ -25,7 +25,7 @@ async def get_readiness_status(
             "ready": True,
             "checks": {
                 "minio": False,
-                "mqtt": False
+                "data_sources": True  # Modular system is always ready to accept data
             }
         }
         
@@ -37,20 +37,9 @@ async def get_readiness_status(
             ready_status["checks"]["minio"] = False
             ready_status["ready"] = False
         
-        # Check MQTT connection (critical for data ingestion)
-        try:
-            if state.mqtt_handler and hasattr(state.mqtt_handler, 'client'):
-                if state.mqtt_handler.client and state.mqtt_handler.client.is_connected():
-                    ready_status["checks"]["mqtt"] = True
-                else:
-                    ready_status["checks"]["mqtt"] = False
-                    ready_status["ready"] = False
-            else:
-                ready_status["checks"]["mqtt"] = False
-                ready_status["ready"] = False
-        except Exception:
-            ready_status["checks"]["mqtt"] = False
-            ready_status["ready"] = False
+        # Modular data source system is always ready to receive data
+        # Individual data sources are managed separately
+        ready_status["checks"]["data_sources"] = True
         
         return ready_status
         
@@ -72,31 +61,24 @@ async def get_health_status(
         health_status = {
             "status": "healthy",
             "components": {
-                "mqtt": "unknown",
+                "data_sources": "modular_system_active",
                 "minio": "unknown",
                 "data_buffer": "unknown"
             },
             "metrics": {
                 "buffered_messages": sum(len(b) for b in state.data_buffers.values()),
-                "active_connections": len(state.connection_configs),
+                "active_data_sources": "managed_by_modular_system",
                 "messages_received": state.messages_received._value._value,
                 "messages_processed": state.messages_processed._value._value
             }
         }
         
-        # Check MQTT connection
+        # Check data source system (replace old MQTT check)
         try:
-            if state.mqtt_handler and hasattr(state.mqtt_handler, 'client'):
-                if state.mqtt_handler.client and state.mqtt_handler.client.is_connected():
-                    health_status["components"]["mqtt"] = "connected"
-                else:
-                    health_status["components"]["mqtt"] = "disconnected"
-                    health_status["status"] = "degraded"
-            else:
-                health_status["components"]["mqtt"] = "not_initialized"
-                health_status["status"] = "degraded"
+            # In the modular system, we always allow data ingestion
+            health_status["components"]["data_sources"] = "modular_system_ready"
         except Exception as e:
-            health_status["components"]["mqtt"] = f"error: {str(e)}"
+            health_status["components"]["data_sources"] = f"error: {str(e)}"
             health_status["status"] = "degraded"
         
         # Check MinIO connection

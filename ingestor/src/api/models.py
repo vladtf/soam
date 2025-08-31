@@ -2,30 +2,10 @@
 Pydantic models for the SOAM ingestor API.
 """
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Generic, TypeVar
 from datetime import datetime
 
-
-class ConnectionConfigCreate(BaseModel):
-    """Schema for creating a new connection configuration."""
-    broker: str = Field(..., description="MQTT broker hostname or IP")
-    port: int = Field(1883, ge=1, le=65535, description="MQTT broker port")
-    topic: str = Field(..., description="MQTT topic to subscribe to")
-    connectionType: str = Field("mqtt", description="Connection type")
-
-
-class ConnectionConfig(BaseModel):
-    """Schema for connection configuration response."""
-    id: int
-    broker: str
-    port: int
-    topic: str
-    connectionType: str = "mqtt"
-
-
-class BrokerSwitchRequest(BaseModel):
-    """Schema for switching active broker."""
-    id: int = Field(..., description="Connection ID to switch to")
+T = TypeVar('T')
 
 
 class SensorData(BaseModel):
@@ -42,18 +22,18 @@ class ConnectionsResponse(BaseModel):
     data: Dict[str, Any]
 
 
-class ApiResponse(BaseModel):
+class ApiResponse(BaseModel, Generic[T]):
     """Generic API response wrapper."""
     status: str
-    data: Optional[Any] = None
+    data: Optional[T] = None
     message: Optional[str] = None
     error: Optional[str] = None
 
 
-class ApiListResponse(BaseModel):
+class ApiListResponse(BaseModel, Generic[T]):
     """Generic API list response wrapper."""
     status: str
-    data: List[Any]
+    data: List[T]
     total: Optional[int] = None
     page: Optional[int] = None
     page_size: Optional[int] = None

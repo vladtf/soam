@@ -330,9 +330,8 @@ export interface IngestorTopicAnalysis {
   sensor_types_by_partition: Record<string, any>;
   buffer_status: {
     max_rows_per_partition: number;
-    active_connections: number;
-    mqtt_handler_active: boolean;
     total_messages_in_buffers: number;
+    note: string;
     active_broker?: string;
     subscribed_topic?: string;
   };
@@ -369,20 +368,6 @@ export const fetchTemperatureAlerts = (
   return doFetch<unknown[]>(
     `${backendUrl}/api/spark/temperature-alerts?since_minutes=${sinceMinutes}`
   );
-};
-
-export const fetchConnections = (): Promise<unknown> => {
-  const { ingestorUrl } = getConfig();
-  return doFetch<{ status: string; data: { connections: any[]; active: any } }>(`${ingestorUrl}/api/connections`);
-};
-
-export const switchBroker = (id: number): Promise<unknown> => {
-  const { backendUrl } = getConfig();
-  return doFetch<unknown>(`${backendUrl}/api/switchBroker`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
 };
 
 export const fetchBuildings = (): Promise<Building[]> => {
@@ -1207,6 +1192,89 @@ export const getCopilotContext = (): Promise<any> => {
 export const getCopilotHealth = (): Promise<{available: boolean; reason?: string; endpoint?: string}> => {
   const { backendUrl } = getConfig();
   return doFetch<{available: boolean; reason?: string; endpoint?: string}>(`${backendUrl}/api/copilot/health`);
+};
+
+// Data Sources API - New modular data source management
+import { 
+  DataSourceType, 
+  DataSource, 
+  CreateDataSourceRequest, 
+  UpdateDataSourceRequest,
+  DataSourceHealth,
+  ConnectorStatusOverview
+} from '../types/dataSource';
+
+export const fetchDataSourceTypes = (): Promise<DataSourceType[]> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<DataSourceType[]>(`${ingestorUrl}/api/data-sources/types`);
+};
+
+export const fetchDataSources = (enabledOnly: boolean = true): Promise<DataSource[]> => {
+  const { ingestorUrl } = getConfig();
+  const url = new URL(`${ingestorUrl}/api/data-sources`);
+  if (enabledOnly) url.searchParams.set('enabled_only', 'true');
+  return doFetch<DataSource[]>(url.toString());
+};
+
+export const getDataSource = (id: number): Promise<DataSource> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<DataSource>(`${ingestorUrl}/api/data-sources/${id}`);
+};
+
+export const createDataSource = (payload: CreateDataSourceRequest): Promise<DataSource> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<DataSource>(`${ingestorUrl}/api/data-sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ created_by: 'frontend-user', ...payload }),
+  });
+};
+
+export const updateDataSource = (id: number, payload: UpdateDataSourceRequest): Promise<DataSource> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<DataSource>(`${ingestorUrl}/api/data-sources/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const deleteDataSource = (id: number): Promise<{ status: string; message: string }> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ status: string; message: string }>(`${ingestorUrl}/api/data-sources/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const startDataSource = (id: number): Promise<{ status: string; message: string }> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ status: string; message: string }>(`${ingestorUrl}/api/data-sources/${id}/start`, {
+    method: 'POST',
+  });
+};
+
+export const stopDataSource = (id: number): Promise<{ status: string; message: string }> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ status: string; message: string }>(`${ingestorUrl}/api/data-sources/${id}/stop`, {
+    method: 'POST',
+  });
+};
+
+export const restartDataSource = (id: number): Promise<{ status: string; message: string }> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<{ status: string; message: string }>(`${ingestorUrl}/api/data-sources/${id}/restart`, {
+    method: 'POST',
+  });
+};
+
+export const getDataSourceHealth = (id: number): Promise<DataSourceHealth> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<DataSourceHealth>(`${ingestorUrl}/api/data-sources/${id}/health`);
+};
+
+export const getConnectorStatusOverview = (): Promise<ConnectorStatusOverview> => {
+  const { ingestorUrl } = getConfig();
+  return doFetch<ConnectorStatusOverview>(`${ingestorUrl}/api/data-sources/status/overview`);
 };
 
 // Metadata API interfaces and functions

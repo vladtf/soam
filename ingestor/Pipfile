@@ -15,6 +15,9 @@ pandas = "*"
 requests = "*"
 prometheus-client = "*"
 colorlog = "*"
+aiohttp = "*"
+sqlalchemy = "*"
+jsonschema = "*"
 
 [dev-packages]
 

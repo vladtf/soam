@@ -8,9 +8,7 @@ from typing import Annotated
 from collections import deque
 from prometheus_client import Counter, Histogram
 
-from src.config import ConnectionConfig, MINIO_BUCKET
 from src.storage.minio_client import MinioClient
-from src.mqtt_client import MQTTClientHandler
 from src.metadata.service import MetadataService
 
 logger = logging.getLogger(__name__)
@@ -57,19 +55,6 @@ class IngestorState:
         self.buffer_max_rows = int(os.getenv("BUFFER_MAX_ROWS", "100"))
         # Map of ingestion_id -> deque
         self.data_buffers = {}
-        self.connection_configs = []
-        self.active_connection = None
-        self.mqtt_handler = None
-
-        # Initialize default connection
-        default_config = ConnectionConfig(
-            id=1,
-            broker=config.mqtt_broker,
-            port=config.mqtt_port,
-            topic=config.mqtt_topic,
-        )
-        self.connection_configs.append(default_config)
-        self.active_connection = default_config
 
         # Reference the module-level metrics (no re-initialization)
         self.messages_received = MESSAGES_RECEIVED

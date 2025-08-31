@@ -110,8 +110,11 @@ const EnrichmentDiagnosticCard: React.FC = () => {
                 <strong>Connection Status:</strong>
                 <br />
                 <small>
-                  MQTT Handler: {ingestorAnalysis.buffer_status.mqtt_handler_active ? '✅ Active' : '❌ Inactive'}
+                  System: ✅ Modular Data Sources
                   <br />
+                  {ingestorAnalysis.buffer_status.note && (
+                    <><i>{ingestorAnalysis.buffer_status.note}</i><br /></>
+                  )}
                   {ingestorAnalysis.buffer_status.active_broker && (
                     <>Broker: {ingestorAnalysis.buffer_status.active_broker}<br /></>
                   )}
@@ -141,8 +144,9 @@ const EnrichmentDiagnosticCard: React.FC = () => {
               This could mean:
               <ul className="mb-0 mt-2">
                 <li>No messages have been received yet</li>
-                <li>MQTT client is not connected ({ingestorAnalysis.buffer_status.mqtt_handler_active ? 'Handler is active' : 'Handler is inactive'})</li>
-                <li>Simulators are not running or not publishing data</li>
+                <li>Data sources are not active or not publishing data</li>
+                <li>Simulators are not running</li>
+                <li>Check the <a href="/data-sources">Data Sources</a> page to manage connections</li>
               </ul>
             </Alert>
           ) : (

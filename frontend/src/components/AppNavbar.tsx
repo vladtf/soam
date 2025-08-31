@@ -4,7 +4,6 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useError } from '../context/ErrorContext';
 import { getConfig } from '../config';
-import { fetchConnections } from '../api/backendRequests';
 import { isErrorReportingEnabled, setErrorReportingEnabled } from '../errors';
 
 const AppNavbar: React.FC = () => {
@@ -32,9 +31,10 @@ const AppNavbar: React.FC = () => {
     let cancelled = false;
     const ping = async () => {
       try {
-        // Using connections API as a lightweight health probe
-        await fetchConnections();
-        if (!cancelled) setStatus('green');
+        // Using ingestor ready endpoint as health probe
+        const { ingestorUrl } = getConfig();
+        const response = await fetch(`${ingestorUrl}/api/ready`);
+        if (!cancelled) setStatus(response.ok ? 'green' : 'red');
       } catch {
         if (!cancelled) setStatus('red');
       }
@@ -100,6 +100,7 @@ const AppNavbar: React.FC = () => {
           <Nav className="me-auto">
             <Nav.Link href="/dashboard">Dashboard</Nav.Link>
             <Nav.Link href="/pipeline">Data Pipeline</Nav.Link>
+            <Nav.Link href="/data-sources">Data Sources</Nav.Link>
             <Nav.Link href="/minio">Data Browser</Nav.Link>
             <Nav.Link href="/metadata">Metadata</Nav.Link>
             <Nav.Link href="/troubleshooting">Troubleshooting</Nav.Link>
