@@ -71,6 +71,8 @@ spec:
               value: minio123
             - name: MINIO_BUCKET
               value: lake
+            - name: INGESTOR_BASE_URL
+              value: http://ingestor:8001
             # Database configuration  
             - name: DATABASE_URL
               value: sqlite:////app/data/feedback.db
