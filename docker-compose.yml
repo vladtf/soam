@@ -47,6 +47,7 @@ services:
       - MINIO_ACCESS_KEY=minio
       - MINIO_SECRET_KEY=minio123
       - MINIO_BUCKET=lake
+      - INGESTOR_BASE_URL=http://ingestor:8001
     volumes:
       - spark-events:/tmp/spark-events  
 
