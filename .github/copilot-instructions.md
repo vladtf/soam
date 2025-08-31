@@ -613,6 +613,7 @@ When implementing new features, always:
 - Include database rollback in exception handlers
 - Use emojis in logging for quick visual scanning
 - Specify response models with generic typing
+- Use absolute paths when running scripts. This ensures the command won't fail because of relative path issues.
 
 ## AI Copilot Integration
 
