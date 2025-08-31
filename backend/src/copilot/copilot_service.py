@@ -3,7 +3,6 @@ Copilot service for AI-powered computation generation using Azure OpenAI.
 """
 from typing import Dict, List, Any, Optional
 import json
-import logging
 from datetime import datetime, date
 from decimal import Decimal
 from openai import AzureOpenAI
@@ -11,8 +10,9 @@ from pydantic import BaseModel
 from src.computations.examples import EXAMPLE_DEFINITIONS
 from src.computations.validation import validate_computation_definition
 from src.spark.spark_manager import SparkManager
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class ComputationRequest(BaseModel):
     user_prompt: str
@@ -262,7 +262,6 @@ class CopilotService:
                 schemas[source] = {"error": str(e)}
                 
         logger.info("✅ Schema inference complete for %d sources", len(sources))
-        return schemas
         return schemas
     
     def _get_computation_syntax_guide(self) -> Dict[str, Any]:

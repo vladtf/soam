@@ -2,16 +2,16 @@
 Dependency injection for FastAPI.
 """
 import os
-import logging
 from functools import lru_cache
 from fastapi import Depends
 from typing import Annotated
 
 from src.spark import SparkManager
 from src.neo4j.neo4j_manager import Neo4jManager
+from src.utils.logging import get_logger
 from minio import Minio
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AppConfig:

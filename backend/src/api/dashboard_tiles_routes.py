@@ -2,6 +2,7 @@
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import json
 
 from src.api.models import DashboardTileCreate, DashboardTileUpdate, DashboardTileResponse, ApiResponse
 from src.api.response_utils import success_response, not_found_error, bad_request_error
@@ -10,38 +11,46 @@ from src.database.models import DashboardTile, Computation
 from src.computations.executor import ComputationExecutor
 from src.api.dependencies import get_spark_manager
 from src.spark.spark_manager import SparkManager
+from src.utils.logging import get_logger
+from src.utils.api_utils import handle_api_errors_sync
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"]) 
 
 
-@router.get("/tiles", response_model=List[DashboardTileResponse])
+@router.get("/tiles", response_model=ApiResponse)
+@handle_api_errors_sync("list dashboard tiles")
 def list_tiles(db: Session = Depends(get_db)):
     rows = db.query(DashboardTile).order_by(DashboardTile.created_at.desc()).all()
-    return [DashboardTileResponse(**r.to_dict()) for r in rows]
+    tiles_data = [DashboardTileResponse(**r.to_dict()) for r in rows]
+    return success_response(data=tiles_data, message="Dashboard tiles retrieved successfully")
 
 
-@router.post("/tiles", response_model=DashboardTileResponse)
+@router.post("/tiles", response_model=ApiResponse)
+@handle_api_errors_sync("create dashboard tile")
 def create_tile(payload: DashboardTileCreate, db: Session = Depends(get_db)):
     # Validate computation exists
     comp = db.get(Computation, payload.computation_id)
     if not comp:
         raise HTTPException(status_code=400, detail="Computation not found")
-    import json as _json
+    
     row = DashboardTile(
         name=payload.name,
         computation_id=payload.computation_id,
         viz_type=payload.viz_type,
-        config=_json.dumps(payload.config or {}),
-        layout=_json.dumps(payload.layout) if payload.layout is not None else None,
+        config=json.dumps(payload.config or {}),
+        layout=json.dumps(payload.layout) if payload.layout is not None else None,
         enabled=payload.enabled,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
-    return DashboardTileResponse(**row.to_dict())
+    tile_data = DashboardTileResponse(**row.to_dict())
+    return success_response(data=tile_data, message="Dashboard tile created successfully")
 
 
-@router.patch("/tiles/{tile_id}", response_model=DashboardTileResponse)
+@router.patch("/tiles/{tile_id}", response_model=ApiResponse)
+@handle_api_errors_sync("update dashboard tile")
 def update_tile(tile_id: int, payload: DashboardTileUpdate, db: Session = Depends(get_db)):
     row = db.get(DashboardTile, tile_id)
     if not row:
@@ -55,20 +64,20 @@ def update_tile(tile_id: int, payload: DashboardTileUpdate, db: Session = Depend
     if payload.viz_type is not None:
         row.viz_type = payload.viz_type
     if payload.config is not None:
-        import json as _json
-        row.config = _json.dumps(payload.config or {})
+        row.config = json.dumps(payload.config or {})
     if payload.layout is not None:
-        import json as _json
-        row.layout = _json.dumps(payload.layout) if payload.layout is not None else None
+        row.layout = json.dumps(payload.layout) if payload.layout is not None else None
     if payload.enabled is not None:
         row.enabled = payload.enabled
     db.add(row)
     db.commit()
     db.refresh(row)
-    return DashboardTileResponse(**row.to_dict())
+    tile_data = DashboardTileResponse(**row.to_dict())
+    return success_response(data=tile_data, message="Dashboard tile updated successfully")
 
 
 @router.delete("/tiles/{tile_id}", response_model=ApiResponse)
+@handle_api_errors_sync("delete dashboard tile")
 def delete_tile(tile_id: int, db: Session = Depends(get_db)):
     row = db.get(DashboardTile, tile_id)
     if not row:
@@ -78,8 +87,9 @@ def delete_tile(tile_id: int, db: Session = Depends(get_db)):
     return success_response(message="Dashboard tile deleted successfully")
 
 
-@router.get("/examples")
-def get_tile_examples(db: Session = Depends(get_db)) -> Dict[str, Any]:
+@router.get("/examples", response_model=ApiResponse)
+@handle_api_errors_sync("get dashboard tile examples")
+def get_tile_examples(db: Session = Depends(get_db)):
     """Provide example tiles wired to available computations for guidance."""
     comps = db.query(Computation).all()
     examples = []
@@ -110,13 +120,15 @@ def get_tile_examples(db: Session = Depends(get_db)) -> Dict[str, Any]:
                 }
             }
         ]
-    return {
+    data = {
         "examples": examples,
         "vizTypes": ["table", "stat", "timeseries"],
     }
+    return success_response(data=data, message="Dashboard tile examples retrieved successfully")
 
 
 @router.post("/tiles/{tile_id}/preview", response_model=ApiResponse)
+@handle_api_errors_sync("preview dashboard tile")
 def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
     tile = db.get(DashboardTile, tile_id)
     if not tile:
@@ -124,11 +136,8 @@ def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManage
     comp = db.get(Computation, tile.computation_id)
     if not comp:
         bad_request_error("Computation not found")
-    import json
-    try:
-        defn = json.loads(comp.definition)
-    except Exception:
-        defn = {}
+    
+    defn = json.loads(comp.definition) if comp.definition else {}
     
     # Execute computation using the new executor
     executor = ComputationExecutor(spark)

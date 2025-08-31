@@ -1,6 +1,5 @@
 """Service layer for computation operations."""
 import json
-import logging
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from src.database.models import Computation
@@ -9,8 +8,9 @@ from src.api.response_utils import not_found_error, conflict_error, bad_request_
 from src.computations.validation import validate_dataset, validate_username, validate_computation_definition
 from src.computations.executor import ComputationExecutor
 from src.spark.spark_manager import SparkManager
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ComputationService:
