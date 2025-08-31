@@ -32,6 +32,7 @@ class DataCleaner:
         "sensorid": "sensorId",
         "sensor_id": "sensorId",
         "sensor-id": "sensorId",
+        "sensorId": "sensorId",
         # temperature (example field - works for any numeric sensor field)
         "temperature": "temperature",
         # humidity (example field - works for any numeric sensor field) 
