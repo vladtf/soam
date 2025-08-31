@@ -101,6 +101,7 @@ const TroubleshootingPage: React.FC = () => {
                 <h5 className="mb-3">Spark Applications</h5>
                 <SparkApplicationsCard 
                   sparkMasterStatus={sparkMasterStatus} 
+                  sparkStreamsStatus={null}
                   loading={sparkLoading}
                   lastUpdated={lastSparkUpdate}
                   refreshInterval={15000}

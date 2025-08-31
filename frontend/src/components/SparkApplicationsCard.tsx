@@ -1,13 +1,14 @@
 import React from 'react';
 import { Card, Badge, Row, Col, ProgressBar, Spinner } from 'react-bootstrap';
-import { FaTasks, FaServer, FaCog, FaMemory, FaUsers, FaClock } from 'react-icons/fa';
-import { SparkMasterStatus, SparkApplication } from '../api/backendRequests';
+import { FaTasks, FaServer, FaCog, FaMemory, FaUsers, FaClock, FaStream, FaPlay, FaStop } from 'react-icons/fa';
+import { SparkMasterStatus, SparkApplication, SparkStreamsStatus } from '../api/backendRequests';
 import { useTheme } from '../context/ThemeContext';
 import ThemedTable from './ThemedTable';
 import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
 
 interface SparkApplicationsCardProps {
   sparkMasterStatus: SparkMasterStatus | null;
+  sparkStreamsStatus: SparkStreamsStatus | null;
   loading: boolean;
   refreshing?: boolean;
   lastUpdated?: Date | null;
@@ -16,6 +17,7 @@ interface SparkApplicationsCardProps {
 
 const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({ 
   sparkMasterStatus, 
+  sparkStreamsStatus,
   loading,
   refreshing = false,
   lastUpdated,
@@ -224,6 +226,133 @@ const SparkApplicationsCard: React.FC<SparkApplicationsCardProps> = ({
                 </Card>
               </Col>
             </Row>
+          </div>
+        )}
+
+        {/* Running Streams Section */}
+        {sparkStreamsStatus && (
+          <div className="mt-4">
+            <hr />
+            <h6 className="mb-3 text-body-secondary">
+              <FaStream className="me-2" />
+              Running Streams ({sparkStreamsStatus.totalActiveStreams})
+            </h6>
+            
+            {sparkStreamsStatus.totalActiveStreams > 0 ? (
+              <div>
+                {/* Managed Streams */}
+                {Object.keys(sparkStreamsStatus.managedStreams).length > 0 && (
+                  <div className="mb-3">
+                    <div className="small text-body-secondary mb-2">Managed Streams:</div>
+                    <Row className="g-2">
+                      {Object.entries(sparkStreamsStatus.managedStreams).map(([key, stream]) => (
+                        <Col md={6} key={key}>
+                          <Card className="border-0 bg-body-tertiary">
+                            <Card.Body className="p-2">
+                              <div className="d-flex align-items-center justify-content-between">
+                                <div>
+                                  <div className="fw-semibold small">{stream.name}</div>
+                                  <div className="text-body-secondary" style={{ fontSize: '0.75rem' }}>
+                                    Type: {stream.type}
+                                  </div>
+                                </div>
+                                <Badge bg={stream.isActive ? 'success' : 'danger'}>
+                                  {stream.isActive ? (
+                                    <>
+                                      <FaPlay className="me-1" size={10} />
+                                      Active
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FaStop className="me-1" size={10} />
+                                      Stopped
+                                    </>
+                                  )}
+                                </Badge>
+                              </div>
+                            </Card.Body>
+                          </Card>
+                        </Col>
+                      ))}
+                    </Row>
+                  </div>
+                )}
+
+                {/* All Active Streams Table */}
+                {sparkStreamsStatus.activeStreams.length > 0 && (
+                  <div>
+                    <div className="small text-body-secondary mb-2">All Active Streams:</div>
+                    <ThemedTable striped hover responsive size="sm">
+                      <thead className={isDark ? 'table-dark' : 'table-light'}>
+                        <tr>
+                          <th>Stream Name</th>
+                          <th>Status</th>
+                          <th>Input Rate</th>
+                          <th>Processed Rate</th>
+                          <th>Batch ID</th>
+                          <th>Last Update</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sparkStreamsStatus.activeStreams.map((stream) => (
+                          <tr key={stream.id}>
+                            <td>
+                              <div className="fw-semibold small">{stream.name}</div>
+                              <div className="text-body-secondary" style={{ fontSize: '0.7rem' }}>
+                                ID: {stream.id.substring(0, 8)}...
+                              </div>
+                            </td>
+                            <td>
+                              <Badge bg={
+                                stream.status === 'ACTIVE' ? 'success' : 
+                                stream.status === 'ERROR' ? 'danger' : 'warning'
+                              }>
+                                {stream.status}
+                              </Badge>
+                              {stream.exception && (
+                                <div className="text-danger small mt-1" title={stream.exception}>
+                                  Error: {stream.exception.substring(0, 30)}...
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              {stream.inputRowsPerSecond !== undefined ? 
+                                `${stream.inputRowsPerSecond.toFixed(1)}/s` : 
+                                'N/A'
+                              }
+                            </td>
+                            <td>
+                              {stream.processedRowsPerSecond !== undefined ? 
+                                `${stream.processedRowsPerSecond.toFixed(1)}/s` : 
+                                'N/A'
+                              }
+                            </td>
+                            <td>
+                              {stream.batchId !== undefined ? 
+                                stream.batchId : 
+                                'N/A'
+                              }
+                            </td>
+                            <td className="small text-body-secondary">
+                              {stream.timestamp ? 
+                                new Date(stream.timestamp).toLocaleTimeString() : 
+                                'N/A'
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </ThemedTable>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-3 text-body-secondary">
+                <FaStream size={32} className="mb-2 opacity-50" />
+                <div>No active streams running</div>
+                <small>Streaming queries will appear here when they are active</small>
+              </div>
+            )}
           </div>
         )}
       </Card.Body>

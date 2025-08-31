@@ -2,6 +2,7 @@
 Main SparkManager class that orchestrates all Spark operations.
 """
 import logging
+import time
 from typing import Dict, Any, List
 
 from .session import SparkSessionManager
@@ -82,6 +83,110 @@ class SparkManager:
     def get_spark_master_status(self) -> Dict[str, Any]:
         """Fetch Spark master status from the web UI API."""
         return self.master_client.get_spark_master_status()
+
+    def get_running_streams_status(self) -> Dict[str, Any]:
+        """Get status information about all running Spark streams."""
+        try:
+            spark = self.session_manager.spark
+            active_streams = []
+            
+            # Get all active streaming queries
+            for query in spark.streams.active:
+                stream_info = {
+                    "id": query.id,
+                    "name": query.name or "Unnamed Stream",
+                    "runId": query.runId,
+                    "isActive": query.isActive,
+                    "status": "ACTIVE" if query.isActive else "TERMINATED"
+                }
+                
+                # Try to get progress information
+                try:
+                    progress = query.lastProgress
+                    if progress:
+                        stream_info.update({
+                            "inputRowsPerSecond": progress.get("inputRowsPerSecond", 0),
+                            "processedRowsPerSecond": progress.get("processedRowsPerSecond", 0),
+                            "batchDuration": progress.get("durationMs", {}).get("triggerExecution", 0),
+                            "timestamp": progress.get("timestamp", ""),
+                            "batchId": progress.get("batchId", 0),
+                            "numInputRows": progress.get("numInputRows", 0)
+                        })
+                        
+                        # Get sources information
+                        sources = progress.get("sources", [])
+                        if sources:
+                            stream_info["sources"] = [
+                                {
+                                    "description": source.get("description", "Unknown"),
+                                    "inputRowsPerSecond": source.get("inputRowsPerSecond", 0),
+                                    "processedRowsPerSecond": source.get("processedRowsPerSecond", 0),
+                                    "numInputRows": source.get("numInputRows", 0)
+                                }
+                                for source in sources
+                            ]
+                            
+                        # Get sink information
+                        sink = progress.get("sink", {})
+                        if sink:
+                            stream_info["sink"] = {
+                                "description": sink.get("description", "Unknown"),
+                                "numOutputRows": sink.get("numOutputRows", 0)
+                            }
+                    
+                    # Get exception if any
+                    exception = query.exception()
+                    if exception:
+                        stream_info["exception"] = str(exception)
+                        stream_info["status"] = "ERROR"
+                        
+                except Exception as e:
+                    logger.warning(f"Could not get progress for stream {query.id}: {e}")
+                    stream_info["progressError"] = str(e)
+                
+                active_streams.append(stream_info)
+            
+            # Get information about specific streams we manage
+            managed_streams = {}
+            
+            # Check enrichment stream
+            if hasattr(self.streaming_manager, 'enrichment_manager') and self.streaming_manager.enrichment_manager:
+                enrich_query = getattr(self.streaming_manager.enrichment_manager, 'enrich_query', None)
+                if enrich_query:
+                    managed_streams["enrichment"] = {
+                        "id": enrich_query.id,
+                        "name": enrich_query.name or "Enrichment Stream",
+                        "isActive": enrich_query.isActive,
+                        "type": "enrichment"
+                    }
+            
+            # Check schema inference stream
+            if hasattr(self, 'schema_inference_manager') and self.schema_inference_manager:
+                schema_query = getattr(self.schema_inference_manager, 'query', None)
+                if schema_query:
+                    managed_streams["schema_inference"] = {
+                        "id": schema_query.id,
+                        "name": schema_query.name or "Schema Inference Stream",
+                        "isActive": schema_query.isActive,
+                        "type": "schema_inference"
+                    }
+            
+            return {
+                "totalActiveStreams": len(active_streams),
+                "activeStreams": active_streams,
+                "managedStreams": managed_streams,
+                "timestamp": time.time()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting running streams status: {e}")
+            return {
+                "error": str(e),
+                "totalActiveStreams": 0,
+                "activeStreams": [],
+                "managedStreams": {},
+                "timestamp": time.time()
+            }
 
     # ================================================================
     # Data Access Methods

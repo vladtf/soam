@@ -31,6 +31,7 @@ const DashboardPage: React.FC = () => {
     sparkMasterStatus,
     loadingSparkStatus,
     refreshingSparkStatus,
+    sparkStreamsStatus,
     temperatureAlerts,
     loadingAlerts,
     refreshingAlerts,
@@ -182,7 +183,6 @@ const DashboardPage: React.FC = () => {
           enabled: editing.enabled,
         });
         toast.success('Dashboard tile updated successfully');
-        toast.success('Dashboard tile updated successfully');
       } else {
         // Create new tile with default layout
         const currentTileCount = tiles.length;
@@ -253,6 +253,7 @@ const DashboardPage: React.FC = () => {
         <Col md={12}>
           <SparkApplicationsCard
             sparkMasterStatus={sparkMasterStatus}
+            sparkStreamsStatus={sparkStreamsStatus}
             loading={loadingSparkStatus}
             refreshing={refreshingSparkStatus}
             lastUpdated={lastUpdated}

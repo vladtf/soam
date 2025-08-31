@@ -243,6 +243,57 @@ export const fetchSparkMasterStatus = (): Promise<SparkMasterStatus> => {
   return doFetch<SparkMasterStatus>(`${backendUrl}/api/spark/master-status`);
 };
 
+// Spark Streaming interfaces
+export interface SparkStreamSource {
+  description: string;
+  inputRowsPerSecond: number;
+  processedRowsPerSecond: number;
+  numInputRows: number;
+}
+
+export interface SparkStreamSink {
+  description: string;
+  numOutputRows: number;
+}
+
+export interface SparkStream {
+  id: string;
+  name: string;
+  runId: string;
+  isActive: boolean;
+  status: string;
+  inputRowsPerSecond?: number;
+  processedRowsPerSecond?: number;
+  batchDuration?: number;
+  timestamp?: string;
+  batchId?: number;
+  numInputRows?: number;
+  sources?: SparkStreamSource[];
+  sink?: SparkStreamSink;
+  exception?: string;
+  progressError?: string;
+}
+
+export interface SparkManagedStream {
+  id: string;
+  name: string;
+  isActive: boolean;
+  type: string;
+}
+
+export interface SparkStreamsStatus {
+  totalActiveStreams: number;
+  activeStreams: SparkStream[];
+  managedStreams: Record<string, SparkManagedStream>;
+  timestamp: number;
+  error?: string;
+}
+
+export const fetchSparkStreamsStatus = (): Promise<SparkStreamsStatus> => {
+  const { backendUrl } = getConfig();
+  return doFetch<SparkStreamsStatus>(`${backendUrl}/api/spark/streams-status`);
+};
+
 // Enrichment Filtering Diagnostic interfaces
 export interface EnrichmentDiagnosticDevice {
   id: number;

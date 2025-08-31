@@ -24,6 +24,17 @@ async def get_spark_master_status(spark_manager: SparkManagerDep):
         raise internal_server_error("Failed to fetch Spark master status", str(e))
 
 
+@router.get("/streams-status", response_model=ApiResponse)
+async def get_running_streams_status(spark_manager: SparkManagerDep):
+    """Get status information about all running Spark streaming queries."""
+    try:
+        streams_status = spark_manager.get_running_streams_status()
+        return success_response(streams_status, "Running streams status retrieved successfully")
+    except Exception as e:
+        logger.error(f"Error fetching running streams status: {str(e)}")
+        raise internal_server_error("Failed to fetch running streams status", str(e))
+
+
 @router.get("/average-temperature", response_model=ApiResponse)
 async def get_average_temperature(
     spark_manager: SparkManagerDep,

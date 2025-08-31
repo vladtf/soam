@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   fetchAverageTemperature, 
   fetchSparkMasterStatus, 
+  fetchSparkStreamsStatus,
   fetchTemperatureAlerts, 
-  SparkMasterStatus 
+  SparkMasterStatus,
+  SparkStreamsStatus
 } from '../api/backendRequests';
 import { reportClientError } from '../errors';
 
@@ -30,6 +32,11 @@ export const useDashboardData = () => {
   const [loadingSparkStatus, setLoadingSparkStatus] = useState<boolean>(true);
   const [refreshingSparkStatus, setRefreshingSparkStatus] = useState<boolean>(false);
   
+  // Spark streams status state
+  const [sparkStreamsStatus, setSparkStreamsStatus] = useState<SparkStreamsStatus | null>(null);
+  const [loadingStreamsStatus, setLoadingStreamsStatus] = useState<boolean>(true);
+  const [refreshingStreamsStatus, setRefreshingStreamsStatus] = useState<boolean>(false);
+  
   // Temperature alerts state
   const [temperatureAlerts, setTemperatureAlerts] = useState<TemperatureAlert[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState<boolean>(true);
@@ -46,6 +53,7 @@ export const useDashboardData = () => {
   // Use refs to track initial loading state
   const hasLoadedTemperature = useRef(false);
   const hasLoadedSparkStatus = useRef(false);
+  const hasLoadedStreamsStatus = useRef(false);
   const hasLoadedAlerts = useRef(false);
   
   // Handle errors when they change
@@ -122,6 +130,35 @@ export const useDashboardData = () => {
     return () => clearInterval(interval); // Cleanup interval on component unmount
   }, [autoRefresh]); // Removed setError dependency
 
+  // Fetch Spark streams status
+  const fetchStreamsStatusNow = useCallback(async () => {
+      if (hasLoadedStreamsStatus.current) {
+        setRefreshingStreamsStatus(true);
+      } else {
+        setLoadingStreamsStatus(true);
+      }
+      
+      try {
+        const data = await fetchSparkStreamsStatus();
+        setSparkStreamsStatus(data);
+        hasLoadedStreamsStatus.current = true;
+      } catch (error: unknown) {
+        setLatestError(error);
+        reportClientError({ message: String(error), severity: 'error', component: 'useDashboardData', context: 'fetchStreamsStatusNow' }).catch(() => {});
+        // Don't clear existing data on error if we have it
+      } finally {
+        setLoadingStreamsStatus(false);
+        setRefreshingStreamsStatus(false);
+      }
+    }, []);
+
+  useEffect(() => {
+    fetchStreamsStatusNow();
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchStreamsStatusNow, 15000);
+    return () => clearInterval(interval); // Cleanup interval on component unmount
+  }, [autoRefresh]); // Removed setError dependency
+
   // Fetch temperature alerts
   const fetchAlertsNow = useCallback(async () => {
       if (hasLoadedAlerts.current) {
@@ -165,6 +202,7 @@ export const useDashboardData = () => {
       await Promise.all([
         fetchTemperature(),
         fetchSparkStatusNow(),
+        fetchStreamsStatusNow(),
         fetchAlertsNow(),
       ]);
       setLastUpdated(new Date());
@@ -174,6 +212,11 @@ export const useDashboardData = () => {
     sparkMasterStatus,
     loadingSparkStatus,
     refreshingSparkStatus,
+    
+    // Spark streams status
+    sparkStreamsStatus,
+    loadingStreamsStatus,
+    refreshingStreamsStatus,
     
     // Temperature alerts
     temperatureAlerts,
