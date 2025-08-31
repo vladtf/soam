@@ -10,6 +10,45 @@ SOAM is a smart city IoT platform built with Python/FastAPI backend, React/TypeS
 
 The architecture follows a **data lake pattern** with Bronze (raw) → Silver (normalized) → Gold (aggregated) layers, all orchestrated through Kubernetes. **Core Data Flow**: MQTT sensors → Ingestor → MinIO (Bronze) → Spark Streaming → Schema Inference → Enrichment → Neo4j/Gold Layer → Dashboard
 
+## Established Good Practices (FOLLOW THESE)
+
+**Based on comprehensive codebase analysis, the following patterns are already established and MUST be maintained:**
+
+### ✅ Dependency Injection Excellence
+- Uses `@lru_cache()` for singleton instances
+- Type aliases provide both DI and type hints: `SparkManagerDep`, `Neo4jManagerDep`, `ConfigDep`, `MinioClientDep`
+- Centralized configuration in `AppConfig`
+
+### ✅ Explicit Error Handling
+- All error functions return `HTTPException` - callers must `raise` them explicitly
+- Specific error types: `bad_request_error()`, `not_found_error()`, `conflict_error()`, `internal_server_error()`
+- Database rollback pattern in all exception handlers
+
+### ✅ Comprehensive Logging with Emojis
+- Standardized emoji prefixes: ✅ (success), ❌ (error), ⚠️ (warning), 🔍 (debug)
+- Context-rich logging with user/operation details
+- Consistent logger creation: `logger = get_logger(__name__)`
+
+### ✅ Response Model Consistency
+- ALWAYS use `response_model=ApiResponse[T]` or `ApiListResponse[T]`
+- Generic typing ensures frontend type safety
+- Meaningful success messages in all responses
+
+### ✅ Import Organization Standards
+- Predictable import order: stdlib → FastAPI → SQLAlchemy → src modules
+- Type alias usage for dependency injection
+- Consistent utility imports
+
+### ✅ Database Transaction Patterns
+- Input validation before database operations
+- Explicit transaction management with rollback
+- User context tracking in all mutations
+
+### ✅ Router Structure Conventions
+- HTTP methods in logical order: GET (list, single) → POST → PATCH → DELETE
+- Consistent endpoint naming and prefixing
+- Action endpoints placed after CRUD operations
+
 ## Tech Map / Key Files
 
 ### Infrastructure & Deployment
@@ -40,19 +79,124 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 
 ## Critical Development Patterns
 
-### 1. Dependency Injection Architecture
-All services use FastAPI's DI pattern. Key dependencies are in `src/api/dependencies.py`:
+### 1. Dependency Injection Architecture (MANDATORY)
+**Pattern**: All services use FastAPI's DI with cached instances and type aliases
+**Location**: `src/api/dependencies.py` - Central DI configuration
+
 ```python
-# Always use these patterns for new endpoints
-from src.api.dependencies import get_spark_manager, get_neo4j_manager
+# ALWAYS use these exact imports and patterns for new endpoints
+from src.api.dependencies import SparkManagerDep, Neo4jManagerDep, ConfigDep, MinioClientDep
 from fastapi import Depends
 
-@router.get("/endpoint")
-async def handler(spark_manager = Depends(get_spark_manager)):
+@router.get("/endpoint", response_model=ApiResponse)
+async def handler(spark_manager: SparkManagerDep, config: ConfigDep):
+    # Type aliases provide dependency injection + type hints
     # Spark session available via spark_manager.session_manager.spark
+    return success_response(data=result)
 ```
 
-### 2. Schema Inference System (Critical)
+**Key Benefits**: 
+- `@lru_cache()` ensures singleton instances across requests
+- Type aliases (`SparkManagerDep`, `Neo4jManagerDep`) provide both DI and typing
+- Centralized configuration management via `AppConfig`
+
+### 2. Explicit Error Handling (MANDATORY)
+**Pattern**: All error utilities return exceptions that must be explicitly raised
+
+```python
+from src.api.response_utils import success_response, not_found_error, bad_request_error, internal_server_error
+
+@router.patch("/endpoint/{item_id}")
+def update_item(item_id: int, payload: UpdatePayload):
+    try:
+        if not payload.updated_by or not payload.updated_by.strip():
+            raise bad_request_error("User information required (updated_by)")
+        
+        item = db.query(Item).filter(Item.id == item_id).one_or_none()
+        if not item:
+            raise not_found_error("Item not found")
+            
+        # Update logic...
+        return success_response(item.to_dict(), "Item updated successfully")
+    except Exception as e:
+        logger.error("Error updating item: %s", e)
+        db.rollback()
+        raise internal_server_error("Failed to update item", str(e))
+```
+
+**Key Rules**: 
+- NEVER call error functions directly - always `raise error_function()`
+- Use specific error types: `bad_request_error()`, `not_found_error()`, `conflict_error()`, `internal_server_error()`
+- Always include database rollback in exception handlers
+- Provide detailed error messages for debugging
+
+### 3. Comprehensive Logging (MANDATORY)
+**Pattern**: Standardized logging with emojis and context
+
+```python
+from src.utils.logging import get_logger
+logger = get_logger(__name__)
+
+# Use emoji prefixes for easy log scanning
+logger.info("✅ Device updated by '%s': %s changes", user, "; ".join(changes))
+logger.error("❌ Failed to update device: %s", str(e))
+logger.warning("⚠️ Potential schema conflict detected")
+logger.debug("🔍 Processing batch with %d files", file_count)
+```
+
+**Logging Standards**:
+- ✅ Success operations with context details
+- ❌ Errors with full exception details
+- ⚠️ Warnings for potential issues
+- 🔍 Debug information for troubleshooting
+- Always include user/operation context in business logic logs
+
+### 4. API Response Pattern (MANDATORY)
+**Pattern**: Consistent response models and utilities
+
+```python
+from src.api.response_utils import success_response, list_response
+from src.api.models import ApiResponse, ApiListResponse
+
+@router.get("/items", response_model=ApiListResponse[ItemResponse])
+def list_items():
+    items = db.query(Item).all()
+    return list_response([item.to_dict() for item in items], "Items retrieved successfully")
+
+@router.post("/items", response_model=ApiResponse[ItemResponse]) 
+def create_item(payload: ItemCreate):
+    # Create logic...
+    return success_response(item.to_dict(), "Item created successfully")
+```
+
+**Response Standards**:
+- ALWAYS specify `response_model=ApiResponse[T]` or `ApiListResponse[T]`
+- Use `success_response()` for single items, `list_response()` for collections
+- Include meaningful success messages
+- Generic `T` types ensure frontend type safety
+
+### 5. API Decorators (RECOMMENDED)
+**Pattern**: Use decorators to reduce boilerplate error handling
+
+```python
+from src.utils.api_utils import handle_api_errors, handle_api_errors_sync
+
+@router.get("/config", response_model=ApiResponse)
+@handle_api_errors("get system configuration")
+async def get_config():
+    # No try/catch needed - decorator handles exceptions
+    return success_response(data=config_data, message="Config retrieved")
+
+# For sync endpoints
+@router.get("/sync-endpoint", response_model=ApiResponse)  
+@handle_api_errors_sync("sync operation")
+def sync_handler():
+    return success_response(data=result)
+```
+
+**Benefits**: Eliminates repetitive try/catch blocks, standardizes error responses
+
+### 6. Schema Inference System (Critical)
 **Location**: `backend/src/schema_inference/` - This is a modular package that automatically infers schemas from bronze files.
 
 **Key Pattern**: Never read parquet files with Spark streaming directly - use batch processing:
@@ -64,21 +208,11 @@ stream = spark.readStream.parquet(path)
 stream = spark.readStream.format("rate").trigger(processingTime="30 seconds")
 ```
 
-### 3. Data Layer Patterns
+### 7. Data Layer Patterns
 - **Bronze**: Raw sensor data in `s3a://lake/bronze/ingestion_id=*/date=*/hour=*/*.parquet`
 - **Silver**: Normalized data via Spark enrichment pipeline
 - **Gold**: Aggregated data and alerts stored in Neo4j
 - **Schema Storage**: SQLite database with `SchemaInfo` and `SchemaInferenceLog` tables
-
-### 4. API Response Pattern
-```python
-from src.api.response_utils import success_response, internal_server_error
-from src.api.models import ApiResponse
-
-@router.get("/endpoint", response_model=ApiResponse)
-async def handler():
-    return success_response(data={"result": data}, message="Success")
-```
 
 ## Dev Workflow (Windows PowerShell)
 
@@ -238,7 +372,7 @@ kubectl exec -it backend-0 -- /bin/bash
 
 ## Code Conventions
 
-### Python (Backend/Ingestor)
+### Python (Backend/Ingestor) - MANDATORY Patterns
 ```powershell
 # Use pipenv for all Python operations
 cd backend
@@ -252,6 +386,98 @@ pipenv shell
 
 # Run tests
 # pipenv run pytest tests/
+```
+
+### Module Import Standards (MANDATORY)
+**Pattern**: Consistent import organization for all route files
+
+```python
+"""
+Module docstring describing the API endpoints.
+"""
+import logging
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+# API models and response utilities (always these exact imports)
+from src.api.models import ApiResponse, ApiListResponse, [SpecificModels]
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
+
+# Dependencies (use type aliases)
+from src.api.dependencies import SparkManagerDep, Neo4jManagerDep, ConfigDep, MinioClientDep
+from src.database.database import get_db  # Only for DB routes
+
+# Utilities
+from src.utils.logging import get_logger
+from src.utils.api_utils import handle_api_errors, handle_api_errors_sync  # When using decorators
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/api", tags=["feature_name"])
+```
+
+### Database Operations (MANDATORY)
+**Pattern**: Explicit transaction management with rollback handling
+
+```python
+@router.post("/items", response_model=ApiResponse[ItemResponse])
+def create_item(payload: ItemCreate, db: Session = Depends(get_db)):
+    try:
+        # Validate input first
+        if not payload.created_by or not payload.created_by.strip():
+            raise bad_request_error("User information required (created_by)")
+        
+        # Check for existing records
+        existing = db.query(Item).filter(Item.name == payload.name).one_or_none()
+        if existing:
+            raise conflict_error("Item already exists")
+            
+        # Create new record
+        item = Item(
+            name=payload.name,
+            description=payload.description,
+            created_by=payload.created_by.strip()
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        
+        logger.info("✅ Item created by '%s': %s", payload.created_by, item.name)
+        return success_response(item.to_dict(), "Item created successfully")
+    except Exception as e:
+        logger.error("❌ Error creating item: %s", e)
+        db.rollback()  # ALWAYS rollback on exceptions
+        raise internal_server_error("Failed to create item", str(e))
+```
+
+### Router Organization (MANDATORY)
+**Pattern**: Consistent router structure and endpoint naming
+
+```python
+router = APIRouter(prefix="/api", tags=["feature_name"])
+
+# GET endpoints first (list, then single item)
+@router.get("/items", response_model=ApiListResponse[ItemResponse])
+def list_items(): pass
+
+@router.get("/items/{item_id}", response_model=ApiResponse[ItemResponse])  
+def get_item(): pass
+
+# POST endpoints (create)
+@router.post("/items", response_model=ApiResponse[ItemResponse])
+def create_item(): pass
+
+# PATCH endpoints (update)
+@router.patch("/items/{item_id}", response_model=ApiResponse[ItemResponse])
+def update_item(): pass
+
+# DELETE endpoints
+@router.delete("/items/{item_id}", response_model=ApiResponse)
+def delete_item(): pass
+
+# Special action endpoints last
+@router.post("/items/{item_id}/action", response_model=ApiResponse)
+def perform_action(): pass
 ```
 
 ### Error Handling & Logging
@@ -329,6 +555,35 @@ When implementing new features, always:
    - Check logs for errors: `kubectl logs -f statefulset/backend`
    - Verify frontend integration at `http://localhost:3000`
 
+## Implementation Standards Checklist
+
+**Before submitting any code, verify:**
+
+### ✅ Dependency Injection
+- [ ] Uses type aliases: `SparkManagerDep`, `Neo4jManagerDep`, `ConfigDep`, `MinioClientDep`
+- [ ] Follows centralized DI pattern from `dependencies.py`
+- [ ] No direct instantiation of services in endpoints
+
+### ✅ Error Handling
+- [ ] All error functions use `raise error_function()` pattern
+- [ ] Database rollback in all exception handlers
+- [ ] Specific error types used (not generic `HTTPException`)
+
+### ✅ Logging
+- [ ] Uses `get_logger(__name__)` for logger creation
+- [ ] Emoji prefixes: ✅ ❌ ⚠️ 🔍
+- [ ] Context included in business logic logs (user, operation details)
+
+### ✅ Response Models
+- [ ] `response_model=ApiResponse[T]` or `ApiListResponse[T]` specified
+- [ ] Generic typing used for type safety
+- [ ] Meaningful success messages included
+
+### ✅ Code Organization
+- [ ] Imports organized: stdlib → FastAPI → SQLAlchemy → src modules
+- [ ] Router endpoints ordered: GET → POST → PATCH → DELETE
+- [ ] Database operations include input validation and user context
+
 ## Safe Ops Rules
 
 ### NEVER (without confirmation):
@@ -354,6 +609,10 @@ When implementing new features, always:
 - Use dependency injection pattern for new endpoints
 - Test schema changes with `/api/schema/stream/status` endpoint
 - Use PowerShell for CLI commands
+- Use explicit error raising: `raise error_function()`
+- Include database rollback in exception handlers
+- Use emojis in logging for quick visual scanning
+- Specify response models with generic typing
 
 ## AI Copilot Integration
 
@@ -393,14 +652,42 @@ $response = Invoke-RestMethod -Uri "http://localhost:8000/api/endpoint" -Method 
 ### FastAPI Router Template
 ```python
 from fastapi import APIRouter, Depends
-from src.api.models import ApiResponse
-from src.api.response_utils import success_response
+from sqlalchemy.orm import Session
+from src.api.models import ApiResponse, ApiListResponse
+from src.api.response_utils import success_response, not_found_error, bad_request_error, internal_server_error
+from src.api.dependencies import SparkManagerDep, Neo4jManagerDep, ConfigDep
+from src.database.database import get_db
+from src.utils.logging import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/feature", tags=["feature"])
 
-@router.get("/endpoint", response_model=ApiResponse)
-async def get_data():
-    return success_response(data={"result": "value"})
+@router.get("/items", response_model=ApiListResponse[ItemResponse])
+def list_items(db: Session = Depends(get_db)):
+    try:
+        items = db.query(Item).all()
+        return list_response([item.to_dict() for item in items], "Items retrieved successfully")
+    except Exception as e:
+        logger.error("❌ Error listing items: %s", e)
+        raise internal_server_error("Failed to retrieve items", str(e))
+
+@router.post("/items", response_model=ApiResponse[ItemResponse])
+def create_item(payload: ItemCreate, db: Session = Depends(get_db)):
+    try:
+        if not payload.created_by or not payload.created_by.strip():
+            raise bad_request_error("User information required (created_by)")
+            
+        item = Item(**payload.dict())
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        
+        logger.info("✅ Item created by '%s': %s", payload.created_by, item.name)
+        return success_response(item.to_dict(), "Item created successfully")
+    except Exception as e:
+        logger.error("❌ Error creating item: %s", e)
+        db.rollback()
+        raise internal_server_error("Failed to create item", str(e))
 ```
 
 ## Glossary
