@@ -7,8 +7,17 @@ export default defineConfig({
   build: {
     sourcemap: true, // Enable source maps for better error messages
     minify: false,   // Disable minification in development builds
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      }
+    }
   },
   server: {
     port: 3000,
-  }
+    host: true,
+  },
+  base: '/', // Ensure assets are loaded from root
 })
