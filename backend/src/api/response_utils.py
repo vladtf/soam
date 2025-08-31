@@ -26,33 +26,33 @@ def error_response(
     detail: Optional[str] = None,
     status_code: int = 400,
     status_text: str = "error"
-) -> None:
-    """Create an error API response and raise HTTPException with proper status code."""
+) -> HTTPException:
+    """Create an error API response and return HTTPException with proper status code."""
     error_detail = detail or message
-    raise HTTPException(
+    return HTTPException(
         status_code=status_code,
         detail=error_detail
     )
 
 
-def not_found_error(message: str = "Resource not found", detail: Optional[str] = None) -> None:
-    """Raise a 404 Not Found error."""
-    error_response(message, detail, status_code=404)
+def not_found_error(message: str = "Resource not found", detail: Optional[str] = None) -> HTTPException:
+    """Return a 404 Not Found error."""
+    return error_response(message, detail, status_code=404)
 
 
-def bad_request_error(message: str, detail: Optional[str] = None) -> None:
-    """Raise a 400 Bad Request error."""
-    error_response(message, detail, status_code=400)
+def bad_request_error(message: str, detail: Optional[str] = None) -> HTTPException:
+    """Return a 400 Bad Request error."""
+    return error_response(message, detail, status_code=400)
 
 
-def internal_server_error(message: str = "Internal server error", detail: Optional[str] = None) -> None:
-    """Raise a 500 Internal Server Error."""
-    error_response(message, detail, status_code=500)
+def internal_server_error(message: str = "Internal server error", detail: Optional[str] = None) -> HTTPException:
+    """Return a 500 Internal Server Error."""
+    return error_response(message, detail, status_code=500)
 
 
-def conflict_error(message: str, detail: Optional[str] = None) -> None:
-    """Raise a 409 Conflict error."""
-    error_response(message, detail, status_code=409)
+def conflict_error(message: str, detail: Optional[str] = None) -> HTTPException:
+    """Return a 409 Conflict error."""
+    return error_response(message, detail, status_code=409)
 
 
 def list_response(

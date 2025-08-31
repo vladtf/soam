@@ -12,7 +12,7 @@ def validate_dataset(ds: str) -> str:
     ds = ds.lower()
     allowed_datasets = {"bronze", "silver", "gold", "enriched", "alerts", "sensors", "gold_temp_avg", "gold_alerts"}
     if ds not in allowed_datasets:
-        bad_request_error(f"Invalid dataset. Use {', '.join(sorted(allowed_datasets))}")
+        raise bad_request_error(f"Invalid dataset. Use {', '.join(sorted(allowed_datasets))}")
     return ds
 
 
@@ -20,13 +20,13 @@ def validate_username(username: str) -> str:
     """Validate username format and security."""
     username = username.strip()
     if not (3 <= len(username) <= 32):
-        bad_request_error("Username must be 3-32 characters long")
+        raise bad_request_error("Username must be 3-32 characters long")
     if not re.match(r"^[A-Za-z0-9_.-]+$", username):
-        bad_request_error("Username contains invalid characters")
+        raise bad_request_error("Username contains invalid characters")
     
     # Additional sanitization to prevent SQL injection or unsafe characters
     if re.search(r"[;'\"]|--|\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b", username, re.IGNORECASE):
-        bad_request_error("Username contains unsafe characters or SQL keywords")
+        raise bad_request_error("Username contains unsafe characters or SQL keywords")
     
     return username
 

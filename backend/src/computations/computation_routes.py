@@ -44,7 +44,7 @@ def preview_example_computation(example_id: str, spark: SparkManager = Depends(g
     """Preview an example computation by ID."""
     example = get_example_by_id(example_id)
     if not example:
-        not_found_error("Example computation not found")
+        raise not_found_error("Example computation not found")
     
     try:
         service = ComputationService(db=None, spark_manager=spark)
@@ -62,7 +62,7 @@ def preview_example_computation(example_id: str, spark: SparkManager = Depends(g
         raise
     except Exception as e:
         logger.exception(f"Example computation preview failed for {example_id}")
-        bad_request_error(str(e))
+        raise bad_request_error(str(e))
 
 
 @router.get("/computations/schemas", response_model=ApiResponse)
@@ -82,7 +82,7 @@ def list_computations(db: Session = Depends(get_db)):
         return list_response(computations, message="Computations retrieved successfully")
     except Exception as e:
         logger.error("Error listing computations: %s", e)
-        internal_server_error("Failed to retrieve computations", str(e))
+        raise internal_server_error("Failed to retrieve computations", str(e))
 
 
 @router.post("/computations", response_model=ApiResponse[ComputationResponse])
@@ -96,10 +96,10 @@ def create_computation(payload: ComputationCreate, db: Session = Depends(get_db)
         # Let FastAPI handle HTTPExceptions (like 409 conflicts) directly
         raise
     except ValueError as e:
-        bad_request_error(str(e))
+        raise bad_request_error(str(e))
     except Exception as e:
         logger.error("Error creating computation: %s", e)
-        internal_server_error("Failed to create computation", str(e))
+        raise internal_server_error("Failed to create computation", str(e))
 
 
 @router.patch("/computations/{comp_id}", response_model=ApiResponse[ComputationResponse])
@@ -113,10 +113,10 @@ def update_computation(comp_id: int, payload: ComputationUpdate, db: Session = D
         # Let FastAPI handle HTTPExceptions (like 404, 409) directly
         raise
     except ValueError as e:
-        bad_request_error(str(e))
+        raise bad_request_error(str(e))
     except Exception as e:
         logger.error("Error updating computation: %s", e)
-        internal_server_error("Failed to update computation", str(e))
+        raise internal_server_error("Failed to update computation", str(e))
 
 
 @router.delete("/computations/{comp_id}", response_model=ApiResponse)
@@ -131,7 +131,7 @@ def delete_computation(comp_id: int, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error("Error deleting computation: %s", e)
-        internal_server_error("Failed to delete computation", str(e))
+        raise internal_server_error("Failed to delete computation", str(e))
 
 
 @router.post("/computations/{comp_id}/preview", response_model=ApiResponse)
@@ -145,7 +145,7 @@ def preview_computation(comp_id: int, db: Session = Depends(get_db), spark: Spar
         # Let FastAPI handle HTTPExceptions directly
         raise
     except ValueError as e:
-        bad_request_error(str(e))
+        raise bad_request_error(str(e))
     except Exception as e:
         logger.exception("Computation preview failed")
-        bad_request_error(str(e))
+        raise bad_request_error(str(e))

@@ -21,7 +21,7 @@ async def get_buildings(neo4j_manager: Neo4jManagerDep):
         return list_response(buildings, message="Buildings retrieved successfully")
     except Exception as e:
         logger.error(f"Error fetching buildings: {str(e)}")
-        internal_server_error("Failed to retrieve buildings", str(e))
+        raise internal_server_error("Failed to retrieve buildings", str(e))
 
 
 @router.post("/buildings", response_model=ApiResponse)
@@ -33,13 +33,13 @@ async def add_building(building: BuildingCreateNeo4j, neo4j_manager: Neo4jManage
         return success_response(res, "Building added successfully")
     except ValueError as e:
         logger.error(f"Invalid data in add_building: {str(e)}")
-        bad_request_error(str(e))
+        raise bad_request_error(str(e))
     except ConnectionError as e:
         logger.error(f"Database connection error in add_building: {str(e)}")
-        internal_server_error("Database connection error", str(e))
+        raise internal_server_error("Database connection error", str(e))
     except Exception as e:
         logger.error(f"Error adding building: {str(e)}")
-        internal_server_error("Failed to add building", str(e))
+        raise internal_server_error("Failed to add building", str(e))
 
 
 @router.delete("/buildings", response_model=ApiResponse)
@@ -55,10 +55,10 @@ async def delete_building(
         return success_response(None, "Building deleted successfully")
     except ValueError as e:
         logger.error(f"Invalid data in delete_building: {str(e)}")
-        not_found_error(str(e))
+        raise not_found_error(str(e))
     except ConnectionError as e:
         logger.error(f"Database connection error in delete_building: {str(e)}")
-        internal_server_error("Database connection error", str(e))
+        raise internal_server_error("Database connection error", str(e))
     except Exception as e:
         logger.error(f"Error deleting building: {str(e)}")
-        internal_server_error("Failed to delete building", str(e))
+        raise internal_server_error("Failed to delete building", str(e))

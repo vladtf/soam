@@ -24,7 +24,7 @@ def list_devices(db: Session = Depends(get_db)) -> ApiListResponse[DeviceRespons
         return list_response(devices, message="Devices retrieved successfully")
     except Exception as e:
         logger.error("Error listing devices: %s", e)
-        internal_server_error("Failed to retrieve devices", str(e))
+        raise internal_server_error("Failed to retrieve devices", str(e))
 
 
 @router.post("/devices", response_model=ApiResponse[DeviceResponse])
@@ -32,7 +32,7 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)) -> Api
     try:
         # Validate user is provided
         if not payload.created_by or not payload.created_by.strip():
-            bad_request_error("User information required (created_by)")
+            raise bad_request_error("User information required (created_by)")
         
         # Initial registration should only require ingestion_id.
         # If a device with the same ingestion_id exists, update its metadata; otherwise create it.
@@ -65,7 +65,7 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)) -> Api
     except Exception as e:
         logger.error("Error registering device: %s", e)
         db.rollback()
-        internal_server_error("Failed to register device", str(e))
+        raise internal_server_error("Failed to register device", str(e))
 
 
 @router.patch("/devices/{device_id}", response_model=ApiResponse[DeviceResponse])
@@ -73,11 +73,11 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
     try:
         # Validate user is provided
         if not payload.updated_by or not payload.updated_by.strip():
-            bad_request_error("User information required (updated_by)")
+            raise bad_request_error("User information required (updated_by)")
         
         row: Device | None = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
-            not_found_error("Device not found")
+            raise not_found_error("Device not found")
         
         changes: List[str] = []
         if payload.name is not None and payload.name != row.name:
@@ -107,7 +107,7 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
     except Exception as e:
         logger.error("Error updating device: %s", e)
         db.rollback()
-        internal_server_error("Failed to update device", str(e))
+        raise internal_server_error("Failed to update device", str(e))
 
 
 @router.delete("/devices/{device_id}", response_model=ApiResponse)
@@ -115,14 +115,14 @@ def delete_device(device_id: int, db: Session = Depends(get_db)) -> ApiResponse:
     try:
         row: Device | None = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
-            not_found_error("Device not found")
+            raise not_found_error("Device not found")
         db.delete(row)
         db.commit()
         return success_response({"message": "Device deleted"}, "Device deleted successfully")
     except Exception as e:
         logger.error("Error deleting device: %s", e)
         db.rollback()
-        internal_server_error("Failed to delete device", str(e))
+        raise internal_server_error("Failed to delete device", str(e))
 
 
 @router.post("/devices/{device_id}/toggle", response_model=ApiResponse[DeviceResponse])
@@ -130,7 +130,7 @@ def toggle_device(device_id: int, db: Session = Depends(get_db)) -> ApiResponse[
     try:
         row: Device | None = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
-            not_found_error("Device not found")
+            raise not_found_error("Device not found")
         row.enabled = not row.enabled
         db.add(row)
         db.commit()
@@ -139,4 +139,4 @@ def toggle_device(device_id: int, db: Session = Depends(get_db)) -> ApiResponse[
     except Exception as e:
         logger.error("Error toggling device: %s", e)
         db.rollback()
-        internal_server_error("Failed to toggle device", str(e))
+        raise internal_server_error("Failed to toggle device", str(e))

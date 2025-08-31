@@ -48,7 +48,7 @@ def list_rules(db: Session = Depends(get_db)):
         )
     except Exception as e:
         logger.error("Error listing normalization rules: %s", e)
-        internal_server_error("Failed to retrieve normalization rules", str(e))
+        raise internal_server_error("Failed to retrieve normalization rules", str(e))
 
 
 @router.post("/normalization", response_model=ApiResponse)
@@ -91,7 +91,7 @@ def create_rule(payload: NormalizationRuleCreate, db: Session = Depends(get_db))
     except Exception as e:
         db.rollback()
         logger.error("Error creating normalization rule: %s", e)
-        internal_server_error("Failed to create normalization rule", str(e))
+        raise internal_server_error("Failed to create normalization rule", str(e))
 
 
 @router.patch("/normalization/{rule_id}", response_model=ApiResponse)
@@ -100,7 +100,7 @@ def update_rule(rule_id: int, payload: NormalizationRuleUpdate, db: Session = De
     try:
         rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
         if not rule:
-            not_found_error("Rule not found")
+            raise not_found_error("Rule not found")
 
         changes = []
         if payload.canonical_key is not None and payload.canonical_key.strip() != rule.canonical_key:
@@ -145,7 +145,7 @@ def update_rule(rule_id: int, payload: NormalizationRuleUpdate, db: Session = De
     except Exception as e:
         db.rollback()
         logger.error("Error updating normalization rule %d: %s", rule_id, e)
-        internal_server_error("Failed to update normalization rule", str(e))
+        raise internal_server_error("Failed to update normalization rule", str(e))
 
 
 @router.delete("/normalization/{rule_id}", response_model=ApiResponse)
@@ -154,7 +154,7 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
     try:
         rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
         if not rule:
-            not_found_error("Rule not found")
+            raise not_found_error("Rule not found")
         db.delete(rule)
         db.commit()
         logger.info("Normalization rule deleted: id=%d", rule_id)
@@ -162,4 +162,4 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         logger.error("Error deleting normalization rule %d: %s", rule_id, e)
-        internal_server_error("Failed to delete normalization rule", str(e))
+        raise internal_server_error("Failed to delete normalization rule", str(e))

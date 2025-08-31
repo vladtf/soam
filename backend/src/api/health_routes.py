@@ -64,7 +64,7 @@ async def get_readiness_status(
     
     if not ready_status["ready"]:
         # Use internal_server_error for readiness failures
-        internal_server_error(message, None)
+        raise internal_server_error(message, None)
     
     return success_response(
         data=ready_status,

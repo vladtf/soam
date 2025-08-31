@@ -59,7 +59,7 @@ async def generate_computation(
         raise
     except Exception as e:
         logger.error(f"Error generating computation: {e}")
-        return internal_server_error("Failed to generate computation", str(e))
+        raise internal_server_error("Failed to generate computation", str(e))
 
 @router.get("/copilot/context", response_model=ApiResponse)
 async def get_copilot_context(
@@ -86,7 +86,7 @@ async def get_copilot_context(
         )
     except Exception as e:
         logger.error(f"Error retrieving context: {e}")
-        return internal_server_error("Failed to retrieve context", str(e))
+        raise internal_server_error("Failed to retrieve context", str(e))
 
 @router.get("/copilot/health", response_model=ApiResponse)
 async def copilot_health():
@@ -106,4 +106,4 @@ async def copilot_health():
             message="Copilot service available"
         )
     except Exception as e:
-        return internal_server_error("Failed to check copilot health", str(e))
+        raise internal_server_error("Failed to check copilot health", str(e))

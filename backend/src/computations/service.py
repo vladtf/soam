@@ -38,11 +38,11 @@ class ComputationService:
         # Validate computation definition
         validation_result = validate_computation_definition(payload.definition)
         if not validation_result.get("valid", False):
-            bad_request_error(validation_result.get("message", "Invalid computation definition"))
+            raise bad_request_error(validation_result.get("message", "Invalid computation definition"))
         
         # Check for unique name
         if self.db.query(Computation).filter(Computation.name == payload.name).first():
-            conflict_error("Computation name already exists")
+            raise conflict_error("Computation name already exists")
         
         # Create computation
         computation = Computation(
@@ -71,9 +71,10 @@ class ComputationService:
         
         computation = self.db.get(Computation, comp_id)
         if not computation:
-            not_found_error("Computation not found")
+            raise not_found_error("Computation not found")
         
         validated_username = validate_username(payload.updated_by)
+        
         changes = []
         
         # Update fields if provided and changed
@@ -89,7 +90,7 @@ class ComputationService:
         if payload.definition is not None:
             validation_result = validate_computation_definition(payload.definition)
             if not validation_result.get("valid", False):
-                bad_request_error(validation_result.get("message", "Invalid computation definition"))
+                raise bad_request_error(validation_result.get("message", "Invalid computation definition"))
             import hashlib
             old_def = json.loads(computation.definition) if computation.definition else {}
             
@@ -123,7 +124,7 @@ class ComputationService:
         """Delete a computation."""
         computation = self.db.get(Computation, comp_id)
         if not computation:
-            not_found_error("Computation not found")
+            raise not_found_error("Computation not found")
         
         self.db.delete(computation)
         self.db.commit()
@@ -137,7 +138,7 @@ class ComputationService:
         
         computation = self.db.get(Computation, comp_id)
         if not computation:
-            not_found_error("Computation not found")
+            raise not_found_error("Computation not found")
         
         try:
             definition = json.loads(computation.definition)

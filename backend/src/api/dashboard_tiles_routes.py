@@ -81,7 +81,7 @@ def update_tile(tile_id: int, payload: DashboardTileUpdate, db: Session = Depend
 def delete_tile(tile_id: int, db: Session = Depends(get_db)):
     row = db.get(DashboardTile, tile_id)
     if not row:
-        not_found_error("Dashboard tile not found")
+        raise not_found_error("Dashboard tile not found")
     db.delete(row)
     db.commit()
     return success_response(message="Dashboard tile deleted successfully")
@@ -132,10 +132,10 @@ def get_tile_examples(db: Session = Depends(get_db)):
 def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
     tile = db.get(DashboardTile, tile_id)
     if not tile:
-        not_found_error("Dashboard tile not found")
+        raise not_found_error("Dashboard tile not found")
     comp = db.get(Computation, tile.computation_id)
     if not comp:
-        bad_request_error("Computation not found")
+        raise bad_request_error("Computation not found")
     
     defn = json.loads(comp.definition) if comp.definition else {}
     

@@ -73,7 +73,7 @@ async def get_feedback(
     feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
     
     if not feedback:
-        not_found_error("Feedback not found")
+        raise not_found_error("Feedback not found")
         
     return FeedbackResponse(
         id=feedback.id,
