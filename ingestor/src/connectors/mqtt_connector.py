@@ -8,6 +8,7 @@ from typing import Dict, Any
 import paho.mqtt.client as mqtt
 from datetime import datetime, timezone
 from .base import BaseDataConnector, DataMessage, ConnectorStatus
+from ..utils.timestamp_utils import extract_timestamp
 
 
 class MQTTConnector(BaseDataConnector):
@@ -125,7 +126,7 @@ class MQTTConnector(BaseDataConnector):
                     "ingestion_timestamp": datetime.now(timezone.utc).isoformat()
                 },
                 source_id=topic_specific_source_id,  # Use topic-specific ID
-                timestamp=data.get("timestamp") if isinstance(data, dict) else datetime.now(timezone.utc).isoformat(),
+                timestamp=extract_timestamp(data.get("timestamp")) if isinstance(data, dict) else datetime.now(timezone.utc).isoformat(),
                 raw_payload=raw_payload
             )
             

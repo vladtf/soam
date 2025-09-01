@@ -14,6 +14,7 @@ from src.middleware import RequestIdMiddleware
 from src.database.database import init_database
 from src.services.data_source_service import DataSourceRegistry, DataSourceManager
 from src.connectors.base import DataMessage
+from src.utils.timestamp_utils import ensure_datetime
 
 # Configure structured logging once
 setup_logging(service_name="ingestor", log_file="ingestor.log")
@@ -101,18 +102,8 @@ async def lifespan(app: FastAPI):
                 # Ensure proper timestamp format
                 from datetime import datetime, timezone
                 
-                # Use message timestamp if available, otherwise current time
-                if message.timestamp and message.timestamp != 'timestamp':
-                    try:
-                        # Try to parse the timestamp if it's a string
-                        if isinstance(message.timestamp, str):
-                            timestamp = datetime.fromisoformat(message.timestamp.replace('Z', '+00:00'))
-                        else:
-                            timestamp = message.timestamp
-                    except:
-                        timestamp = datetime.now(timezone.utc)
-                else:
-                    timestamp = datetime.now(timezone.utc)
+                # Use the shared utility to ensure we have a datetime object
+                timestamp = ensure_datetime(message.timestamp if message.timestamp and message.timestamp != 'timestamp' else None)
                 
                 # Convert DataMessage to the format expected by MinIO client
                 # The MinIO client expects 'ingestion_id' and 'timestamp' as top-level fields

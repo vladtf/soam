@@ -8,6 +8,7 @@ import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from .base import BaseDataConnector, DataMessage, ConnectorStatus
+from ..utils.timestamp_utils import extract_timestamp
 
 
 class RestApiConnector(BaseDataConnector):
@@ -160,7 +161,7 @@ class RestApiConnector(BaseDataConnector):
                             "method": method
                         },
                         source_id=self.source_id,
-                        timestamp=record.get("timestamp") if isinstance(record, dict) else datetime.now(timezone.utc).isoformat(),
+                        timestamp=extract_timestamp(record.get("timestamp")) if isinstance(record, dict) else datetime.now(timezone.utc).isoformat(),
                         raw_payload=json.dumps(record) if isinstance(record, dict) else str(record)
                     )
                     
