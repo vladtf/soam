@@ -12,6 +12,7 @@ from pyspark.sql.types import StructType
 from .cleaner import DataCleaner
 from ..config import SparkConfig, SparkSchemas
 from .batch_processor import BatchProcessor
+from ...utils.logging import log_execution_time
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,12 @@ class EnrichmentManager:
             # Wait a moment for cleanup
             time.sleep(2)
 
+    @log_execution_time(operation_name="Streaming Schema Inference")
     def _get_streaming_schema(self) -> StructType:
-        """Get the schema for streaming reads with simplified inference.
+        """Get the schema for streaming reads with optimized inference.
+        
+        Uses only the latest file for each ingestion_id to optimize schema inference
+        and relies on the pattern: ingestion_id=*/date=*/hour=*
         
         Returns:
             Spark schema for reading streaming data
@@ -76,13 +81,13 @@ class EnrichmentManager:
         Raises:
             Exception: If no data is available for schema inference
         """
-        logger.info(f"Starting schema inference from path: {self.bronze_path}")
+        logger.info(f"🔍 Starting optimized schema inference from path: {self.bronze_path}")
         
         # Check if any data exists first
         if not self._has_bronze_data():
             raise Exception("No data available in bronze layer for schema inference. Please ensure data ingestion is working.")
         
-        # Try simplified schema inference
+        # Try optimized schema inference
         schema = self._try_schema_inference()
         if schema:
             return schema
@@ -90,111 +95,117 @@ class EnrichmentManager:
         # If inference fails, this is a real issue that needs to be addressed
         raise Exception("Unable to infer schema from any available data. Check data format and structure in bronze layer.")
 
+    @log_execution_time(operation_name="Bronze Data Check")
     def _has_bronze_data(self) -> bool:
-        """Check if bronze layer contains any data."""
+        """Check if bronze layer contains any data using the optimized pattern."""
         try:
             logger.info(f"Checking for data in bronze layer: {self.bronze_path}")
             
-            # Use Spark to check for data existence (works with S3, HDFS, local, etc.)
+            # Use only the specific pattern we want for optimization
+            pattern = f"{self.bronze_path}ingestion_id=*/date=*/hour=*"
+            
             try:
-                # Try to read any parquet files - this will fail if no data exists
-                df_check = self.spark.read.parquet(self.bronze_path)
-                # Try to get the schema without reading data
+                df_check = self.spark.read.option("basePath", self.bronze_path).parquet(pattern)
                 schema = df_check.schema
                 if schema and len(schema.fields) > 0:
-                    logger.info(f"Bronze layer data check: found data with {len(schema.fields)} fields")
+                    logger.info(f"✅ Bronze layer data check: found hourly partitioned data with {len(schema.fields)} fields")
                     return True
                 else:
-                    logger.info("Bronze layer data check: no valid schema found")
+                    logger.info("❌ Bronze layer data check: no valid schema found")
                     return False
-                    
             except Exception as e:
-                logger.debug(f"Direct parquet read failed: {e}")
-                
-                # Try with partition pattern
-                try:
-                    df_check = self.spark.read.parquet(f"{self.bronze_path}ingestion_id=*/*/*")
-                    schema = df_check.schema
-                    if schema and len(schema.fields) > 0:
-                        logger.info(f"Bronze layer data check: found partitioned data with {len(schema.fields)} fields")
-                        return True
-                except Exception as e2:
-                    logger.debug(f"Partitioned read failed: {e2}")
-                    
-                    # Try even more specific pattern
-                    try:
-                        df_check = self.spark.read.option("basePath", self.bronze_path).parquet(
-                            f"{self.bronze_path}ingestion_id=*/date=*/hour=*"
-                        )
-                        schema = df_check.schema
-                        if schema and len(schema.fields) > 0:
-                            logger.info(f"Bronze layer data check: found hourly partitioned data with {len(schema.fields)} fields")
-                            return True
-                    except Exception as e3:
-                        logger.debug(f"Hourly partitioned read failed: {e3}")
-                
-                logger.info("Bronze layer data check: no data found with any pattern")
+                logger.debug(f"❌ Hourly partitioned read failed: {e}")
+                logger.info("❌ Bronze layer data check: no data found with required pattern")
                 return False
                 
         except Exception as e:
-            logger.warning(f"Could not check bronze layer data existence: {e}")
+            logger.warning(f"⚠️ Could not check bronze layer data existence: {e}")
             # If we can't check, assume data might exist and let schema inference handle it
-            logger.info("Bronze layer data check: unknown (assuming data exists)")
+            logger.info("🔍 Bronze layer data check: unknown (assuming data exists)")
             return True
 
+    @log_execution_time(operation_name="Schema Inference from Latest Files")
     def _try_schema_inference(self) -> Optional[StructType]:
-        """Try schema inference with simplified, robust approach."""
-        logger.info("Starting schema inference")
+        """Try schema inference using only latest files for each ingestion_id."""
+        logger.info("🔍 Starting optimized schema inference")
         
-        # Define search patterns in order of preference
-        patterns = [
-            # Most specific pattern first (includes partitioning structure)
-            f"{self.bronze_path}ingestion_id=*/date=*/hour=*",
-            # Fallback patterns for different partition structures
-            f"{self.bronze_path}ingestion_id=*/*/*",
-            f"{self.bronze_path}ingestion_id=*/*",
-            # General patterns if specific partition structure isn't found
-            f"{self.bronze_path}*/*/*",
-            f"{self.bronze_path}*/*",
-            # Base path as last resort
-            self.bronze_path
-        ]
+        # Use only the specific pattern for optimization
+        pattern = f"{self.bronze_path}ingestion_id=*/date=*/hour=*"
         
-        for i, pattern in enumerate(patterns):
-            try:
-                logger.debug(f"Trying pattern {i+1}/{len(patterns)}: {pattern}")
+        try:
+            logger.debug(f"📂 Using pattern: {pattern}")
+            
+            # First, get all files with the pattern to find latest for each ingestion_id
+            all_files_df = (
+                self.spark.read
+                .option("basePath", self.bronze_path)
+                .parquet(pattern)
+            )
+            
+            # Get file metadata to find latest files per ingestion_id
+            # Add file input metadata to track which files we're reading from
+            files_with_metadata = all_files_df.withColumn("input_file", F.input_file_name())
+            
+            # Extract partition info from file paths and find latest file per ingestion_id
+            files_with_partitions = (
+                files_with_metadata
+                .select("ingestion_id", "input_file")
+                .distinct()
+                # Extract date and hour from file path for sorting
+                .withColumn("file_path", F.col("input_file"))
+                # Create a sortable timestamp from the path components
+                .withColumn("path_parts", F.split(F.col("file_path"), "/"))
+            )
+            
+            # Get the latest file for each ingestion_id by finding max file path
+            # (file paths are naturally sortable by date/hour structure)
+            latest_files_per_ingestion = (
+                files_with_partitions
+                .groupBy("ingestion_id")
+                .agg(F.max("file_path").alias("latest_file_path"))
+                .collect()
+            )
+            
+            if not latest_files_per_ingestion:
+                logger.warning("⚠️ No files found with the specified pattern")
+                return None
+            
+            # Read only the latest files for schema inference
+            latest_file_paths = [row.latest_file_path for row in latest_files_per_ingestion]
+            logger.info(f"✅ Found {len(latest_file_paths)} latest files for schema inference")
+            
+            # Read schema from the latest files only
+            static_df = (
+                self.spark.read
+                .option("basePath", self.bronze_path)
+                .option("mergeSchema", "true")  # Handle schema evolution across ingestion_ids
+                .parquet(*latest_file_paths)  # Read specific latest files
+            )
+            
+            schema = static_df.schema
+            
+            if self._validate_schema(schema):
+                schema_field_names = [field.name for field in schema.fields]
+                logger.info(f"✅ Optimized schema inference successful: {len(schema_field_names)} fields found")
+                logger.info(f"📋 Schema fields: {schema_field_names}")
+                unique_ingestion_count = len(set(row.ingestion_id for row in latest_files_per_ingestion))
+                logger.info(f"🎯 Used {len(latest_file_paths)} latest files from {unique_ingestion_count} ingestion ids")
+                return schema
+            else:
+                logger.warning("⚠️ Schema validation failed")
+                return None
                 
-                # Use mergeSchema for the first pattern to handle schema evolution
-                if i == 0:
-                    static_df = (
-                        self.spark.read
-                        .option("basePath", self.bronze_path)
-                        .option("mergeSchema", "true")
-                        .parquet(pattern)
-                    )
-                else:
-                    static_df = self.spark.read.parquet(pattern)
-                
-                schema = static_df.schema
-                
-                if self._validate_schema(schema):
-                    schema_field_names = [field.name for field in schema.fields]
-                    logger.info(f"Schema inference successful with pattern {i+1}: {len(schema_field_names)} fields found")
-                    logger.info(f"Schema fields: {schema_field_names}")
-                    return schema
-                    
-            except Exception as e:
-                logger.debug(f"Pattern {i+1} failed: {e}")
-                continue
-        
-        logger.error("All schema inference patterns failed")
-        return None
+        except Exception as e:
+            logger.error(f"❌ Optimized schema inference failed: {e}")
+            logger.debug(f"Pattern used: {pattern}")
+            return None
 
 
 
     def _validate_schema(self, schema: StructType) -> bool:
         """Validate that the inferred schema has required fields."""
         if not schema or not schema.fields:
+            logger.warning("❌ Schema validation failed - no schema or fields found")
             return False
             
         schema_field_names: List[str] = [field.name for field in schema.fields]
@@ -204,16 +215,68 @@ class EnrichmentManager:
         has_essential: bool = all(field in schema_field_names for field in essential_fields)
         
         if not has_essential:
-            logger.warning(f"Schema validation failed - missing essential fields. Found: {schema_field_names}")
+            logger.warning(f"❌ Schema validation failed - missing essential fields. Found: {schema_field_names}")
             return False
             
         # Check for minimum reasonable field count (avoid empty schemas)
         if len(schema_field_names) < 2:  # At least ingestion_id + one data field
-            logger.warning(f"Schema validation failed - too few fields: {len(schema_field_names)}")
+            logger.warning(f"❌ Schema validation failed - too few fields: {len(schema_field_names)}")
             return False
             
-        logger.info(f"Schema validation passed: {len(schema_field_names)} fields, essential fields present")
+        logger.info(f"✅ Schema validation passed: {len(schema_field_names)} fields, essential fields present")
         return True
+
+    @log_execution_time(operation_name="Bronze Layer Statistics")
+    def get_bronze_layer_stats(self) -> dict:
+        """Get statistics about bronze layer for monitoring and debugging.
+        
+        Returns:
+            Dictionary with bronze layer statistics
+        """
+        try:
+            pattern = f"{self.bronze_path}ingestion_id=*/date=*/hour=*"
+            
+            # Read all files to get statistics
+            all_files_df = (
+                self.spark.read
+                .option("basePath", self.bronze_path)
+                .parquet(pattern)
+            )
+            
+            # Get basic statistics
+            total_records = all_files_df.count()
+            unique_ingestion_ids = all_files_df.select("ingestion_id").distinct().count()
+            
+            # Get file count per ingestion_id
+            files_per_ingestion = (
+                all_files_df
+                .withColumn("input_file", F.input_file_name())
+                .select("ingestion_id", "input_file")
+                .distinct()
+                .groupBy("ingestion_id")
+                .count()
+                .collect()
+            )
+            
+            stats = {
+                "total_records": total_records,
+                "unique_ingestion_ids": unique_ingestion_ids,
+                "files_per_ingestion": {row.ingestion_id: row.count for row in files_per_ingestion},
+                "pattern_used": pattern
+            }
+            
+            logger.info(f"📊 Bronze layer stats: {stats}")
+            return stats
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting bronze layer stats: {e}")
+            return {
+                "error": str(e),
+                "total_records": 0,
+                "unique_ingestion_ids": 0,
+                "files_per_ingestion": {},
+                "pattern_used": pattern
+            }
 
     def _create_raw_stream(self, schema: StructType) -> DataFrame:
         """Create raw streaming DataFrame.
