@@ -7,7 +7,8 @@ from typing import Optional, List
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
-from pyspark.sql.types import StructType
+from pyspark.sql.types import StructType, StructField, DataType
+from pyspark.sql.types import IntegerType, LongType, DoubleType, FloatType, StringType, BooleanType
 
 from .cleaner import DataCleaner
 from ..config import SparkConfig, SparkSchemas
@@ -126,8 +127,8 @@ class EnrichmentManager:
 
     @log_execution_time(operation_name="Schema Inference from Latest Files")
     def _try_schema_inference(self) -> Optional[StructType]:
-        """Try schema inference using only latest files for each ingestion_id."""
-        logger.info("🔍 Starting optimized schema inference")
+        """Try schema inference using only latest files for each ingestion_id with type conflict resolution."""
+        logger.info("🔍 Starting optimized schema inference with type conflict resolution")
         
         # Use only the specific pattern for optimization
         pattern = f"{self.bronze_path}ingestion_id=*/date=*/hour=*"
@@ -136,14 +137,14 @@ class EnrichmentManager:
             logger.debug(f"📂 Using pattern: {pattern}")
             
             # First, get all files with the pattern to find latest for each ingestion_id
-            all_files_df = (
-                self.spark.read
-                .option("basePath", self.bronze_path)
-                .parquet(pattern)
-            )
+            # Use individual file reading to avoid schema merge conflicts during discovery
+            all_files_df = self._read_files_without_merge(pattern)
+            
+            if all_files_df is None:
+                logger.warning("⚠️ No files found with the specified pattern")
+                return None
             
             # Get file metadata to find latest files per ingestion_id
-            # Add file input metadata to track which files we're reading from
             files_with_metadata = all_files_df.withColumn("input_file", F.input_file_name())
             
             # Extract partition info from file paths and find latest file per ingestion_id
@@ -151,14 +152,11 @@ class EnrichmentManager:
                 files_with_metadata
                 .select("ingestion_id", "input_file")
                 .distinct()
-                # Extract date and hour from file path for sorting
                 .withColumn("file_path", F.col("input_file"))
-                # Create a sortable timestamp from the path components
                 .withColumn("path_parts", F.split(F.col("file_path"), "/"))
             )
             
             # Get the latest file for each ingestion_id by finding max file path
-            # (file paths are naturally sortable by date/hour structure)
             latest_files_per_ingestion = (
                 files_with_partitions
                 .groupBy("ingestion_id")
@@ -170,27 +168,20 @@ class EnrichmentManager:
                 logger.warning("⚠️ No files found with the specified pattern")
                 return None
             
-            # Read only the latest files for schema inference
+            # Read schemas from individual files and merge them manually
             latest_file_paths = [row.latest_file_path for row in latest_files_per_ingestion]
             logger.info(f"✅ Found {len(latest_file_paths)} latest files for schema inference")
             
-            # Read schema from the latest files only
-            static_df = (
-                self.spark.read
-                .option("basePath", self.bronze_path)
-                .option("mergeSchema", "true")  # Handle schema evolution across ingestion_ids
-                .parquet(*latest_file_paths)  # Read specific latest files
-            )
+            # Perform custom schema merging with type conflict resolution
+            merged_schema = self._merge_schemas_with_type_resolution(latest_file_paths)
             
-            schema = static_df.schema
-            
-            if self._validate_schema(schema):
-                schema_field_names = [field.name for field in schema.fields]
-                logger.info(f"✅ Optimized schema inference successful: {len(schema_field_names)} fields found")
+            if merged_schema and self._validate_schema(merged_schema):
+                schema_field_names = [field.name for field in merged_schema.fields]
+                logger.info(f"✅ Schema inference with type resolution successful: {len(schema_field_names)} fields found")
                 logger.info(f"📋 Schema fields: {schema_field_names}")
                 unique_ingestion_count = len(set(row.ingestion_id for row in latest_files_per_ingestion))
                 logger.info(f"🎯 Used {len(latest_file_paths)} latest files from {unique_ingestion_count} ingestion ids")
-                return schema
+                return merged_schema
             else:
                 logger.warning("⚠️ Schema validation failed")
                 return None
@@ -199,6 +190,183 @@ class EnrichmentManager:
             logger.error(f"❌ Optimized schema inference failed: {e}")
             logger.debug(f"Pattern used: {pattern}")
             return None
+
+    def _read_files_without_merge(self, pattern: str) -> Optional[DataFrame]:
+        """Read files using a simple approach without schema merging to discover available files."""
+        try:
+            # Try to read with the pattern first to see if any files exist
+            return (
+                self.spark.read
+                .option("basePath", self.bronze_path)
+                # Don't use mergeSchema here - we just want to see if files exist
+                .parquet(pattern)
+            )
+        except Exception as e:
+            logger.debug(f"Could not read files with pattern {pattern}: {e}")
+            return None
+
+    def _merge_schemas_with_type_resolution(self, file_paths: List[str]) -> Optional[StructType]:
+        """Merge schemas from multiple files with automatic type conflict resolution.
+        
+        Args:
+            file_paths: List of file paths to read schemas from
+            
+        Returns:
+            Merged schema with type conflicts resolved, or None if failed
+        """
+        logger.info(f"🔧 Merging schemas from {len(file_paths)} files with type resolution")
+        
+        schemas = []
+        successful_reads = 0
+        
+        # Read schema from each file individually
+        for file_path in file_paths:
+            try:
+                df = (
+                    self.spark.read
+                    .option("basePath", self.bronze_path)
+                    .parquet(file_path)
+                )
+                schemas.append(df.schema)
+                successful_reads += 1
+                logger.debug(f"✅ Read schema from {file_path}: {len(df.schema.fields)} fields")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not read schema from {file_path}: {e}")
+                continue
+        
+        if not schemas:
+            logger.error("❌ Could not read schemas from any files")
+            return None
+        
+        logger.info(f"✅ Successfully read schemas from {successful_reads}/{len(file_paths)} files")
+        
+        # Start with the first schema and merge others
+        merged_schema = schemas[0]
+        
+        for i, schema in enumerate(schemas[1:], 1):
+            try:
+                merged_schema = self._merge_two_schemas(merged_schema, schema)
+                logger.debug(f"✅ Merged schema {i+1}/{len(schemas)}")
+            except Exception as e:
+                logger.error(f"❌ Failed to merge schema {i+1}: {e}")
+                return None
+        
+        logger.info(f"✅ Final merged schema has {len(merged_schema.fields)} fields")
+        return merged_schema
+
+    def _merge_two_schemas(self, schema1: StructType, schema2: StructType) -> StructType:
+        """Merge two schemas with intelligent type resolution for conflicts.
+        
+        Args:
+            schema1: First schema
+            schema2: Second schema
+            
+        Returns:
+            Merged schema with type conflicts resolved
+        """        
+        # Create a map of field names to fields for both schemas
+        fields1 = {field.name: field for field in schema1.fields}
+        fields2 = {field.name: field for field in schema2.fields}
+        
+        # Get all unique field names
+        all_field_names = set(fields1.keys()) | set(fields2.keys())
+        
+        merged_fields = []
+        type_promotions = 0
+        
+        for field_name in sorted(all_field_names):  # Sort for consistent ordering
+            field1 = fields1.get(field_name)
+            field2 = fields2.get(field_name)
+            
+            if field1 and field2:
+                # Both schemas have this field - resolve type conflicts
+                if field1.dataType == field2.dataType:
+                    # Types match - use either field (they're the same)
+                    merged_fields.append(field1)
+                else:
+                    # Types don't match - resolve conflict
+                    resolved_type = self._resolve_type_conflict(
+                        field_name, field1.dataType, field2.dataType
+                    )
+                    if resolved_type != field1.dataType or resolved_type != field2.dataType:
+                        type_promotions += 1
+                        logger.info(f"🔧 Type promotion for '{field_name}': {field1.dataType} + {field2.dataType} -> {resolved_type}")
+                    
+                    # Create new field with resolved type (nullable if either is nullable)
+                    merged_field = StructField(
+                        field_name, 
+                        resolved_type, 
+                        field1.nullable or field2.nullable
+                    )
+                    merged_fields.append(merged_field)
+            elif field1:
+                # Only in first schema
+                merged_fields.append(field1)
+            elif field2:
+                # Only in second schema  
+                merged_fields.append(field2)
+        
+        if type_promotions > 0:
+            logger.info(f"✅ Schema merge completed with {type_promotions} type promotions")
+        else:
+            logger.info("✅ Schema merge completed with no type conflicts")
+        
+        return StructType(merged_fields)
+
+    def _resolve_type_conflict(self, field_name: str, type1: DataType, type2: DataType) -> DataType:
+        """Resolve type conflicts between two data types for the same field.
+        
+        Args:
+            field_name: Name of the field (for logging)
+            type1: First data type
+            type2: Second data type
+            
+        Returns:
+            Resolved data type that can accommodate both types
+        """        
+        # Define type promotion hierarchy for numeric types
+        # Order from most specific to most general
+        numeric_hierarchy = [
+            BooleanType(),  # Can be promoted to any numeric type
+            IntegerType(),  # Can be promoted to long or double
+            LongType(),     # Can be promoted to double
+            FloatType(),    # Can be promoted to double
+            DoubleType(),   # Most general numeric type
+        ]
+        
+        # Get the hierarchy positions (-1 if not numeric)
+        pos1 = self._get_type_hierarchy_position(type1, numeric_hierarchy)
+        pos2 = self._get_type_hierarchy_position(type2, numeric_hierarchy)
+        
+        # Both types are numeric - promote to the more general type
+        if pos1 >= 0 and pos2 >= 0:
+            promoted_type = numeric_hierarchy[max(pos1, pos2)]
+            logger.debug(f"🔢 Numeric type resolution for '{field_name}': {type1} + {type2} -> {promoted_type}")
+            return promoted_type
+        
+        # If one is numeric and the other is string, use string (most compatible)
+        if (pos1 >= 0 and isinstance(type2, StringType)) or (pos2 >= 0 and isinstance(type1, StringType)):
+            logger.debug(f"🔤 Mixed type resolution for '{field_name}': {type1} + {type2} -> StringType")
+            return StringType()
+        
+        # Both are non-numeric and different - use string as fallback
+        logger.debug(f"🔀 Fallback type resolution for '{field_name}': {type1} + {type2} -> StringType")
+        return StringType()
+
+    def _get_type_hierarchy_position(self, data_type: DataType, hierarchy: list) -> int:
+        """Get the position of a data type in the hierarchy.
+        
+        Args:
+            data_type: Data type to find
+            hierarchy: List of types in promotion order
+            
+        Returns:
+            Position in hierarchy, or -1 if not found
+        """
+        for i, hierarchy_type in enumerate(hierarchy):
+            if type(data_type) == type(hierarchy_type):
+                return i
+        return -1
 
 
 
@@ -279,29 +447,52 @@ class EnrichmentManager:
             }
 
     def _create_raw_stream(self, schema: StructType) -> DataFrame:
-        """Create raw streaming DataFrame.
+        """Create raw streaming DataFrame with flexible schema handling.
         
         Args:
-            schema: Schema to use for reading
+            schema: Schema to use as target (with type conflicts resolved)
             
         Returns:
-            Raw streaming DataFrame
+            Raw streaming DataFrame with automatic type adaptation
         """
-        # Read raw parquet with schema
-        raw_stream: DataFrame = (
-            self.spark.readStream
-            .schema(schema)
-            .option("basePath", self.bronze_path)
-            .option("maxFilesPerTrigger", SparkConfig.MAX_FILES_PER_TRIGGER)
-            .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
-        )
-
-        # Add debug logging to see what's in the raw stream before any processing
-        logger.info("Raw stream created successfully")
+        # For streaming, we need a more flexible approach since we can't predict
+        # the schema of each individual file. Instead, we'll read without strict schema
+        # enforcement and then apply normalization.
+        
+        try:
+            # First attempt: try to read with the resolved schema
+            raw_stream: DataFrame = (
+                self.spark.readStream
+                .schema(schema)
+                .option("basePath", self.bronze_path)
+                .option("maxFilesPerTrigger", SparkConfig.MAX_FILES_PER_TRIGGER)
+                .option("ignoreCorruptFiles", "true")  # Skip files that can't be read with this schema
+                .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
+            )
+            
+            logger.info("Raw stream created successfully with resolved schema")
+        except Exception as e:
+            logger.warning(f"Could not create stream with resolved schema: {e}")
+            logger.info("Falling back to schema-flexible reading approach")
+            
+            # Fallback: create a more permissive schema where all potential numeric conflicts are strings
+            # This allows us to handle type conversion in the transformation phase
+            flexible_schema = self._create_flexible_schema(schema)
+            
+            raw_stream = (
+                self.spark.readStream
+                .schema(flexible_schema)
+                .option("basePath", self.bronze_path)
+                .option("maxFilesPerTrigger", SparkConfig.MAX_FILES_PER_TRIGGER)
+                .option("ignoreCorruptFiles", "true")
+                .parquet(f"{self.bronze_path}ingestion_id=*/date=*/hour=*")
+            )
+            
+            logger.info("Raw stream created with flexible schema")
+        
+        # Add debug logging
         try:
             logger.info(f"Raw stream columns ({len(raw_stream.columns)}): {raw_stream.columns}")
-            
-            # Log schema details
             schema_details: List[str] = []
             for field in raw_stream.schema.fields:
                 schema_details.append(f"{field.name}({field.dataType.simpleString()})")
@@ -310,6 +501,35 @@ class EnrichmentManager:
             logger.warning(f"Could not log raw stream details: {e}")
 
         return raw_stream
+
+    def _create_flexible_schema(self, resolved_schema: StructType) -> StructType:
+        """Create a flexible schema that can accommodate type variations.
+        
+        For fields that had type conflicts, use StringType to allow flexible reading,
+        then handle type conversion in the transformation phase.
+        
+        Args:
+            resolved_schema: The schema with resolved type conflicts
+            
+        Returns:
+            Flexible schema that can read files with different numeric types
+        """
+        flexible_fields = []
+        
+        for field in resolved_schema.fields:
+            # For potentially conflicting numeric fields, use string type for flexibility
+            if isinstance(field.dataType, (IntegerType, LongType, DoubleType, FloatType)):
+                # Use string type to avoid read-time type conflicts
+                flexible_field = StructField(field.name, StringType(), nullable=True)
+                flexible_fields.append(flexible_field)
+                logger.debug(f"🔄 Made field '{field.name}' flexible: {field.dataType} -> StringType")
+            else:
+                # Keep non-numeric fields as they are
+                flexible_fields.append(field)
+        
+        flexible_schema = StructType(flexible_fields)
+        logger.info(f"✅ Created flexible schema with {len(flexible_fields)} fields")
+        return flexible_schema
 
     def _transform_to_union_schema(self, raw_stream: DataFrame, schema: StructType) -> DataFrame:
         """Transform raw stream to union schema with normalization.

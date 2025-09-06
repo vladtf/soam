@@ -117,17 +117,26 @@ class UnionSchemaTransformer:
 
     @staticmethod
     def _get_numeric_value(col_name: str, schema: Optional[StructType] = None):
-        """Get numeric value for a column using schema optimization when available."""
-        # Check if schema indicates this field is numeric
-        if schema and UnionSchemaTransformer._is_numeric_by_schema(col_name, schema):
-            logger.debug(f"Schema indicates '{col_name}' is numeric - using direct cast")
-            return F.col(col_name).cast("double")
-        else:
-            # Fallback to runtime pattern matching (device-agnostic)
-            return F.when(
-                F.col(col_name).rlike(r"^-?\d+\.?\d*$"), 
-                F.col(col_name).cast("double")
-            ).otherwise(F.lit(None).cast("double"))
+        """Get numeric value for a column using robust type conversion."""
+        # Always use robust numeric conversion that handles string inputs
+        # This is more resilient to schema evolution issues
+        return F.when(
+            # First check if it's already numeric (for cases where parquet read correctly)
+            F.col(col_name).cast("double").isNotNull() & F.col(col_name).rlike(r"^-?\d*\.?\d+([eE][-+]?\d+)?$"),
+            F.col(col_name).cast("double")
+        ).when(
+            # Handle integer strings (including scientific notation)
+            F.col(col_name).rlike(r"^-?\d+$"), 
+            F.col(col_name).cast("double")
+        ).when(
+            # Handle decimal strings
+            F.col(col_name).rlike(r"^-?\d*\.\d+$"), 
+            F.col(col_name).cast("double")
+        ).when(
+            # Handle scientific notation
+            F.col(col_name).rlike(r"^-?\d*\.?\d+[eE][-+]?\d+$"), 
+            F.col(col_name).cast("double")
+        ).otherwise(F.lit(None).cast("double"))
 
     @staticmethod
     def _is_numeric_by_schema(col_name: str, schema: StructType) -> bool:
@@ -263,39 +272,38 @@ class UnionSchemaTransformer:
 
     @staticmethod
     def _get_normalized_numeric_value(canonical_key: str, raw_keys: List[str], df: DataFrame, schema: Optional[StructType] = None):
-        """Get normalized numeric value using schema optimization when available."""
-        # Check if schema indicates this canonical key should be numeric
-        if schema and UnionSchemaTransformer._is_numeric_by_schema(canonical_key, schema):
-            logger.debug(f"Schema indicates '{canonical_key}' is numeric - using optimized conversion")
-            
-            # For schema-identified numeric fields, try direct casting first
-            numeric_options = []
-            
-            # Try existing normalized value first (it's already numeric)
-            numeric_options.append(df.normalized_data.getItem(canonical_key))
-            
-            # Then try direct casting of raw key variants (they should be numeric strings)
-            for raw_key in raw_keys:
-                numeric_options.append(df.sensor_data.getItem(raw_key).cast("double"))
-            
-            return F.coalesce(*numeric_options)
-        else:
-            # Fallback to runtime pattern matching (device-agnostic)
-            numeric_options = []
-            
-            # Include existing normalized value as fallback
-            numeric_options.append(df.normalized_data.getItem(canonical_key))
-            
-            # Try to convert raw key variants using pattern matching
-            for raw_key in raw_keys:
-                numeric_options.append(
-                    F.when(
-                        df.sensor_data.getItem(raw_key).rlike(r"^-?\d+\.?\d*$"),
-                        df.sensor_data.getItem(raw_key).cast("double")
-                    )
+        """Get normalized numeric value using robust type conversion."""
+        # Use robust conversion that can handle both actual numeric types and string representations
+        numeric_options = []
+        
+        # Include existing normalized value as fallback
+        numeric_options.append(df.normalized_data.getItem(canonical_key))
+        
+        # Try to convert raw key variants using robust pattern matching
+        for raw_key in raw_keys:
+            # Use the same robust conversion logic as _get_numeric_value
+            numeric_options.append(
+                F.when(
+                    # Handle already numeric values (direct cast)
+                    df.sensor_data.getItem(raw_key).cast("double").isNotNull() & 
+                    df.sensor_data.getItem(raw_key).rlike(r"^-?\d*\.?\d+([eE][-+]?\d+)?$"),
+                    df.sensor_data.getItem(raw_key).cast("double")
+                ).when(
+                    # Handle integer strings  
+                    df.sensor_data.getItem(raw_key).rlike(r"^-?\d+$"),
+                    df.sensor_data.getItem(raw_key).cast("double")
+                ).when(
+                    # Handle decimal strings
+                    df.sensor_data.getItem(raw_key).rlike(r"^-?\d*\.\d+$"),
+                    df.sensor_data.getItem(raw_key).cast("double")
+                ).when(
+                    # Handle scientific notation
+                    df.sensor_data.getItem(raw_key).rlike(r"^-?\d*\.?\d+[eE][-+]?\d+$"),
+                    df.sensor_data.getItem(raw_key).cast("double")
                 )
-            
-            return F.coalesce(*numeric_options)
+            )
+        
+        return F.coalesce(*numeric_options)
 
     @staticmethod
     def extract_column_from_union(df: DataFrame, column_name: str, prefer_normalized: bool = True) -> DataFrame:
