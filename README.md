@@ -46,8 +46,9 @@ soam/
 │     ├─ components/       # UI building blocks
 │     ├─ pages/            # Main pages (Dashboard, Normalization Rules, etc.)
 │     └─ context/          # React contexts (config, error)
-├─ ingestor/               # MQTT ingestion service
-├─ simulator/              # Test MQTT publisher
+├─ ingestor/               # MQTT and REST API ingestion service
+├─ simulator/              # MQTT test publishers
+├─ rest-api-simulator/     # REST API data source with auto-registration
 ├─ grafana/                # Grafana setup and dashboards
 ├─ prometheus/             # Prometheus setup
 ├─ k8s/                    # Kubernetes manifests for core services

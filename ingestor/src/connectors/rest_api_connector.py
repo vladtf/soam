@@ -5,6 +5,7 @@ Supports various authentication methods and data extraction patterns.
 import asyncio
 import aiohttp
 import json
+import backoff
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from .base import BaseDataConnector, DataMessage, ConnectorStatus
@@ -38,10 +39,20 @@ class RestApiConnector(BaseDataConnector):
             self.session = aiohttp.ClientSession(timeout=timeout, headers=headers)
             
             # Test connection with a health check
-            if await self._test_connection():
-                self.logger.info("✅ REST API connector connected successfully")
-                return True
-            else:
+            try:
+                if await self._test_connection():
+                    self.logger.info("✅ REST API connector connected successfully")
+                    self.last_error = None  # Clear any previous errors
+                    return True
+                else:
+                    error_msg = "REST API connection test failed after retries"
+                    self.last_error = error_msg
+                    self.logger.error(f"❌ {error_msg}")
+                    return False
+            except Exception as e:
+                error_msg = f"REST API connection test failed after retries: {e}"
+                self.last_error = error_msg
+                self.logger.error(f"❌ {error_msg}")
                 return False
                 
         except Exception as e:
@@ -66,7 +77,7 @@ class RestApiConnector(BaseDataConnector):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self.logger.error(f"❌ Error during REST API polling: {e}")
+                self.logger.error(f"❌ Error during REST API polling (after retries): {e}")
                 await asyncio.sleep(min(self.poll_interval, 30))  # Error backoff
     
     async def stop_ingestion(self) -> None:
@@ -75,9 +86,25 @@ class RestApiConnector(BaseDataConnector):
     
     async def health_check(self) -> Dict[str, Any]:
         """REST API connector health check."""
+        detailed_error = None
         try:
-            is_healthy = await self._test_connection() if self.session else False
-            return {
+            is_healthy = False
+            if self.session:
+                try:
+                    is_healthy = await self._test_connection()
+                    if is_healthy:
+                        self.last_error = None  # Clear error on successful connection
+                except Exception as e:
+                    error_msg = str(e)
+                    self.logger.debug(f"🔍 Health check failed after retries: {e}")
+                    self.last_error = error_msg
+                    detailed_error = error_msg
+                    is_healthy = False
+            else:
+                detailed_error = "HTTP session not initialized"
+                self.last_error = detailed_error
+            
+            result = {
                 "status": self.status.value,
                 "endpoint": self.config.get("url"),
                 "method": self.config.get("method", "GET").upper(),
@@ -86,36 +113,62 @@ class RestApiConnector(BaseDataConnector):
                 "healthy": is_healthy,
                 "running": self._running
             }
+            
+            # Include error details if there are any (use stored or current error)
+            if detailed_error or self.last_error:
+                result["error"] = detailed_error or self.last_error
+                
+            return result
         except Exception as e:
+            error_msg = str(e)
+            self.last_error = error_msg
             return {
                 "status": "error",
-                "error": str(e),
+                "error": error_msg,
                 "healthy": False,
                 "running": False
             }
     
+    @backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError, ConnectionError),
+        max_tries=3,
+        max_time=60,
+        jitter=backoff.random_jitter
+    )
     async def _test_connection(self) -> bool:
-        """Test if the REST API is accessible."""
+        """Test if the REST API is accessible with retry logic."""
         try:
             url = self.config["url"]
             method = self.config.get("method", "GET").upper()
+            
+            self.logger.debug(f"🔍 Testing connection to {method} {url}")
             
             if method == "GET":
                 async with self.session.get(url) as response:
                     is_ok = response.status < 400
                     if not is_ok:
                         self.logger.warning(f"⚠️ Health check returned HTTP {response.status}")
+                        # Raise an exception to trigger retry
+                        raise aiohttp.ClientError(f"HTTP {response.status}")
                     return is_ok
             else:
                 # For other methods, we might need to be more careful
                 return True  # Assume OK for now
                 
         except Exception as e:
-            self.logger.error(f"❌ REST API test connection failed: {e}")
-            return False
+            self.logger.warning(f"⚠️ REST API test connection attempt failed: {e}")
+            raise  # Re-raise to trigger backoff retry
     
+    @backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError, ConnectionError),
+        max_tries=3,
+        max_time=60,
+        jitter=backoff.random_jitter
+    )
     async def _fetch_data(self) -> None:
-        """Fetch data from REST API and emit it."""
+        """Fetch data from REST API and emit it with retry logic."""
         try:
             url = self.config["url"]
             method = self.config.get("method", "GET").upper()
@@ -131,8 +184,9 @@ class RestApiConnector(BaseDataConnector):
             async with self.session.request(method, url, params=params, data=data) as response:
                 if response.status >= 400:
                     error_text = await response.text()
-                    self.logger.error(f"❌ HTTP {response.status}: {error_text}")
-                    return
+                    error_msg = f"HTTP {response.status}: {error_text}"
+                    self.logger.warning(f"⚠️ {error_msg}")
+                    raise aiohttp.ClientError(error_msg)
                 
                 content_type = response.headers.get('content-type', '').lower()
                 
@@ -171,7 +225,8 @@ class RestApiConnector(BaseDataConnector):
                 self.logger.debug(f"✅ Successfully processed {len(records)} records from REST API")
                 
         except Exception as e:
-            self.logger.error(f"❌ Error fetching REST API data: {e}")
+            self.logger.warning(f"⚠️ Error fetching REST API data (will retry): {e}")
+            raise  # Re-raise to trigger backoff retry
     
     def _extract_records(self, data: Any) -> List[Dict[str, Any]]:
         """Extract individual records from API response."""

@@ -10,7 +10,8 @@ import {
   Modal, 
   Alert, 
   Spinner,
-  Form
+  Form,
+  Pagination
 } from 'react-bootstrap';
 import { 
   fetchDataSources, 
@@ -46,11 +47,15 @@ const DataSourcesPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showHealthModal, setShowHealthModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   
   // Selected items
   const [selectedSource, setSelectedSource] = useState<DataSource | null>(null);
   const [selectedHealth, setSelectedHealth] = useState<DataSourceHealth | null>(null);
+  
+  // Pagination for config details
+  const [configCurrentPage, setConfigCurrentPage] = useState(1);
+  const [configItemsPerPage, setConfigItemsPerPage] = useState(5); // Show 5 config items per page initially
   
   // Form states
   const [createForm, setCreateForm] = useState<CreateDataSourceRequest>({
@@ -179,17 +184,53 @@ const DataSourcesPage: React.FC = () => {
     }
   };
 
-  const handleShowHealth = async (source: DataSource) => {
+  const handleShowDetails = async (source: DataSource) => {
     try {
       const health = await getDataSourceHealth(source.id);
       setSelectedHealth(health);
       setSelectedSource(source);
-      setShowHealthModal(true);
+      setConfigCurrentPage(1); // Reset pagination when opening modal
+      setShowDetailsModal(true);
     } catch (err) {
       console.error('Failed to get health status:', err);
-      setError(err instanceof Error ? err.message : 'Failed to get health status');
+      // Show modal anyway with basic info, but without health data
+      setSelectedHealth(null);
+      setSelectedSource(source);
+      setConfigCurrentPage(1); // Reset pagination when opening modal
+      setShowDetailsModal(true);
     }
   };
+
+  // Calculate paginated config entries
+  const paginatedConfigEntries = useMemo(() => {
+    if (!selectedSource?.config) {
+      return {
+        entries: [] as [string, any][],
+        totalPages: 0,
+        totalEntries: 0
+      };
+    }
+    
+    const entries = Object.entries(selectedSource.config);
+    
+    if (configItemsPerPage === -1) {
+      // Show all entries
+      return {
+        entries: entries as [string, any][],
+        totalPages: 1,
+        totalEntries: entries.length
+      };
+    }
+    
+    const startIndex = (configCurrentPage - 1) * configItemsPerPage;
+    const endIndex = startIndex + configItemsPerPage;
+    
+    return {
+      entries: entries.slice(startIndex, endIndex) as [string, any][],
+      totalPages: Math.ceil(entries.length / configItemsPerPage),
+      totalEntries: entries.length
+    };
+  }, [selectedSource?.config, configCurrentPage, configItemsPerPage]);
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
@@ -356,10 +397,10 @@ const DataSourcesPage: React.FC = () => {
                           <Button
                             size="sm"
                             variant="outline-info"
-                            onClick={() => handleShowHealth(source)}
-                            title="Health Check"
+                            onClick={() => handleShowDetails(source)}
+                            title="View Details"
                           >
-                            🩺
+                            🔍
                           </Button>
                           <Button
                             size="sm"
@@ -553,68 +594,97 @@ const DataSourcesPage: React.FC = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* Health Check Modal */}
-      <Modal show={showHealthModal} onHide={() => setShowHealthModal(false)} size="lg">
+      {/* Data Source Details Modal */}
+      <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)} size="xl">
         <Modal.Header closeButton>
-          <Modal.Title>🩺 Health Check Results</Modal.Title>
+          <Modal.Title>🔍 Data Source Details</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedSource && selectedHealth && (
+          {selectedSource && (
             <div>
-              <h6>{selectedSource.name} ({selectedSource.type_display_name})</h6>
+              <h6 className="mb-3">{selectedSource.name} ({selectedSource.type_display_name})</h6>
               
-              <Row className="mt-3">
-                <Col md={6}>
+              <Row className="mb-4">
+                <Col md={4}>
                   <Card>
+                    <Card.Header>
+                      <Card.Title className="h6 mb-0">📊 Status & Health</Card.Title>
+                    </Card.Header>
                     <Card.Body>
-                      <Card.Title className="h6">Status</Card.Title>
                       <div className="mb-2">
-                        <strong>Overall:</strong> {getStatusBadge(selectedHealth.status)}
+                        <strong>Status:</strong> {getStatusBadge(selectedSource.status)}
                       </div>
                       <div className="mb-2">
-                        <strong>Healthy:</strong> {
-                          selectedHealth.healthy ? (
+                        <strong>Enabled:</strong> {
+                          selectedSource.enabled ? (
                             <Badge bg="success">Yes</Badge>
                           ) : (
-                            <Badge bg="danger">No</Badge>
+                            <Badge bg="secondary">No</Badge>
                           )
                         }
                       </div>
-                      {selectedHealth.running !== undefined && (
-                        <div>
-                          <strong>Running:</strong> {
-                            selectedHealth.running ? (
-                              <Badge bg="success">Yes</Badge>
-                            ) : (
-                              <Badge bg="warning">No</Badge>
-                            )
-                          }
+                      {selectedHealth && (
+                        <>
+                          <div className="mb-2">
+                            <strong>Healthy:</strong> {
+                              selectedHealth.healthy ? (
+                                <Badge bg="success">Yes</Badge>
+                              ) : (
+                                <Badge bg="danger">No</Badge>
+                              )
+                            }
+                          </div>
+                          {selectedHealth.running !== undefined && (
+                            <div className="mb-2">
+                              <strong>Running:</strong> {
+                                selectedHealth.running ? (
+                                  <Badge bg="success">Yes</Badge>
+                                ) : (
+                                  <Badge bg="warning">No</Badge>
+                                )
+                              }
+                            </div>
+                          )}
+                          {selectedHealth.connected !== undefined && (
+                            <div className="mb-2">
+                              <strong>Connected:</strong> {selectedHealth.connected ? 'Yes' : 'No'}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {selectedSource.last_connection ? (
+                        <div className="mb-2">
+                          <strong>Last Connection:</strong><br />
+                          <small>{new Date(selectedSource.last_connection).toLocaleString()}</small>
+                        </div>
+                      ) : (
+                        <div className="mb-2">
+                          <strong>Last Connection:</strong> <span className="text-muted">Never</span>
                         </div>
                       )}
                     </Card.Body>
                   </Card>
                 </Col>
-                <Col md={6}>
+                <Col md={4}>
                   <Card>
+                    <Card.Header>
+                      <Card.Title className="h6 mb-0">🔗 Connection Details</Card.Title>
+                    </Card.Header>
                     <Card.Body>
-                      <Card.Title className="h6">Connection Details</Card.Title>
-                      {selectedHealth.connected !== undefined && (
+                      {selectedHealth?.endpoint && (
                         <div className="mb-2">
-                          <strong>Connected:</strong> {selectedHealth.connected ? 'Yes' : 'No'}
+                          <strong>Endpoint:</strong><br />
+                          <code>{selectedHealth.endpoint}</code>
                         </div>
                       )}
-                      {selectedHealth.endpoint && (
+                      {selectedHealth?.broker && (
                         <div className="mb-2">
-                          <strong>Endpoint:</strong> <code>{selectedHealth.endpoint}</code>
+                          <strong>Broker:</strong><br />
+                          <code>{selectedHealth.broker}:{selectedHealth.port}</code>
                         </div>
                       )}
-                      {selectedHealth.broker && (
+                      {selectedHealth?.topics && (
                         <div className="mb-2">
-                          <strong>Broker:</strong> <code>{selectedHealth.broker}:{selectedHealth.port}</code>
-                        </div>
-                      )}
-                      {selectedHealth.topics && (
-                        <div>
                           <strong>Topics:</strong>
                           <ul className="mb-0 mt-1">
                             {selectedHealth.topics.map((topic, index) => (
@@ -623,19 +693,215 @@ const DataSourcesPage: React.FC = () => {
                           </ul>
                         </div>
                       )}
+                      {selectedHealth?.method && (
+                        <div className="mb-2">
+                          <strong>Method:</strong> <code>{selectedHealth.method}</code>
+                        </div>
+                      )}
+                      {selectedHealth?.poll_interval && (
+                        <div className="mb-2">
+                          <strong>Poll Interval:</strong> {selectedHealth.poll_interval}s
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={4}>
+                  <Card>
+                    <Card.Header>
+                      <Card.Title className="h6 mb-0">📋 Metadata</Card.Title>
+                    </Card.Header>
+                    <Card.Body>
+                      <div className="mb-2">
+                        <strong>Source ID:</strong><br />
+                        <code>{selectedSource.id}</code>
+                      </div>
+                      <div className="mb-2">
+                        <strong>Type:</strong><br />
+                        <code>{selectedSource.type_name}</code>
+                      </div>
+                      <div className="mb-2">
+                        <strong>Ingestion ID:</strong><br />
+                        <code>{selectedSource.ingestion_id}</code>
+                      </div>
+                      {selectedSource.created_by && (
+                        <div className="mb-2">
+                          <strong>Created By:</strong><br />
+                          <code>{selectedSource.created_by}</code>
+                        </div>
+                      )}
+                      {selectedSource.created_at && (
+                        <div className="mb-2">
+                          <strong>Created:</strong><br />
+                          <small>{new Date(selectedSource.created_at).toLocaleString()}</small>
+                        </div>
+                      )}
+                      {selectedSource.updated_at && (
+                        <div className="mb-2">
+                          <strong>Updated:</strong><br />
+                          <small>{new Date(selectedSource.updated_at).toLocaleString()}</small>
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
                 </Col>
               </Row>
 
-              {selectedHealth.error && (
+              {/* Configuration Section */}
+              <Row>
+                <Col md={8}>
+                  <Card>
+                    <Card.Header className="d-flex justify-content-between align-items-center">
+                      <Card.Title className="h6 mb-0">⚙️ Configuration</Card.Title>
+                      <div className="d-flex align-items-center gap-3">
+                        {selectedSource.config && Object.keys(selectedSource.config).length > 5 && (
+                          <div className="d-flex align-items-center gap-2">
+                            <small className="text-muted">Items per page:</small>
+                            <Form.Select
+                              size="sm"
+                              style={{ width: 'auto' }}
+                              value={configItemsPerPage}
+                              onChange={(e) => {
+                                const newItemsPerPage = parseInt(e.target.value);
+                                setConfigItemsPerPage(newItemsPerPage);
+                                setConfigCurrentPage(1); // Reset to first page when changing items per page
+                              }}
+                            >
+                              <option value={5}>5</option>
+                              <option value={10}>10</option>
+                              <option value={20}>20</option>
+                              <option value={-1}>All</option>
+                            </Form.Select>
+                          </div>
+                        )}
+                        {selectedSource.config && paginatedConfigEntries.totalEntries > configItemsPerPage && configItemsPerPage !== -1 && (
+                          <small className="text-muted">
+                            Showing {((configCurrentPage - 1) * configItemsPerPage) + 1}-{Math.min(configCurrentPage * configItemsPerPage, paginatedConfigEntries.totalEntries)} of {paginatedConfigEntries.totalEntries} entries
+                          </small>
+                        )}
+                      </div>
+                    </Card.Header>
+                    <Card.Body>
+                      {selectedSource.config && Object.keys(selectedSource.config).length > 0 ? (
+                        <div>
+                          {paginatedConfigEntries.entries.map(([key, value]) => (
+                            <div key={key} className="mb-3">
+                              <div className="fw-bold text-primary">{key}</div>
+                              <div className="p-2 bg-light rounded">
+                                <code style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                  {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+                                </code>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Pagination */}
+                          {paginatedConfigEntries.totalPages > 1 && configItemsPerPage !== -1 && (
+                            <div className="d-flex justify-content-center mt-3">
+                              <Pagination size="sm">
+                                <Pagination.First 
+                                  onClick={() => setConfigCurrentPage(1)}
+                                  disabled={configCurrentPage === 1}
+                                />
+                                <Pagination.Prev 
+                                  onClick={() => setConfigCurrentPage(prev => Math.max(1, prev - 1))}
+                                  disabled={configCurrentPage === 1}
+                                />
+                                
+                                {/* Show page numbers */}
+                                {Array.from({ length: Math.min(5, paginatedConfigEntries.totalPages) }, (_, i) => {
+                                  let pageNum;
+                                  if (paginatedConfigEntries.totalPages <= 5) {
+                                    pageNum = i + 1;
+                                  } else if (configCurrentPage <= 3) {
+                                    pageNum = i + 1;
+                                  } else if (configCurrentPage >= paginatedConfigEntries.totalPages - 2) {
+                                    pageNum = paginatedConfigEntries.totalPages - 4 + i;
+                                  } else {
+                                    pageNum = configCurrentPage - 2 + i;
+                                  }
+                                  
+                                  return (
+                                    <Pagination.Item
+                                      key={pageNum}
+                                      active={pageNum === configCurrentPage}
+                                      onClick={() => setConfigCurrentPage(pageNum)}
+                                    >
+                                      {pageNum}
+                                    </Pagination.Item>
+                                  );
+                                })}
+                                
+                                <Pagination.Next 
+                                  onClick={() => setConfigCurrentPage(prev => Math.min(paginatedConfigEntries.totalPages, prev + 1))}
+                                  disabled={configCurrentPage === paginatedConfigEntries.totalPages}
+                                />
+                                <Pagination.Last 
+                                  onClick={() => setConfigCurrentPage(paginatedConfigEntries.totalPages)}
+                                  disabled={configCurrentPage === paginatedConfigEntries.totalPages}
+                                />
+                              </Pagination>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-muted">No configuration values</p>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={4}>
+                  <Card>
+                    <Card.Header>
+                      <Card.Title className="h6 mb-0">📊 Raw JSON Config</Card.Title>
+                    </Card.Header>
+                    <Card.Body>
+                      {selectedSource.config && Object.keys(selectedSource.config).length > 0 ? (
+                        <div>
+                          <Form.Control
+                            as="textarea"
+                            rows={12}
+                            readOnly
+                            value={JSON.stringify(selectedSource.config, null, 2)}
+                            className="font-monospace small"
+                            style={{ resize: 'vertical', fontSize: '11px' }}
+                          />
+                          <div className="text-end mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              onClick={() => {
+                                navigator.clipboard.writeText(JSON.stringify(selectedSource.config, null, 2));
+                              }}
+                            >
+                              📋 Copy JSON
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-muted">No configuration to display</p>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* Error Information */}
+              {selectedSource.last_error && (
                 <Alert variant="danger" className="mt-3">
-                  <Alert.Heading>Error</Alert.Heading>
+                  <Alert.Heading>Last Error</Alert.Heading>
+                  {selectedSource.last_error}
+                </Alert>
+              )}
+
+              {selectedHealth?.error && selectedHealth.error !== selectedSource.last_error && (
+                <Alert variant="warning" className="mt-3">
+                  <Alert.Heading>Current Health Error</Alert.Heading>
                   {selectedHealth.error}
                 </Alert>
               )}
 
-              {selectedHealth.message && !selectedHealth.error && (
+              {selectedHealth?.message && !selectedHealth.error && (
                 <Alert variant="info" className="mt-3">
                   {selectedHealth.message}
                 </Alert>
@@ -644,11 +910,12 @@ const DataSourcesPage: React.FC = () => {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowHealthModal(false)}>
+          <Button variant="secondary" onClick={() => setShowDetailsModal(false)}>
             Close
           </Button>
         </Modal.Footer>
       </Modal>
+
     </Container>
   );
 };

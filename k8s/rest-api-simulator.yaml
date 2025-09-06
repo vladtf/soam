@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-api-simulator
+  labels:
+    app: rest-api-simulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rest-api-simulator
+  template:
+    metadata:
+      labels:
+        app: rest-api-simulator
+    spec:
+      containers:
+      - name: rest-api-simulator
+        image: rest-api-simulator:latest
+        ports:
+        - containerPort: 8002
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        # livenessProbe:
+        #   httpGet:
+        #     path: /health
+        #     port: 8002
+        #   initialDelaySeconds: 30
+        #   periodSeconds: 30
+        # readinessProbe:
+        #   httpGet:
+        #     path: /health
+        #     port: 8002
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 10
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rest-api-simulator
+  labels:
+    app: rest-api-simulator
+spec:
+  selector:
+    app: rest-api-simulator
+  ports:
+    - port: 8002
+      targetPort: 8002
+      name: http
+  type: ClusterIP

@@ -38,6 +38,7 @@ class DataSourceResponse(BaseModel):
     name: str
     type_name: str
     type_display_name: str
+    config: Dict[str, Any]
     ingestion_id: str
     enabled: bool
     status: str
@@ -387,10 +388,13 @@ async def get_data_source_health(
         
         health = await manager.get_connector_health(source.ingestion_id)
         if health is None:
+            # Connector not running - provide detailed error info from database
             health = {
                 "status": source.status,
                 "healthy": source.status == "active",
-                "message": "Connector not running"
+                "message": source.last_error or "Connector not running",
+                "last_error": source.last_error,
+                "last_connection": source.last_connection
             }
         
         return {

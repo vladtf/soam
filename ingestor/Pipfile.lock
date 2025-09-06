@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "39181480acf5fcafda2dce9a5169802603ce82d6760e2e85db52de50deaee393"
+            "sha256": "e7eb305cd076becee34918aab00ab7c7dd7be0884d1d68e9443a58b22d59adfc"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -188,6 +188,15 @@
             ],
             "markers": "python_version >= '3.8'",
             "version": "==25.3.0"
+        },
+        "backoff": {
+            "hashes": [
+                "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba",
+                "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.7' and python_version < '4.0'",
+            "version": "==2.2.1"
         },
         "certifi": {
             "hashes": [
@@ -1204,11 +1213,11 @@
         },
         "pyspark": {
             "hashes": [
-                "sha256:38db1b4f6095a080d7605e578d775528990e66dc326311d93e94a71cfc24e5a5"
+                "sha256:9d1f22d994f60369228397e3479003ffe2dd736ba79165003246ff7bd48e2c73"
             ],
             "index": "pypi",
             "markers": "python_version >= '3.9'",
-            "version": "==4.0.0"
+            "version": "==4.0.1"
         },
         "python-dateutil": {
             "hashes": [

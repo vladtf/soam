@@ -9,6 +9,8 @@ RUN apt-get update && \
         openjdk-17-jre-headless \
         procps \
         iputils-ping \
+        curl \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------- Java env ----------

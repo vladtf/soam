@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Table, Badge, Nav, Alert, Spinner, Button, Accordion } from 'react-bootstrap';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Row, Col, Card, Table, Badge, Nav, Alert, Spinner, Button, Accordion, Pagination, Form } from 'react-bootstrap';
 import { 
   FaDatabase, 
   FaTable, 
@@ -35,10 +35,19 @@ const MetadataViewer: React.FC<MetadataViewerProps> = ({ className }) => {
   const [datasets, setDatasets] = useState<DatasetMetadata[]>([]);
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [activeTab, setActiveTab] = useState('datasets');
+  
+  // Pagination for datasets
+  const [datasetCurrentPage, setDatasetCurrentPage] = useState(1);
+  const [datasetItemsPerPage, setDatasetItemsPerPage] = useState(5);
 
   useEffect(() => {
     loadMetadata();
   }, []);
+
+  // Reset pagination when datasets change or when switching to datasets tab
+  useEffect(() => {
+    setDatasetCurrentPage(1);
+  }, [datasets.length, activeTab]);
 
   const loadMetadata = async () => {
     try {
@@ -61,6 +70,27 @@ const MetadataViewer: React.FC<MetadataViewerProps> = ({ className }) => {
       setLoading(false);
     }
   };
+
+  // Calculate paginated datasets
+  const paginatedDatasets = useMemo(() => {
+    if (datasetItemsPerPage === -1) {
+      // Show all datasets
+      return {
+        datasets: datasets,
+        totalPages: 1,
+        totalDatasets: datasets.length
+      };
+    }
+    
+    const startIndex = (datasetCurrentPage - 1) * datasetItemsPerPage;
+    const endIndex = startIndex + datasetItemsPerPage;
+    
+    return {
+      datasets: datasets.slice(startIndex, endIndex),
+      totalPages: Math.ceil(datasets.length / datasetItemsPerPage),
+      totalDatasets: datasets.length
+    };
+  }, [datasets, datasetCurrentPage, datasetItemsPerPage]);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -232,11 +262,40 @@ const MetadataViewer: React.FC<MetadataViewerProps> = ({ className }) => {
           {activeTab === 'datasets' && (
             <div>
               <div className="d-flex justify-content-between align-items-center mb-3">
-                <h5 className="mb-0">
-                  <FaDatabase className="me-2 text-primary" />
-                  Dataset Details
-                </h5>
-                <Badge bg="secondary" className="fs-6">{datasets.length} datasets</Badge>
+                <div className="d-flex align-items-center gap-3">
+                  <h5 className="mb-0">
+                    <FaDatabase className="me-2 text-primary" />
+                    Dataset Details
+                  </h5>
+                  <Badge bg="secondary" className="fs-6">{datasets.length} datasets</Badge>
+                </div>
+                <div className="d-flex align-items-center gap-3">
+                  {datasets.length > 5 && (
+                    <div className="d-flex align-items-center gap-2">
+                      <small className="text-muted">Items per page:</small>
+                      <Form.Select
+                        size="sm"
+                        style={{ width: 'auto' }}
+                        value={datasetItemsPerPage}
+                        onChange={(e) => {
+                          const newItemsPerPage = parseInt(e.target.value);
+                          setDatasetItemsPerPage(newItemsPerPage);
+                          setDatasetCurrentPage(1); // Reset to first page when changing items per page
+                        }}
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={-1}>All</option>
+                      </Form.Select>
+                    </div>
+                  )}
+                  {datasets.length > datasetItemsPerPage && datasetItemsPerPage !== -1 && (
+                    <small className="text-muted">
+                      Showing {((datasetCurrentPage - 1) * datasetItemsPerPage) + 1}-{Math.min(datasetCurrentPage * datasetItemsPerPage, paginatedDatasets.totalDatasets)} of {paginatedDatasets.totalDatasets} datasets
+                    </small>
+                  )}
+                </div>
               </div>
               
               {datasets.length === 0 ? (
@@ -246,22 +305,23 @@ const MetadataViewer: React.FC<MetadataViewerProps> = ({ className }) => {
                   <p className="mb-0">No ingestion data has been processed yet. Start the simulators to see metadata appear here.</p>
                 </Alert>
               ) : (
-                <Accordion flush>
-                  {datasets.map((dataset, index) => (
-                    <Accordion.Item key={dataset.ingestion_id} eventKey={index.toString()} className="border rounded mb-2">
-                      <Accordion.Header>
-                        <div className="w-100 d-flex justify-content-between align-items-center me-3">
-                          <div>
-                            <strong className="text-primary">{dataset.ingestion_id}</strong>
-                            <Badge bg="primary" className="ms-2">{dataset.topic}</Badge>
+                <>
+                  <Accordion flush>
+                    {paginatedDatasets.datasets.map((dataset, index) => (
+                      <Accordion.Item key={dataset.ingestion_id} eventKey={index.toString()} className="border rounded mb-2">
+                        <Accordion.Header>
+                          <div className="w-100 d-flex justify-content-between align-items-center me-3">
+                            <div>
+                              <strong className="text-primary">{dataset.ingestion_id}</strong>
+                              <Badge bg="primary" className="ms-2">{dataset.topic}</Badge>
+                            </div>
+                            <div className="d-flex gap-3 text-muted">
+                              <small><strong>{dataset.record_count.toLocaleString()}</strong> records</small>
+                              <small><strong>{dataset.unique_sensor_count}</strong> sensors</small>
+                              <small><strong>{formatBytes(dataset.data_size_bytes)}</strong></small>
+                            </div>
                           </div>
-                          <div className="d-flex gap-3 text-muted">
-                            <small><strong>{dataset.record_count.toLocaleString()}</strong> records</small>
-                            <small><strong>{dataset.unique_sensor_count}</strong> sensors</small>
-                            <small><strong>{formatBytes(dataset.data_size_bytes)}</strong></small>
-                          </div>
-                        </div>
-                      </Accordion.Header>
+                        </Accordion.Header>
                       <Accordion.Body className={isDark ? 'bg-dark' : 'bg-light'}>
                         {/* Dataset Details */}
                         <Row className="mb-4 g-3">
@@ -348,11 +408,59 @@ const MetadataViewer: React.FC<MetadataViewerProps> = ({ className }) => {
                     </Accordion.Item>
                   ))}
                 </Accordion>
+                
+                {/* Pagination */}
+                {paginatedDatasets.totalPages > 1 && datasetItemsPerPage !== -1 && (
+                  <div className="d-flex justify-content-center mt-4">
+                    <Pagination size="sm">
+                      <Pagination.First 
+                        onClick={() => setDatasetCurrentPage(1)}
+                        disabled={datasetCurrentPage === 1}
+                      />
+                      <Pagination.Prev 
+                        onClick={() => setDatasetCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={datasetCurrentPage === 1}
+                      />
+                      
+                      {/* Show page numbers */}
+                      {Array.from({ length: Math.min(5, paginatedDatasets.totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (paginatedDatasets.totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (datasetCurrentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (datasetCurrentPage >= paginatedDatasets.totalPages - 2) {
+                          pageNum = paginatedDatasets.totalPages - 4 + i;
+                        } else {
+                          pageNum = datasetCurrentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <Pagination.Item
+                            key={pageNum}
+                            active={pageNum === datasetCurrentPage}
+                            onClick={() => setDatasetCurrentPage(pageNum)}
+                          >
+                            {pageNum}
+                          </Pagination.Item>
+                        );
+                      })}
+                      
+                      <Pagination.Next 
+                        onClick={() => setDatasetCurrentPage(prev => Math.min(paginatedDatasets.totalPages, prev + 1))}
+                        disabled={datasetCurrentPage === paginatedDatasets.totalPages}
+                      />
+                      <Pagination.Last 
+                        onClick={() => setDatasetCurrentPage(paginatedDatasets.totalPages)}
+                        disabled={datasetCurrentPage === paginatedDatasets.totalPages}
+                      />
+                    </Pagination>
+                  </div>
+                )}
+                </>
               )}
             </div>
           )}
-
-          {/* Topics Tab */}
           {activeTab === 'topics' && (
             <div>
               <div className="d-flex justify-content-between align-items-center mb-3">

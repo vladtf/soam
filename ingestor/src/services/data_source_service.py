@@ -112,6 +112,12 @@ class DataSourceRegistry:
         finally:
             db.close()
     
+    def _generate_config_hash(self, config: Dict[str, Any]) -> str:
+        """Generate MD5 hash of configuration for duplicate detection."""
+        # Convert config to sorted JSON string for consistent hashing
+        config_str = json.dumps(config, sort_keys=True, separators=(',', ':'))
+        return hashlib.md5(config_str.encode()).hexdigest()
+    
     def create_data_source(self, name: str, type_name: str, config: Dict[str, Any], 
                           created_by: str = "system") -> int:
         """Create a new data source instance."""
@@ -125,6 +131,22 @@ class DataSourceRegistry:
             if not ds_type:
                 raise ValueError(f"Unknown data source type: {type_name}")
             
+            # Check if a data source with the same name, type, and configuration already exists
+            # Generate config hash for comparison (but don't store it)
+            config_hash = self._generate_config_hash(config)
+            
+            existing_sources = db.query(DataSource).filter(
+                DataSource.name == name,
+                DataSource.type_id == ds_type.id
+            ).all()
+            
+            # Check if any existing source has the same config by comparing hashes
+            for existing in existing_sources:
+                if self._generate_config_hash(existing.config) == config_hash:
+                    logger.info(f"ℹ️ Data source already exists: {name} (ID: {existing.id})")
+                    # Return existing source ID instead of creating duplicate
+                    return existing.id
+            
             # Validate configuration against schema
             if not self._validate_config(ds_type.config_schema, config):
                 raise ValueError(f"Invalid configuration for {type_name}")
@@ -132,7 +154,7 @@ class DataSourceRegistry:
             # Generate unique ingestion_id
             ingestion_id = self._generate_ingestion_id(name, type_name)
             
-            # Create new data source
+            # Create new data source (without storing config_hash)
             new_source = DataSource(
                 name=name,
                 type_id=ds_type.id,
@@ -349,7 +371,14 @@ class DataSourceManager:
                 self.logger.info(f"✅ Started data source: {source.name}")
                 return True
             else:
-                self.registry.update_source_status(source.id, "error", "Failed to start connector")
+                # Try to get more detailed error information from the connector
+                try:
+                    health_info = await connector.health_check()
+                    error_detail = health_info.get("error", "Failed to start connector")
+                except Exception:
+                    error_detail = "Failed to start connector"
+                
+                self.registry.update_source_status(source.id, "error", error_detail)
                 self.logger.error(f"❌ Failed to start data source: {source.name}")
                 return False
                 

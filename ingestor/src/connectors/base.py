@@ -41,6 +41,7 @@ class BaseDataConnector(ABC):
         self.logger = logging.getLogger(f"{self.__class__.__name__}_{source_id}")
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        self.last_error: Optional[str] = None
     
     @abstractmethod
     async def connect(self) -> bool:

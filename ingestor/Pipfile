@@ -18,6 +18,7 @@ colorlog = "*"
 aiohttp = "*"
 sqlalchemy = "*"
 jsonschema = "*"
+backoff = "*"
 
 [dev-packages]
 

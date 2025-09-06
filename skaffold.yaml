@@ -17,6 +17,10 @@ build:
       context: simulator
       docker:
         pullParent: false
+    - image: rest-api-simulator
+      context: rest-api-simulator
+      docker:
+        pullParent: false
     - image: frontend
       context: frontend
       docker:
@@ -79,6 +83,11 @@ portForward:
     namespace: default
     port: 8001
     localPort: 8001
+  - resourceType: service
+    resourceName: rest-api-simulator
+    namespace: default
+    port: 8002
+    localPort: 8002
   - resourceType: service
     resourceName: neo4j
     namespace: default
