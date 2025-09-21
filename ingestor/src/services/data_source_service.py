@@ -374,7 +374,7 @@ class DataSourceManager:
                 # Try to get more detailed error information from the connector
                 try:
                     health_info = await connector.health_check()
-                    error_detail = health_info.get("error", "Failed to start connector")
+                    error_detail = health_info.error if health_info.error else "Failed to start connector"
                 except Exception:
                     error_detail = "Failed to start connector"
                 
@@ -425,9 +425,10 @@ class DataSourceManager:
         """Get health check for a specific connector."""
         if source_id in self.active_connectors:
             try:
-                return await self.active_connectors[source_id].health_check()
+                health_response = await self.active_connectors[source_id].health_check()
+                return health_response.to_dict()
             except Exception as e:
-                return {"error": str(e), "healthy": False}
+                return {"error": str(e), "healthy": False, "status": "error", "running": False}
         return None
     
     async def shutdown_all(self):

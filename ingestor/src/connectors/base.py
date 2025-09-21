@@ -34,9 +34,8 @@ class ConnectorHealthResponse:
     """Standardized health response for all data connectors."""
     # Core status fields - required for all connectors
     status: str                    # ConnectorStatus enum value
-    healthy: bool                  # Overall health indicator
+    healthy: bool                  # Overall health indicator (includes connectivity status)
     running: bool                  # Whether connector is actively running
-    connected: bool                # Whether connector is connected to its source
     
     # Optional common fields
     last_successful_operation: Optional[str] = None  # ISO timestamp of last successful operation
@@ -50,8 +49,7 @@ class ConnectorHealthResponse:
         result = {
             "status": self.status,
             "healthy": self.healthy,
-            "running": self.running,
-            "connected": self.connected
+            "running": self.running
         }
         
         # Add optional fields if they have values
@@ -71,7 +69,6 @@ class ConnectorHealthResponse:
             status=status,
             healthy=False,
             running=False,
-            connected=False,
             error=error_message
         )
     
@@ -82,7 +79,6 @@ class ConnectorHealthResponse:
             status=status,
             healthy=True,
             running=True,
-            connected=True,
             connection_details=connection_details if connection_details else None
         )
 

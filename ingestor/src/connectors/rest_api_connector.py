@@ -8,7 +8,7 @@ import json
 import backoff
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
-from .base import BaseDataConnector, DataMessage, ConnectorStatus, ConnectorHealthResponse
+from .base import BaseDataConnector, DataMessage, ConnectorHealthResponse
 from ..utils.timestamp_utils import extract_timestamp
 
 
@@ -89,12 +89,10 @@ class RestApiConnector(BaseDataConnector):
         detailed_error = None
         try:
             is_healthy = False
-            is_connected = False
             
             if self.session:
                 try:
                     is_healthy = await self._test_connection()
-                    is_connected = is_healthy  # For REST API, connected means successful test
                     if is_healthy:
                         self.last_error = None  # Clear error on successful connection
                 except Exception as e:
@@ -103,11 +101,9 @@ class RestApiConnector(BaseDataConnector):
                     self.last_error = error_msg
                     detailed_error = error_msg
                     is_healthy = False
-                    is_connected = False
             else:
                 detailed_error = "HTTP session not initialized"
                 self.last_error = detailed_error
-                is_connected = False
             
             # Prepare connection-specific details
             connection_details = {
@@ -125,7 +121,6 @@ class RestApiConnector(BaseDataConnector):
                 status=self.status.value,
                 healthy=is_healthy,
                 running=self._running,
-                connected=is_connected,
                 last_successful_operation=last_successful_operation,
                 error=detailed_error or self.last_error,
                 connection_details=connection_details
@@ -138,7 +133,6 @@ class RestApiConnector(BaseDataConnector):
                 status="error",
                 healthy=False,
                 running=False,
-                connected=False,
                 error=error_msg,
                 connection_details={
                     "endpoint": self.config.get("url", "unknown"),

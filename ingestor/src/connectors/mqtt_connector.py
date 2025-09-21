@@ -73,7 +73,7 @@ class MQTTConnector(BaseDataConnector):
         is_connected = self.client and self.client.is_connected() if self.client else False
         is_running = self._running
         
-        # Calculate overall health status
+        # Calculate overall health status (includes connectivity)
         healthy = is_connected and is_running and self.status == ConnectorStatus.ACTIVE
         
         # Prepare connection-specific details
@@ -87,7 +87,6 @@ class MQTTConnector(BaseDataConnector):
             status=self.status.value,
             healthy=healthy,
             running=is_running,
-            connected=is_connected,
             connection_details=connection_details,
             error=self.last_error
         )
