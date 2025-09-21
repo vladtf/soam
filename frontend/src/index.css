@@ -1,3 +1,101 @@
+/* Bootstrap Color Customization - Comprehensive Info Color Override */
+:root {
+	/* Override Bootstrap's info color with purple */
+	--bs-info: #6f42c1 !important;
+	--bs-info-rgb: 111, 66, 193 !important;
+	
+	/* Info color variants for different states */
+	--bs-info-text-emphasis: #4c306d !important;
+	--bs-info-bg-subtle: #f3f0ff !important;
+	--bs-info-border-subtle: #9f7aea !important;
+	
+	/* Button variants */
+	--bs-btn-info-color: #ffffff !important;
+	--bs-btn-info-bg: #6f42c1 !important;
+	--bs-btn-info-border-color: #6f42c1 !important;
+	--bs-btn-info-hover-color: #ffffff !important;
+	--bs-btn-info-hover-bg: #5a359b !important;
+	--bs-btn-info-hover-border-color: #5a359b !important;
+	--bs-btn-info-active-color: #ffffff !important;
+	--bs-btn-info-active-bg: #4c2d8a !important;
+	--bs-btn-info-active-border-color: #4c2d8a !important;
+	
+	/* Outline button variants */
+	--bs-btn-outline-info-color: #6f42c1 !important;
+	--bs-btn-outline-info-border-color: #6f42c1 !important;
+	--bs-btn-outline-info-hover-color: #ffffff !important;
+	--bs-btn-outline-info-hover-bg: #6f42c1 !important;
+	--bs-btn-outline-info-hover-border-color: #6f42c1 !important;
+	--bs-btn-outline-info-active-color: #ffffff !important;
+	--bs-btn-outline-info-active-bg: #6f42c1 !important;
+	--bs-btn-outline-info-active-border-color: #6f42c1 !important;
+}
+
+/* Force override for ALL info button variants */
+.btn-info,
+.btn-info:hover,
+.btn-info:focus,
+.btn-info:active,
+.btn-info.active {
+	background-color: #6f42c1 !important;
+	border-color: #6f42c1 !important;
+	color: #ffffff !important;
+}
+
+.btn-info:hover {
+	background-color: #5a359b !important;
+	border-color: #5a359b !important;
+}
+
+.btn-info:active,
+.btn-info.active {
+	background-color: #4c2d8a !important;
+	border-color: #4c2d8a !important;
+}
+
+.btn-outline-info,
+.btn-outline-info:hover,
+.btn-outline-info:focus,
+.btn-outline-info:active,
+.btn-outline-info.active {
+	color: #6f42c1 !important;
+	border-color: #6f42c1 !important;
+}
+
+.btn-outline-info:hover,
+.btn-outline-info:focus,
+.btn-outline-info:active,
+.btn-outline-info.active {
+	background-color: #6f42c1 !important;
+	border-color: #6f42c1 !important;
+	color: #ffffff !important;
+}
+
+.badge.bg-info {
+	background-color: #6f42c1 !important;
+	color: #ffffff !important;
+}
+
+.alert-info {
+	color: #4c306d !important;
+	background-color: #f3f0ff !important;
+	border-color: #9f7aea !important;
+}
+
+/* Force override for any stubborn cyan colors */
+.text-info {
+	color: #6f42c1 !important;
+}
+
+.border-info {
+	border-color: #6f42c1 !important;
+}
+
+.bg-info {
+	background-color: #6f42c1 !important;
+	color: #ffffff !important;
+}
+
 /* Accessibility: visible focus outlines */
 :focus-visible {
 	outline: 2px solid var(--bs-primary) !important;

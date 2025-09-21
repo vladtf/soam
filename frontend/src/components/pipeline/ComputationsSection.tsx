@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Table, Badge, Modal, Form, Row, Col, Spinner } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import {
+  FaPlus, FaEdit, FaTrash, FaEye, FaCog, FaInfoCircle,
+  FaTrophy, FaMedal, FaAward, FaStar, FaBell, FaBroadcastTower,
+  FaRobot, FaTimes, FaSave, FaFileAlt, FaChartBar
+} from 'react-icons/fa';
+import {
   ComputationDef,
   createComputation,
   updateComputation,
@@ -46,16 +51,20 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewingComputationId, setPreviewingComputationId] = useState<number | null>(null);
   const [examples, setExamples] = useState<ComputationExample[]>([]);
+  const [examplesLoading, setExamplesLoading] = useState(true);
   const [examplePreviewData, setExamplePreviewData] = useState<{ result: unknown[]; row_count: number } | null>(null);
   const [previewingExample, setPreviewingExample] = useState<string | null>(null);
 
   useEffect(() => {
     const loadExamples = async () => {
       try {
+        setExamplesLoading(true);
         const exampleData = await fetchComputationExamples();
         setExamples(exampleData.examples);
       } catch (error) {
         console.error('Error loading examples:', error);
+      } finally {
+        setExamplesLoading(false);
       }
     };
 
@@ -125,7 +134,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     setPreviewLoading(true);
     setPreviewingComputationId(computation.id);
     setPreviewData(null); // Clear previous preview data
-    
+
     // Show loading toast
     toast.info(`🔄 Loading preview for "${computation.name}"...`, {
       toastId: `preview-${computation.id}`, // Prevent duplicate toasts
@@ -135,14 +144,14 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     try {
       const preview = await previewComputation(computation.id);
       setPreviewData(preview);
-      
+
       // Dismiss loading toast and show success
       toast.dismiss(`preview-${computation.id}`);
       toast.success(`✅ Preview loaded for "${computation.name}"`);
     } catch (error) {
       console.error('Error previewing computation:', error);
       setPreviewData(null);
-      
+
       // Dismiss loading toast and show error
       toast.dismiss(`preview-${computation.id}`);
       toast.error(extractPreviewErrorMessage(error));
@@ -224,7 +233,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
             </small>
           </div>
           <Button variant="primary" size="sm" onClick={handleAddNew}>
-            + Add Computation
+            <FaPlus className="me-1" /> Add Computation
           </Button>
         </Card.Header>
         <Card.Body>
@@ -295,7 +304,10 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                             Loading...
                           </>
                         ) : (
-                          'Preview'
+                          <>
+                            <FaEye className="me-1" />
+                            Preview
+                          </>
                         )}
                       </Button>
                       <Button
@@ -304,6 +316,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                         className="me-1"
                         onClick={() => handleEdit(comp)}
                       >
+                        <FaEdit className="me-1" />
                         Edit
                       </Button>
                       <Button
@@ -311,6 +324,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                         size="sm"
                         onClick={() => handleDelete(comp.id!)}
                       >
+                        <FaTrash className="me-1" />
                         Delete
                       </Button>
                     </td>
@@ -356,152 +370,345 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
       </Card>
 
       {/* Add/Edit Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered>
         <Modal.Header closeButton>
-          <Modal.Title>{editingId ? 'Edit' : 'Add'} Computation</Modal.Title>
+          <Modal.Title>
+            {editingId ? (
+              <>
+                <FaEdit className="me-2 text-primary" />
+                Edit Computation
+              </>
+            ) : (
+              <>
+                <FaPlus className="me-2 text-primary" />
+                Add New Computation
+              </>
+            )}
+          </Modal.Title>
         </Modal.Header>
         <Form onSubmit={handleSubmit}>
-          <Modal.Body>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Dataset</Form.Label>
-                  <Form.Control
-                    as="select"
-                    value={form.dataset}
-                    onChange={(e) => setForm({ ...form, dataset: e.target.value as any })}
-                  >
-                    <option value="gold">Gold</option>
-                    <option value="silver">Silver</option>
-                    <option value="bronze">Bronze</option>
-                    <option value="enriched">Enriched</option>
-                    <option value="alerts">Alerts</option>
-                    <option value="sensors">Sensors</option>
-                  </Form.Control>
-                </Form.Group>
-              </Col>
-            </Row>
+          <Modal.Body style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+            {/* Basic Information Section */}
+            <div className="mb-4">
+              <h6 className="text-primary mb-3">
+                <FaInfoCircle className="me-2" />
+                Basic Information
+              </h6>
+              <Row className="g-3">
+                <Col md={8}>
+                  <Form.Group>
+                    <Form.Label className="fw-bold">Computation Name</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="Enter a descriptive name for your computation..."
+                      required
+                      size="lg"
+                    />
+                    <Form.Text className="text-muted">
+                      Choose a clear, descriptive name that explains what this computation does.
+                    </Form.Text>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label className="fw-bold">Dataset Source</Form.Label>
+                    <Form.Control
+                      as="select"
+                      value={form.dataset}
+                      onChange={(e) => setForm({ ...form, dataset: e.target.value as any })}
+                      size="lg"
+                    >
+                      <option value="gold">
+                        <FaTrophy className="me-1" />
+                        Gold (Processed & Clean)
+                      </option>
+                      <option value="silver">
+                        <FaMedal className="me-1" />
+                        Silver (Normalized)
+                      </option>
+                      <option value="bronze">
+                        <FaAward className="me-1" />
+                        Bronze (Raw Data)
+                      </option>
+                      <option value="enriched">
+                        <FaStar className="me-1" />
+                        Enriched (Enhanced)
+                      </option>
+                      <option value="alerts">
+                        <FaBell className="me-1" />
+                        Alerts (Events)
+                      </option>
+                      <option value="sensors">
+                        <FaBroadcastTower className="me-1" />
+                        Sensors (Live Data)
+                      </option>
+                    </Form.Control>
+                  </Form.Group>
+                </Col>
+              </Row>
 
-            <Row>
-              <Col>
-                <Form.Group className="mb-3">
-                  <Form.Label>Description</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col>
-                <Form.Group className="mb-3">
-                  <Form.Label>Definition (JSON)</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={6}
-                    value={JSON.stringify(form.definition, null, 2)}
-                    onChange={(e) => {
-                      try {
-                        const definition = JSON.parse(e.target.value);
-                        setForm({ ...form, definition });
-                      } catch {
-                        // Invalid JSON, don't update
-                      }
-                    }}
-                    style={{ fontFamily: 'monospace' }}
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col>
-                <Form.Group>
-                  <Form.Check
-                    type="switch"
-                    id="enabled-switch"
-                    label="Enable this computation"
-                    checked={form.enabled}
-                    onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-
-            {examples.length > 0 && (
               <Row className="mt-3">
                 <Col>
-                  <h6>Examples:</h6>
-                  <div className="d-flex flex-wrap gap-2">
-                    {examples.map((example, idx) => (
-                      <div key={idx} className="d-flex gap-1">
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          onClick={() => useExample(example)}
-                        >
-                          {example.title}
-                        </Button>
-                        <Button
-                          variant="outline-info"
-                          size="sm"
-                          disabled={previewingExample === example.id}
-                          onClick={() => handlePreviewExample(example.id)}
-                        >
-                          👁️
-                        </Button>
-                      </div>
-                    ))}
+                  <Form.Group>
+                    <Form.Label className="fw-bold">Description</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      placeholder="Describe what this computation analyzes or calculates..."
+                      size="lg"
+                    />
+                    <Form.Text className="text-muted">
+                      Explain the purpose and expected output of this computation.
+                    </Form.Text>
+                  </Form.Group>
+                </Col>
+              </Row>
+            </div>
+
+            {/* Definition Section */}
+            <div className="mb-4">
+              <h6 className="text-primary mb-3">
+                <FaCog className="me-2" />
+                Computation Definition
+              </h6>
+              <Form.Group>
+                <Form.Label className="fw-bold d-flex justify-content-between align-items-center">
+                  <span>JSON Definition</span>
+                  <div className="d-flex gap-2">
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => {
+                        try {
+                          const formatted = JSON.stringify(form.definition, null, 2);
+                          setForm({ ...form, definition: JSON.parse(formatted) });
+                        } catch {
+                          toast.error("Cannot format invalid JSON");
+                        }
+                      }}
+                      title="Format JSON"
+                    >
+                      <FaCog className="me-1" />
+                      Format
+                    </Button>
+                    <Button
+                      variant="outline-info"
+                      size="sm"
+                      onClick={() => {
+                        const example = {
+                          "select": ["*"],
+                          "where": {
+                            "column": "temperature",
+                            "operator": ">",
+                            "value": 25
+                          },
+                          "orderBy": [{"column": "timestamp", "direction": "DESC"}],
+                          "limit": 100
+                        };
+                        setForm({ ...form, definition: example });
+                      }}
+                      title="Load example template"
+                    >
+                      <FaFileAlt className="me-1" />
+                      Example
+                    </Button>
                   </div>
-                  {examplePreviewData && (
+                </Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={18}
+                  value={JSON.stringify(form.definition, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const definition = JSON.parse(e.target.value);
+                      setForm({ ...form, definition });
+                    } catch {
+                      // Invalid JSON, don't update
+                    }
+                  }}
+                  placeholder={`{
+  "select": ["*"],
+  "where": {
+    "column": "temperature",
+    "operator": ">",
+    "value": 25
+  },
+  "orderBy": [{"column": "timestamp", "direction": "DESC"}],
+  "limit": 100
+}`}
+                  style={{
+                    fontFamily: 'Monaco, Menlo, "Ubuntu Mono", "Courier New", monospace',
+                    fontSize: '13px',
+                    lineHeight: '1.6',
+                    resize: 'vertical',
+                    minHeight: '280px',
+                    maxHeight: '500px'
+                  }}
+                />
+                <div className="d-flex justify-content-between align-items-start mt-2">
+                  <Form.Text className="text-muted">
+                    Define your computation using JSON syntax. Use select, where, orderBy, and limit clauses.
+                    <br />
+                    <strong><FaCog className="me-1" />Tip:</strong> Use the Format button to clean up your JSON, or drag the corner to resize the editor!
+                  </Form.Text>
+                  <div className="text-muted small">
+                    {(() => {
+                      const jsonText = JSON.stringify(form.definition, null, 2);
+                      const isValid = (() => {
+                        try { JSON.parse(jsonText); return true; } catch { return false; }
+                      })();
+                      return (
+                        <>
+                          Lines: {jsonText.split('\n').length} | 
+                          Chars: {jsonText.length} |
+                          <span className={isValid ? "text-success" : "text-danger"}>
+                            {isValid ? " Valid JSON ✓" : " Invalid JSON ✗"}
+                          </span>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </Form.Group>
+            </div>
+
+            {/* Settings Section */}
+            <div className="mb-4">
+              <h6 className="text-primary mb-3">
+                <FaCog className="me-2" />
+                Settings
+              </h6>
+              <Form.Group>
+                <Form.Check
+                  type="switch"
+                  id="enabled-switch"
+                  label="Enable this computation"
+                  checked={form.enabled}
+                  onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+                />
+                <Form.Text className="text-muted">
+                  {form.enabled
+                    ? "This computation will be available for execution and dashboard tiles."
+                    : "This computation will be saved but not available for execution."
+                  }
+                </Form.Text>
+              </Form.Group>
+            </div>
+
+            {/* Examples Section */}
+            {(examples.length > 0 || examplesLoading) && (
+              <div className="mb-4">
+                <h6 className="text-primary mb-3">
+                  <FaChartBar className="me-2" />
+                  Quick Start Examples
+                </h6>
+                <div className="p-3 bg-light rounded">
+                  {examplesLoading ? (
+                    <div className="text-center py-3">
+                      <Spinner animation="border" variant="primary" size="sm" className="me-2" />
+                      <span className="text-muted">Loading examples...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-muted mb-3">
+                        Click any example to load it into the form, then customize it for your needs:
+                      </p>
+                      <div className="d-flex flex-wrap gap-2">
+                        {examples.map((example, idx) => (
+                          <div key={idx} className="d-flex gap-1">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => useExample(example)}
+                              className="fw-bold"
+                            >
+                              <FaFileAlt className="me-1" />
+                              {example.title}
+                            </Button>
+                            <Button
+                              variant="outline-info"
+                              size="sm"
+                              disabled={previewingExample === example.id}
+                              onClick={() => handlePreviewExample(example.id)}
+                              title="Preview this example"
+                            >
+                              {previewingExample === example.id ? (
+                                <Spinner animation="border" size="sm" />
+                              ) : (
+                                <FaEye />
+                              )}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {examplePreviewData && !examplesLoading && (
                     <Card className="mt-3">
-                      <Card.Header className="py-2">
-                        <small>Example Preview ({examplePreviewData.row_count} rows)</small>
+                      <Card.Header className="py-2 bg-info text-white">
+                        <small className="fw-bold">
+                          <FaChartBar className="me-1" />
+                          Example Preview Results ({examplePreviewData.row_count} rows)
+                        </small>
                       </Card.Header>
-                      <Card.Body style={{ maxHeight: '200px', overflow: 'auto', fontSize: '0.85rem' }}>
-                        <pre className="mb-0">{JSON.stringify(examplePreviewData.result, null, 2)}</pre>
+                      <Card.Body style={{ maxHeight: '250px', overflow: 'auto', fontSize: '13px' }}>
+                        <pre className="mb-0 text-success">
+                          {JSON.stringify(examplePreviewData.result, null, 2)}
+                        </pre>
                       </Card.Body>
                     </Card>
                   )}
-                </Col>
-              </Row>
+                </div>
+              </div>
             )}
           </Modal.Body>
-          <Modal.Footer>
-            <div className="d-flex justify-content-between w-100">
-              <div>
-                {!editingId && copilotAvailable && (
-                  <Button
-                    variant="info"
-                    onClick={() => setShowCopilot(true)}
-                    className="me-2"
-                  >
-                    🤖 Generate with Copilot
-                  </Button>
+          <Modal.Footer className="d-flex justify-content-between">
+            <div>
+              {!editingId && copilotAvailable && (
+                <Button
+                  variant="outline-info"
+                  onClick={() => setShowCopilot(true)}
+                  className="fw-bold"
+                  style={{ 
+                    backgroundColor: '#ffffff'
+                  }}
+                >
+                  <FaRobot className="me-2" />
+                  Generate with AI Copilot
+                </Button>
+              )}
+            </div>
+            <div className="d-flex gap-2">
+              <Button
+                variant="outline-secondary"
+                onClick={() => setShowModal(false)}
+                size="lg"
+              >
+                <FaTimes className="me-1" />
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                size="lg"
+                className="fw-bold"
+              >
+                {editingId ? (
+                  <>
+                    <FaSave className="me-1" />
+                    Update Computation
+                  </>
+                ) : (
+                  <>
+                    <FaPlus className="me-1" />
+                    Create Computation
+                  </>
                 )}
-              </div>
-              <div>
-                <Button variant="secondary" onClick={() => setShowModal(false)} className="me-2">
-                  Cancel
-                </Button>
-                <Button variant="primary" type="submit">
-                  {editingId ? 'Update' : 'Create'} Computation
-                </Button>
-              </div>
+              </Button>
             </div>
           </Modal.Footer>
         </Form>
