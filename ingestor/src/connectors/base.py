@@ -29,6 +29,64 @@ class DataMessage:
     raw_payload: Optional[str] = None
 
 
+@dataclass
+class ConnectorHealthResponse:
+    """Standardized health response for all data connectors."""
+    # Core status fields - required for all connectors
+    status: str                    # ConnectorStatus enum value
+    healthy: bool                  # Overall health indicator
+    running: bool                  # Whether connector is actively running
+    connected: bool                # Whether connector is connected to its source
+    
+    # Optional common fields
+    last_successful_operation: Optional[str] = None  # ISO timestamp of last successful operation
+    error: Optional[str] = None                      # Current error message if any
+    
+    # Connector-specific fields (will vary by connector type)
+    connection_details: Optional[Dict[str, Any]] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API response."""
+        result = {
+            "status": self.status,
+            "healthy": self.healthy,
+            "running": self.running,
+            "connected": self.connected
+        }
+        
+        # Add optional fields if they have values
+        if self.last_successful_operation:
+            result["last_successful_operation"] = self.last_successful_operation
+        if self.error:
+            result["error"] = self.error
+        if self.connection_details:
+            result.update(self.connection_details)
+            
+        return result
+    
+    @classmethod
+    def create_error_response(cls, error_message: str, status: str = "error") -> "ConnectorHealthResponse":
+        """Create a standardized error response."""
+        return cls(
+            status=status,
+            healthy=False,
+            running=False,
+            connected=False,
+            error=error_message
+        )
+    
+    @classmethod
+    def create_healthy_response(cls, status: str = "active", **connection_details) -> "ConnectorHealthResponse":
+        """Create a standardized healthy response."""
+        return cls(
+            status=status,
+            healthy=True,
+            running=True,
+            connected=True,
+            connection_details=connection_details if connection_details else None
+        )
+
+
 class BaseDataConnector(ABC):
     """Abstract base class for all data source connectors."""
     
@@ -64,8 +122,8 @@ class BaseDataConnector(ABC):
         pass
     
     @abstractmethod
-    async def health_check(self) -> Dict[str, Any]:
-        """Return connector health status."""
+    async def health_check(self) -> ConnectorHealthResponse:
+        """Return connector health status using standardized response model."""
         pass
     
     @classmethod

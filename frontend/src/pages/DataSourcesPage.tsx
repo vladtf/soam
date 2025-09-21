@@ -645,11 +645,6 @@ const DataSourcesPage: React.FC = () => {
                               }
                             </div>
                           )}
-                          {selectedHealth.connected !== undefined && (
-                            <div className="mb-2">
-                              <strong>Connected:</strong> {selectedHealth.connected ? 'Yes' : 'No'}
-                            </div>
-                          )}
                         </>
                       )}
                       {selectedSource.last_connection ? (

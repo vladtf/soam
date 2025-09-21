@@ -7,7 +7,7 @@ import json
 from typing import Dict, Any
 import paho.mqtt.client as mqtt
 from datetime import datetime, timezone
-from .base import BaseDataConnector, DataMessage, ConnectorStatus
+from .base import BaseDataConnector, DataMessage, ConnectorStatus, ConnectorHealthResponse
 from ..utils.timestamp_utils import extract_timestamp
 
 
@@ -68,16 +68,29 @@ class MQTTConnector(BaseDataConnector):
         """Stop MQTT ingestion."""
         pass  # Handled by disconnect
     
-    async def health_check(self) -> Dict[str, Any]:
-        """MQTT connector health check."""
-        return {
-            "status": self.status.value,
-            "connected": self.client and self.client.is_connected() if self.client else False,
+    async def health_check(self) -> ConnectorHealthResponse:
+        """MQTT connector health check with standardized response."""
+        is_connected = self.client and self.client.is_connected() if self.client else False
+        is_running = self._running
+        
+        # Calculate overall health status
+        healthy = is_connected and is_running and self.status == ConnectorStatus.ACTIVE
+        
+        # Prepare connection-specific details
+        connection_details = {
             "broker": self.config.get("broker"),
             "port": self.config.get("port", 1883),
-            "topics": self.config.get("topics", []),
-            "running": self._running
+            "topics": self.config.get("topics", [])
         }
+        
+        return ConnectorHealthResponse(
+            status=self.status.value,
+            healthy=healthy,
+            running=is_running,
+            connected=is_connected,
+            connection_details=connection_details,
+            error=self.last_error
+        )
     
     def _on_connect(self, client, userdata, flags, rc):
         """MQTT connection callback."""

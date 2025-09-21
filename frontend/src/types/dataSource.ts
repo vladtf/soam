@@ -48,7 +48,6 @@ export interface UpdateDataSourceRequest {
 export interface DataSourceHealth {
   status: string;
   healthy: boolean;
-  connected?: boolean;
   endpoint?: string;
   broker?: string;
   port?: number;
