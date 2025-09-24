@@ -58,28 +58,180 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `docker-compose.yml` - Alternative Docker Compose setup
 - `utils/cleanup-images.ps1` - PowerShell script for Docker image management
 
-### Backend (Python/FastAPI)
+### Backend (Python/FastAPI) - Port 8000
+**Main Application Structure:**
 - `backend/Dockerfile` - Multi-stage build with Spark/Java dependencies
 - `backend/Pipfile` - Python dependencies (pipenv managed)
-- `backend/src/main.py` - FastAPI app with lifecycle management
-- `backend/src/api/` - API routers organized by feature (dashboard tiles, computations, etc.)
-- `backend/src/api/dashboard_tiles_routes.py` - User-defined dashboard tiles with time series support
-- `backend/src/schema_inference/` - Schema inference package (modular system)
-- `backend/src/spark/` - Spark streaming and enrichment logic
-- `backend/src/neo4j/` - Graph database interactions
-- `backend/src/utils/api_utils.py` - Unified API decorators with error handling
+- `backend/src/main.py` - FastAPI app with lifecycle management and router registration
+- `backend/src/middleware.py` - Request ID middleware for request tracing
+- `backend/src/logging_config.py` - Structured logging configuration
 
-### Frontend (React/TypeScript)
-- `frontend/package.json` - React app with Vite, TypeScript, Bootstrap, recharts
-- `frontend/src/` - Component-based React architecture with modular dashboard system
-- `frontend/src/components/` - Reusable React components including modular dashboard tiles
-- `frontend/src/utils/timeUtils.ts` - Time formatting utilities for refresh intervals and relative time
-- `frontend/Dockerfile` - nginx-based production build
+**API Layer (`backend/src/api/`):**
+- `dependencies.py` - **CRITICAL**: Central DI with `@lru_cache()` singletons and type aliases
+- `models.py` - Pydantic request/response models with generic types (`ApiResponse[T]`, `ApiListResponse[T]`)
+- `response_utils.py` - **MANDATORY**: Unified response utilities (`success_response()`, error functions)
+- Core API routers:
+  - `device_routes.py` - Device/sensor management with Neo4j integration
+  - `dashboard_tiles_routes.py` - User-defined dashboard tiles with time series support
+  - `minio_routes.py` - MinIO bucket/object management and data access
+  - `health_routes.py` - Health checks and system status
+  - `feedback_routes.py` - User feedback collection
+  - `error_routes.py` - Client error tracking and analytics
+  - `normalization_routes.py` - Data normalization rule management
+  - `normalization_preview_routes.py` - Schema normalization preview
+  - `config_routes.py` - System configuration endpoints
+  - `settings_routes.py` - User settings management
+  - `troubleshooting.py` - Advanced diagnostics and pipeline tracing
+- `routers/schema.py` - Schema inference stream management
 
-### Services
-- `ingestor/` - MQTT-to-storage ingestion service
-- `simulator/` - IoT device simulators (temperature, air quality, smart bins)
-- `mosquitto/` - MQTT broker configuration
+**Business Logic Layer:**
+- `backend/src/computations/` - SQL computation engine with AI copilot integration:
+  - `computation_routes.py` - CRUD operations for saved computations
+  - `service.py` - Core computation execution service
+  - `executor.py` - SQL query executor with Spark integration
+  - `validation.py` - SQL query validation and security
+  - `sources.py` - Data source discovery and schema introspection
+  - `examples.py` - Pre-built computation examples
+- `backend/src/copilot/` - AI-powered natural language to SQL conversion:
+  - `copilot_routes.py` - AI copilot API endpoints
+  - `copilot_service.py` - Azure OpenAI integration for SQL generation
+- `backend/src/services/` - Cross-cutting business services:
+  - `ingestor_schema_client.py` - Client for fetching metadata from ingestor service
+  - `normalization_preview.py` - Schema normalization preview logic
+
+**Data & Storage Layer:**
+- `backend/src/database/` - SQLAlchemy ORM and database management:
+  - `database.py` - Database connection, session management, and initialization
+  - `models.py` - Core SQLAlchemy models (Feedback, NormalizationRule, ClientError, Settings, etc.)
+- `backend/src/minio/` - Object storage service integration
+- `backend/src/neo4j/` - Graph database operations:
+  - `neo4j_manager.py` - Core Neo4j connection and CRUD operations
+  - `building_routes.py` - Building/location management API
+
+**Spark & Analytics Layer:**
+- `backend/src/spark/` - Apache Spark integration for stream processing:
+  - `spark_manager.py` - **CRITICAL**: Main Spark coordinator with stream lifecycle management
+  - `session.py` - `SparkSessionManager` with optimized configuration
+  - `spark_routes.py` - Spark cluster management API
+  - `streaming.py` - `StreamingManager` for stream orchestration
+  - `data_access.py` - `DataAccessManager` for bronze/silver/gold layer access
+  - `diagnostics.py` - Data pipeline diagnostics and troubleshooting
+  - `enrichment/` - Data enrichment pipeline:
+    - `enrichment_manager.py` - Main enrichment orchestrator
+    - `batch_processor.py` - Batch processing logic for file-based ingestion
+    - `union_schema.py` - Dynamic schema handling for multi-source data
+    - `device_filter.py` - Device-based data filtering
+    - `cleaner.py` - Data cleaning and validation
+    - `usage_tracker.py` - Resource usage monitoring
+
+**Utilities (`backend/src/utils/`):**
+- `api_utils.py` - **MANDATORY**: API decorators for error handling (`@handle_api_errors`)
+- `response_utils.py` - Response formatting utilities
+- `logging.py` - Emoji-based structured logging (`get_logger()`)
+- `database_utils.py` - Database utilities and error handling
+- `settings_manager.py` - Application settings management
+- `spark_utils.py` - Spark-specific utilities
+- `validation.py` - Input validation utilities
+
+### Ingestor Service (Python/FastAPI) - Port 8001
+**Modular Data Ingestion Platform:**
+- `ingestor/src/main.py` - FastAPI app with connector lifecycle management
+- `ingestor/src/middleware.py` - Request tracking middleware
+- `ingestor/src/config.py` - Ingestor-specific configuration
+
+**API Layer (`ingestor/src/api/`):**
+- `dependencies.py` - DI container with Prometheus metrics and singleton services
+- `routers/` - API endpoint organization:
+  - `health.py` - Health checks, readiness probes, and Prometheus metrics
+  - `data.py` - Legacy data access API (partition buffers)
+  - `metadata.py` - Schema metadata and data quality metrics
+  - `data_sources.py` - **NEW**: Dynamic data source management API
+
+**Connector Architecture (`ingestor/src/connectors/`):**
+- `base.py` - **CRITICAL**: Abstract base connector with standardized `DataMessage` format
+- `mqtt_connector.py` - MQTT broker integration with auto-reconnection
+- `rest_api_connector.py` - REST API polling connector with configurable intervals
+
+**Services Layer (`ingestor/src/services/`):**
+- `data_source_service.py` - **CRITICAL**: Registry and manager for pluggable data sources:
+  - `DataSourceRegistry` - Type registration and discovery
+  - `DataSourceManager` - Instance lifecycle management
+  - Support for MQTT, REST API, and extensible connector types
+
+**Storage & Metadata:**
+- `ingestor/src/storage/minio_client.py` - MinIO client for bronze layer storage
+- `ingestor/src/metadata/service.py` - Metadata extraction and schema evolution tracking
+- `ingestor/src/database/` - SQLAlchemy models for data source configuration
+
+**Utilities:**
+- `ingestor/src/utils/timestamp_utils.py` - Timestamp parsing and standardization
+
+### Frontend (React/TypeScript) - Port 3000
+**Application Architecture:**
+- `frontend/src/main.tsx` - React app entry point with context providers
+- `frontend/src/App.tsx` - Main app component with routing
+- `frontend/src/config.ts` - **CRITICAL**: Configuration management with dynamic loading
+- `frontend/public/config/config.json` - Runtime configuration (backendUrl, ingestorUrl)
+
+**Context & State Management (`frontend/src/context/`):**
+- `ConfigContext.tsx` - Global configuration context with dynamic loading
+
+**API Integration (`frontend/src/api/`):**
+- `backendRequests.tsx` - **COMPREHENSIVE**: All backend and ingestor API calls with TypeScript interfaces
+  - Backend APIs: computations, dashboard tiles, devices, troubleshooting
+  - Ingestor APIs: data sources, metadata, health monitoring
+  - Copilot APIs: AI-powered SQL generation
+
+**Component Architecture (`frontend/src/components/`):**
+**Core Dashboard Components:**
+- `DashboardGrid.tsx` - React-grid-layout integration with drag & drop
+- `DashboardTile.tsx` - Visualization component (table/stat/timeseries)
+- `TileWithData.tsx` - **CRITICAL**: Data fetching, auto-refresh, and chart rendering
+- `TileModal.tsx` - Tile creation/editing with live preview
+- `DashboardHeader.tsx` - Dashboard controls and settings
+
+**Data Visualization:**
+- `TemperatureChart.tsx` - Time series temperature visualization
+- `StatisticsCards.tsx` - System metrics display
+- `SparkApplicationsCard.tsx` - Spark cluster status
+- `TemperatureAlertsCard.tsx` - Real-time alert display
+- `EnrichmentStatusCard.tsx` - Data pipeline status
+
+**Data Management:**
+- `sensor-data/` - Sensor data browsing components
+- `computations/` - SQL computation management UI
+- `pipeline/` - Data pipeline monitoring components
+
+**Utility Components:**
+- `ErrorBoundary.tsx` - Global error handling
+- `MetadataViewer.tsx` - JSON data inspector
+- `ThemedReactJson.tsx` - Styled JSON viewer
+- `WithTooltip.tsx` - Reusable tooltip wrapper
+
+**Pages (`frontend/src/pages/`):**
+- `DashboardPage.tsx` - **MAIN**: Modular dashboard with user-defined tiles
+- `DataPipelinePage.tsx` - Spark streaming monitoring
+- `DataSourcesPage.tsx` - Ingestor data source management
+- `MinioBrowserPage.tsx` - Object storage browser
+- `MetadataPage.tsx` - Schema metadata explorer
+- `TroubleshootingPage.tsx` - Advanced diagnostics interface
+- `SettingsPage.tsx` - Application settings
+- `OntologyPage.tsx` - Neo4j graph visualization
+
+**Type Definitions (`frontend/src/types/`):**
+- `dataSource.ts` - TypeScript interfaces for modular data source system
+- `imports.d.ts` - Module declarations for external libraries
+
+**Utilities (`frontend/src/utils/`):**
+- `timeUtils.ts` - **CRITICAL**: Time formatting for refresh intervals and relative time display
+
+### Supporting Services
+- `simulator/` - IoT device simulators (temperature, air quality, smart bins, traffic)
+- `rest-api-simulator/` - REST API endpoint simulator for testing
+- `mosquitto/` - MQTT broker configuration and persistence
+- `neo4j/` - Graph database with ontology initialization
+- `grafana/` - Monitoring dashboards with Prometheus integration
+- `prometheus/` - Metrics collection and monitoring
 
 ## Critical Development Patterns
 
@@ -266,23 +418,118 @@ const safeRefreshInterval = Math.max(refreshIntervalMs, 15000); // Minimum 15 se
 }
 ```
 
-### 7. Schema Inference System (Critical)
-**Location**: `backend/src/schema_inference/` - This is a modular package that automatically infers schemas from bronze files.
+### 7. Modular Ingestor Architecture (NEW SYSTEM)
+**Location**: `ingestor/` - Complete rewrite with pluggable connector architecture
 
-**Key Pattern**: Never read parquet files with Spark streaming directly - use batch processing:
+**Key Innovation**: Dynamic data source registration with standardized connector interface:
 ```python
-# ❌ Wrong - causes "Schema must be specified" error
-stream = spark.readStream.parquet(path)
+# Base connector contract in ingestor/src/connectors/base.py
+@dataclass
+class DataMessage:
+    """Standardized message format from any connector type."""
+    data: Dict[str, Any]           # Raw sensor data
+    metadata: Dict[str, Any]       # Source metadata
+    source_id: str                 # Ingestion ID for partitioning
+    timestamp: str                 # ISO timestamp
+    raw_payload: Optional[str] = None  # Original message for debugging
 
-# ✅ Correct - use rate trigger for periodic processing
-stream = spark.readStream.format("rate").trigger(processingTime="30 seconds")
+class BaseDataConnector(ABC):
+    """Abstract base for all data connectors."""
+    @abstractmethod
+    async def start(self) -> None: pass
+    @abstractmethod
+    async def stop(self) -> None: pass
+    @abstractmethod
+    async def get_health(self) -> ConnectorHealthResponse: pass
 ```
 
-### 8. Data Layer Patterns
-- **Bronze**: Raw sensor data in `s3a://lake/bronze/ingestion_id=*/date=*/hour=*/*.parquet`
-- **Silver**: Normalized data via Spark enrichment pipeline
-- **Gold**: Aggregated data and alerts stored in Neo4j
-- **Schema Storage**: SQLite database with `SchemaInfo` and `SchemaInferenceLog` tables
+**Data Source Management**:
+```python
+# Dynamic registration in ingestor/src/services/data_source_service.py
+class DataSourceRegistry:
+    """Registry for pluggable connector types."""
+    CONNECTOR_TYPES = {
+        "mqtt": MQTTConnector,
+        "rest_api": RestApiConnector,
+        # Easily extensible for new connector types
+    }
+
+class DataSourceManager:
+    """Manages individual data source instances with lifecycle control."""
+    # Auto-restart, health monitoring, metrics collection
+```
+
+**Critical Data Flow**: Connector → `DataMessage` → Partition Buffer → MinIO Bronze Layer
+- All connectors output standardized `DataMessage` format
+- Partition buffers maintain compatibility with legacy `/api/partitions` endpoint
+- MinIO client handles bronze layer storage with ingestion_id partitioning
+- Metadata service extracts schemas and tracks data quality metrics
+
+### 8. Comprehensive Troubleshooting System (ADVANCED)
+**Location**: `backend/src/api/troubleshooting.py` and `backend/src/spark/diagnostics.py`
+
+**Advanced Pipeline Diagnostics**:
+```python
+# Field-level diagnostic tracing
+@router.post("/diagnose-field", response_model=ApiResponse[FieldDiagnosticResult])
+async def diagnose_field(
+    sensor_id: str,
+    field_name: str, 
+    minutes_back: int,
+    ingestion_id: Optional[str] = None
+):
+    """Trace a specific field through the entire pipeline: Bronze → Silver → Gold"""
+    # Returns detailed pipeline trace with schema evolution and transformation history
+```
+
+**Pipeline Tracing Features**:
+- End-to-end data lineage tracking from ingestion to dashboard
+- Schema evolution detection with compatibility analysis
+- Data quality metrics at each pipeline stage
+- Performance bottleneck identification
+- Missing data gap analysis
+
+### 9. Real-time Dashboard System with Auto-refresh (COMPREHENSIVE)
+**Location**: `frontend/src/components/TileWithData.tsx` and dashboard ecosystem
+
+**Smart Refresh Logic**:
+```typescript
+// Critical auto-refresh implementation
+useEffect(() => {
+  // Data fetching logic with concurrency protection
+}, [tile.id, tsKey]); // ❌ NEVER include 'rows' in dependencies to prevent loops
+
+// Minimum refresh interval safety
+const safeRefreshInterval = Math.max(refreshIntervalMs, 15000); // Minimum 15 seconds
+
+// Time series configuration in tile.config
+{
+  "timeField": "time_start",         // X-axis field for charts
+  "valueField": "avg_temperature",   // Y-axis field for charts
+  "chartHeight": 250,                // Chart height in pixels
+  "refreshInterval": 30000,          // Auto-refresh interval in ms
+  "autoRefresh": true                // Enable/disable auto-refresh
+}
+```
+
+**Dashboard Architecture**:
+- **TileWithData.tsx**: Handles data fetching, caching, and auto-refresh with concurrency protection
+- **DashboardTile.tsx**: Pure visualization component (table/stat/timeseries)
+- **DashboardGrid.tsx**: React-grid-layout integration with drag & drop
+- **TileModal.tsx**: Tile creation with live preview and validation
+- Time series charts use recharts with responsive containers
+- Automatic data caching to prevent redundant API calls
+- User-configurable refresh intervals with minimum safety limits
+
+### 10. AI Copilot Integration (AZURE OPENAI)
+**Location**: `backend/src/copilot/` - Natural language to SQL conversion
+
+**Features**:
+- Context-aware SQL generation from natural language
+- Schema introspection for accurate table/field references
+- Query validation and security filtering
+- Integration with computation engine for execution
+- Configuration via Azure OpenAI API (endpoint, key, version)
 
 ## Dev Workflow (Windows PowerShell)
 
@@ -691,15 +938,182 @@ When implementing new features, always:
 **Config**: Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_API_VERSION`
 **Location**: `backend/src/copilot/` - includes context analysis and computation generation
 
+## Core Service Architecture
+
+### Backend Service Layer
+**Key Services & Managers (All Singleton via DI):**
+
+- `SparkManager` (`backend/src/spark/spark_manager.py`) - **CRITICAL**: Coordinates all Spark operations
+  - `SparkSessionManager` - Optimized Spark session with S3A configuration  
+  - `StreamingManager` - Manages streaming query lifecycle
+  - `EnrichmentManager` - Orchestrates data enrichment pipeline
+  - `DataAccessManager` - Provides bronze/silver/gold layer access
+
+- `Neo4jManager` (`backend/src/neo4j/neo4j_manager.py`) - Graph database operations
+  - Building/location management with spatial queries
+  - Ontology-based data relationships
+  - Auto-provisioning of initial graph data
+
+- `ComputationService` (`backend/src/computations/service.py`) - SQL execution engine
+  - Dynamic query execution on Spark
+  - Schema introspection and validation
+  - Integration with AI copilot for query generation
+
+- `CopilotService` (`backend/src/copilot/copilot_service.py`) - Azure OpenAI integration
+  - Natural language to SQL conversion
+  - Context-aware schema analysis
+  - Query optimization recommendations
+
+### Ingestor Service Architecture
+**Registry & Management Pattern:**
+
+- `DataSourceRegistry` - Type discovery and connector registration
+- `DataSourceManager` - Instance lifecycle management with auto-restart
+- `MetadataService` - Schema extraction and data quality tracking
+- `MinioClient` - Bronze layer storage with partitioning strategy
+
+### Database Models & Storage
+**Core SQLAlchemy Models (`backend/src/database/models.py`):**
+
+```python
+class NormalizationRule(Base):
+    """User-defined schema normalization rules."""
+    # Maps raw sensor keys to canonical field names
+    # Supports global and ingestion-specific rules
+    
+class Feedback(Base):
+    """User feedback and bug report collection."""
+    
+class ClientError(Base):
+    """Frontend error tracking and analytics."""
+    
+class Settings(Base):
+    """Application configuration and user preferences."""
+    
+class DashboardTile(Base):
+    """User-defined dashboard tile definitions."""
+    # Stores computation queries, visualization config, layouts
+```
+
+**Ingestor Models (`ingestor/src/database/models.py`):**
+```python
+class DataSourceType(Base):
+    """Registered connector types (MQTT, REST API, etc.)."""
+    
+class DataSource(Base):
+    """Individual data source instances with configuration."""
+    
+class DataSourceMetric(Base):
+    """Performance and health metrics collection."""
+```
+
 ## Data Processing Flow Understanding
 
-1. **Ingestion**: MQTT sensors → `ingestor` → MinIO bronze layer (partitioned by ingestion_id/date/hour)
-2. **Schema Inference**: `SchemaInferenceStream` runs every 30s, discovers new parquet files, infers schemas → SQLite
-3. **Enrichment**: Spark reads bronze → applies normalization rules → writes silver/gold layers
-4. **Normalization**: Uses `SchemaService` for dynamic field mapping based on inferred schemas
-5. **Analytics**: Neo4j stores graph relationships, dashboard APIs serve aggregated data
+1. **Ingestion**: MQTT/REST → Ingestor Connectors → `DataMessage` standardization → MinIO bronze layer
+2. **Partitioning**: Data partitioned by `ingestion_id=*/date=*/hour=*/*.parquet` for efficient querying
+3. **Schema Inference**: Spark batch jobs analyze new bronze files → SQLAlchemy schema storage
+4. **Enrichment**: Spark streaming reads bronze → applies normalization rules → writes silver/gold layers
+5. **Normalization**: User-defined rules map raw sensor keys to canonical field names
+6. **Analytics**: Neo4j stores enriched relationships, dashboard APIs serve computed aggregations
+7. **Monitoring**: Prometheus metrics collection, Grafana dashboards, health endpoints
 
-## Templates/Snippets
+### Critical Data Layer Patterns
+- **Bronze**: Raw sensor data with original structure preserved
+- **Silver**: Normalized data with consistent schema and cleansed values  
+- **Gold**: Aggregated insights, alerts, and derived analytics
+- **Schema Evolution**: Automatic detection and compatibility analysis
+- **Partition Strategy**: Time-based partitioning enables efficient time-range queries
+
+## Component Interaction Patterns
+
+### Backend → Ingestor Communication
+- **IngestorSchemaClient** (`backend/src/services/ingestor_schema_client.py`): HTTP client for metadata APIs
+- **Data Context Building**: Aggregates schema info from `/api/metadata/datasets` and `/api/metadata/topics`
+- **Real-time Schema Updates**: Backend polls ingestor for schema changes during enrichment
+
+### Frontend → Backend API Flow
+- **Configuration Loading**: `ConfigContext.tsx` loads runtime config from `/config/config.json`
+- **API Abstraction**: `backendRequests.tsx` provides typed interfaces for all backend/ingestor endpoints
+- **Dashboard Data Flow**: `TileWithData.tsx` → `previewDashboardTile()` → Computation Service → Spark Query → Results
+- **Auto-refresh Safety**: Minimum 15-second intervals with concurrency protection
+
+### Spark Pipeline Orchestration
+- **Streaming Manager**: Controls query lifecycle (start/stop/restart) with failure recovery
+- **Enrichment Manager**: Coordinates batch processing pipeline for bronze → silver transformation
+- **Data Access Manager**: Provides abstracted access to all data layers (bronze/silver/gold)
+- **Schema Integration**: Uses fast schema provider for dynamic schema application during processing
+
+### Data Source Plugin Architecture
+- **Registry Pattern**: `DataSourceRegistry.CONNECTOR_TYPES` maps type names to connector classes
+- **Lifecycle Management**: `DataSourceManager` handles start/stop/health for all active sources
+- **Standardized Output**: All connectors output `DataMessage` format for consistent processing
+- **Extensibility**: New connector types register via simple class mapping in registry
+
+## Implementation Standards Checklist
+
+**Before submitting any code, verify:**
+
+### ✅ Dependency Injection
+- [ ] Uses type aliases: `SparkManagerDep`, `Neo4jManagerDep`, `ConfigDep`, `MinioClientDep`
+- [ ] Follows centralized DI pattern from `dependencies.py`
+- [ ] No direct instantiation of services in endpoints
+
+### ✅ Error Handling
+- [ ] All error functions use `raise error_function()` pattern
+- [ ] Database rollback in all exception handlers
+- [ ] Specific error types used (not generic `HTTPException`)
+
+### ✅ Logging
+- [ ] Uses `get_logger(__name__)` for logger creation
+- [ ] Emoji prefixes: ✅ ❌ ⚠️ 🔍
+- [ ] Context included in business logic logs (user, operation details)
+
+### ✅ Response Models
+- [ ] `response_model=ApiResponse[T]` or `ApiListResponse[T]` specified
+- [ ] Generic typing used for type safety
+- [ ] Meaningful success messages included
+
+### ✅ Code Organization
+- [ ] Imports organized: stdlib → FastAPI → SQLAlchemy → src modules
+- [ ] Router endpoints ordered: GET → POST → PATCH → DELETE
+- [ ] Database operations include input validation and user context
+
+## Safe Ops Rules
+
+### NEVER (without confirmation):
+- `kubectl delete` on production-like resources
+- `docker system prune -a` (use project cleanup script instead)
+- Modify StatefulSet volumes without data backup
+- Change Spark cluster configuration without understanding impact
+- Run skaffold on another terminal. I'm using another terminal for hot reloading.
+- Duplicate code that could be reused
+- Use `readStream.parquet()` without schema specification
+- Use blocking commands in CLI, like `kubectl logs -f statefulset/backend`
+- Try to restart the pods. Skaffold dev is handling this automatically.
+
+### ALWAYS:
+- Show commands before execution in destructive operations
+- Use `kubectl describe` and `kubectl logs` for investigation first
+- Test API changes with curl/PowerShell before frontend integration
+- Check resource limits when adding new containers
+- Use `pipenv shell` before running Python scripts
+- Verify port-forwarding is active before API testing
+- Scan uncommitted changes with `git status` to understand the current state.
+- Clean up unused code and dependencies.
+- Use dependency injection pattern for new endpoints
+- Test schema changes with `/api/schema/stream/status` endpoint
+- Use PowerShell for CLI commands
+- Use explicit error raising: `raise error_function()`
+- Include database rollback in exception handlers
+- Use emojis in logging for quick visual scanning
+- Specify response models with generic typing
+- Use absolute paths when running scripts. This ensures the command won't fail because of relative path issues.
+
+## AI Copilot Integration
+
+**Feature**: Natural language → SQL computation generation using Azure OpenAI
+**Config**: Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_API_VERSION`
+**Location**: `backend/src/copilot/` - includes context analysis and computation generation
 
 ### Commit Messages
 ```
