@@ -62,14 +62,18 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `backend/Dockerfile` - Multi-stage build with Spark/Java dependencies
 - `backend/Pipfile` - Python dependencies (pipenv managed)
 - `backend/src/main.py` - FastAPI app with lifecycle management
-- `backend/src/api/` - API routers organized by feature
+- `backend/src/api/` - API routers organized by feature (dashboard tiles, computations, etc.)
+- `backend/src/api/dashboard_tiles_routes.py` - User-defined dashboard tiles with time series support
 - `backend/src/schema_inference/` - Schema inference package (modular system)
 - `backend/src/spark/` - Spark streaming and enrichment logic
 - `backend/src/neo4j/` - Graph database interactions
+- `backend/src/utils/api_utils.py` - Unified API decorators with error handling
 
 ### Frontend (React/TypeScript)
-- `frontend/package.json` - React app with Vite, TypeScript, Bootstrap
-- `frontend/src/` - Component-based React architecture
+- `frontend/package.json` - React app with Vite, TypeScript, Bootstrap, recharts
+- `frontend/src/` - Component-based React architecture with modular dashboard system
+- `frontend/src/components/` - Reusable React components including modular dashboard tiles
+- `frontend/src/utils/timeUtils.ts` - Time formatting utilities for refresh intervals and relative time
 - `frontend/Dockerfile` - nginx-based production build
 
 ### Services
@@ -196,7 +200,73 @@ def sync_handler():
 
 **Benefits**: Eliminates repetitive try/catch blocks, standardizes error responses
 
-### 6. Schema Inference System (Critical)
+### 6. Modular Dashboard System (CRITICAL)
+**Pattern**: Component-based architecture with time series chart support and auto-refresh
+
+**Location**: Frontend dashboard system is fully modularized into reusable components:
+
+```typescript
+// Core dashboard components
+frontend/src/components/TileWithData.tsx      - Data fetching, refresh logic, chart rendering
+frontend/src/components/TileModal.tsx         - Tile creation/editing with live preview
+frontend/src/components/DashboardTile.tsx     - Chart/table/stat visualization component
+frontend/src/components/DashboardGrid.tsx     - Grid layout with drag-and-drop
+frontend/src/components/DashboardHeader.tsx   - Dashboard controls and settings
+frontend/src/utils/timeUtils.ts              - Time formatting utilities
+
+// Backend API support
+backend/src/api/dashboard_tiles_routes.py    - CRUD operations for user-defined tiles
+```
+
+**Key Features**:
+- **Time Series Support**: LineChart with recharts, configurable time/value fields
+- **Auto-Refresh**: Configurable intervals with throttling and concurrent request prevention
+- **Live Preview**: Real-time tile preview during configuration
+- **Drag & Drop**: React-grid-layout integration for dashboard customization
+- **Type Safety**: Full TypeScript integration with backend response models
+
+**Critical Implementation Details**:
+```typescript
+// TileWithData.tsx - Proper useEffect dependency management to prevent infinite loops
+useEffect(() => {
+  // Data fetching logic
+}, [tile.id, tsKey]); // ❌ NEVER include 'rows' in dependencies
+
+// Auto-refresh with minimum interval safety
+const safeRefreshInterval = Math.max(refreshIntervalMs, 15000); // Minimum 15 seconds
+
+// Time series configuration in tile.config
+{
+  "timeField": "time_start",      // X-axis field
+  "valueField": "avg_temperature", // Y-axis field  
+  "chartHeight": 250,             // Chart height in pixels
+  "refreshInterval": 30000,       // Refresh interval in milliseconds
+  "autoRefresh": true             // Enable/disable auto-refresh
+}
+```
+
+**Backend Examples**: Dashboard tiles with time series support:
+```python
+# Time series tile example in dashboard_tiles_routes.py
+{
+    "id": "timeseries-chart",
+    "title": "Time series chart", 
+    "tile": {
+        "name": "Time Series Chart",
+        "computation_id": cid,
+        "viz_type": "timeseries",
+        "config": {
+            "timeField": "time_start",
+            "valueField": "avg_temperature", 
+            "chartHeight": 250,
+            "refreshInterval": 30000,
+            "autoRefresh": True
+        }
+    }
+}
+```
+
+### 7. Schema Inference System (Critical)
 **Location**: `backend/src/schema_inference/` - This is a modular package that automatically infers schemas from bronze files.
 
 **Key Pattern**: Never read parquet files with Spark streaming directly - use batch processing:
@@ -208,7 +278,7 @@ stream = spark.readStream.parquet(path)
 stream = spark.readStream.format("rate").trigger(processingTime="30 seconds")
 ```
 
-### 7. Data Layer Patterns
+### 8. Data Layer Patterns
 - **Bronze**: Raw sensor data in `s3a://lake/bronze/ingestion_id=*/date=*/hour=*/*.parquet`
 - **Silver**: Normalized data via Spark enrichment pipeline
 - **Gold**: Aggregated data and alerts stored in Neo4j
