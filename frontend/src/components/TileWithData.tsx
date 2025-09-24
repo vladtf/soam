@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, ButtonGroup, Spinner } from 'react-bootstrap';
+// @ts-ignore - TypeScript type declarations issue with recharts package
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { DashboardTile } from './DashboardTile';
 import { DashboardTileDef, previewDashboardTile } from '../api/backendRequests';
@@ -28,6 +29,7 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
   const [tsKey, setTsKey] = useState<number>(0);
   const [cache, setCache] = useState<{ rows: unknown[]; at: number } | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [lastManualRefresh, setLastManualRefresh] = useState<number>(0);
 
   // Get refresh interval from config, default to 30 seconds
   const refreshIntervalMs = Number((tile.config as any)?.refreshInterval ?? DEFAULT_REFRESH_INTERVAL_MS);
@@ -36,6 +38,11 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
   useEffect(() => {
     let mounted = true;
     const hasExistingData = rows !== null;
+    
+    // Prevent concurrent requests for the same tile
+    if ((loading || refreshing) && tsKey > 0) {
+      return;
+    }
     
     if (hasExistingData) {
       setRefreshing(true);
@@ -72,16 +79,19 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
       }
     })();
     return () => { mounted = false; };
-  }, [tile.id, tsKey, rows]);
+  }, [tile.id, tsKey]);
 
   // Auto-refresh timer
   useEffect(() => {
     if (!autoRefreshEnabled || refreshIntervalMs <= 0) return;
     
+    // Minimum refresh interval of 15 seconds to prevent abuse
+    const safeRefreshInterval = Math.max(refreshIntervalMs, 15000);
+    
     const interval = setInterval(() => {
       setTsKey(k => k + 1);
       setCache(null);
-    }, refreshIntervalMs);
+    }, safeRefreshInterval);
     
     return () => {
       clearInterval(interval);
@@ -89,6 +99,12 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
   }, [autoRefreshEnabled, refreshIntervalMs, tile.id]);
 
   const handleManualRefresh = () => {
+    const now = Date.now();
+    // Throttle manual refresh to prevent rapid clicking (minimum 2 seconds between manual refreshes)
+    if (now - lastManualRefresh < 2000) {
+      return;
+    }
+    setLastManualRefresh(now);
     setTsKey(k => k + 1);
     setCache(null);
   };
