@@ -66,9 +66,18 @@ def validate_computation_definition(definition) -> dict:
             for i, cond in enumerate(definition["where"]):
                 if not isinstance(cond, dict):
                     return {"valid": False, "message": f"where[{i}] must be an object"}
-                required_keys = {"col", "op", "value"}
-                if not all(key in cond for key in required_keys):
-                    return {"valid": False, "message": f"where[{i}] must contain: {', '.join(required_keys)}"}
+                
+                # Check required keys based on operation type
+                if "col" not in cond or "op" not in cond:
+                    return {"valid": False, "message": f"where[{i}] must contain 'col' and 'op'"}
+                
+                # For null check operations, value is not required
+                op = cond.get("op", "").upper()
+                if op in ["IS NULL", "IS NOT NULL"]:
+                    # These operations don't require a value
+                    pass
+                elif "value" not in cond:
+                    return {"valid": False, "message": f"where[{i}] must contain 'value' for operation '{op}'"}
         
         # Validate orderBy structure
         if "orderBy" in definition:

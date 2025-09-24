@@ -119,30 +119,65 @@ class ComputationExecutor:
         """Validate that referenced columns exist in the DataFrame."""
         referenced_cols = set()
         
-        # Collect column references from select
+        # Collect column references from select (excluding aggregate functions and aliases)
         if definition.get("select"):
             for col_expr in definition["select"]:
                 if isinstance(col_expr, str):
                     if " as " in col_expr:
                         # Extract source column from "column as alias" format
                         source_col = col_expr.split(" as ")[0].strip()
-                        referenced_cols.add(source_col)
-                    elif "(" in col_expr and ")" in col_expr:
-                        # Skip aggregate functions for validation
+                        # Skip aggregate functions and window functions in validation
+                        if not any(func in source_col.upper() for func in ["COUNT(", "AVG(", "MIN(", "MAX(", "SUM(", "WINDOW("]):
+                            referenced_cols.add(source_col)
+                    elif any(func in col_expr.upper() for func in ["COUNT(", "AVG(", "MIN(", "MAX(", "SUM(", "WINDOW("]):
+                        # Skip aggregate functions and window functions for validation - they're handled during execution
                         continue
                     else:
                         referenced_cols.add(col_expr)
         
-        # Collect references from where, orderBy, groupBy
+        # Collect references from where
         referenced_cols.update(w.get("col") for w in definition.get("where", []) if w.get("col"))
-        referenced_cols.update(o.get("col") for o in definition.get("orderBy", []) if o.get("col"))
-        if definition.get("groupBy"):
-            referenced_cols.update(definition["groupBy"])
         
-        # Filter out complex expressions and check simple column references
+        # Collect references from groupBy (excluding window functions)
+        if definition.get("groupBy"):
+            for group_col in definition["groupBy"]:
+                if not group_col.upper().startswith("WINDOW("):
+                    referenced_cols.add(group_col)
+        
+        # For orderBy, we need to be more careful - skip columns that are aliases from aggregation
+        if definition.get("orderBy"):
+            # Get list of aliases created in SELECT clause
+            select_aliases = set()
+            if definition.get("select"):
+                for col_expr in definition["select"]:
+                    if isinstance(col_expr, str) and " as " in col_expr:
+                        alias = col_expr.split(" as ")[1].strip()
+                        select_aliases.add(alias)
+            
+            # Only validate orderBy columns that aren't select aliases
+            for order_spec in definition.get("orderBy", []):
+                col_name = order_spec.get("col")
+                if col_name and col_name not in select_aliases:
+                    referenced_cols.add(col_name)
+        
+        # Validate columns exist in DataFrame
         df_cols = set(df.columns)
-        simple_refs = {c for c in referenced_cols if c and not c.startswith(("normalized_data.", "sensor_data."))}
-        missing = [c for c in simple_refs if c not in df_cols]
+        missing = []
+        
+        for col in referenced_cols:
+            if not col:
+                continue
+                
+            # Handle nested column references (e.g., "normalized_data.temperature")
+            if "." in col:
+                # For nested columns, check if the parent column exists
+                parent_col = col.split(".")[0]
+                if parent_col not in df_cols:
+                    missing.append(col)
+            else:
+                # For simple column references
+                if col not in df_cols:
+                    missing.append(col)
         
         if missing:
             suggestions = {m: get_close_matches(m, list(df_cols), n=3, cutoff=0.5) for m in missing}
@@ -183,50 +218,134 @@ class ComputationExecutor:
     
     def _apply_groupby(self, df, group_cols: List[str], select_cols: List[str]):
         """Apply groupBy with aggregation."""
-        df_grouped = df.groupBy(*group_cols)
+        # Handle window functions in group_cols
+        processed_group_cols = []
+        for group_col in group_cols:
+            if group_col.upper().startswith("WINDOW("):
+                # For window functions, we need to parse and apply them
+                processed_group_cols.append(self._parse_window_function(group_col))
+            else:
+                processed_group_cols.append(group_col)
+        
+        df_grouped = df.groupBy(*processed_group_cols)
         
         # Process select with aggregations
         agg_exprs = []
         for col_expr in select_cols:
             if isinstance(col_expr, str):
                 if "(" in col_expr and ")" in col_expr:
-                    # Handle aggregate functions
-                    agg_expr = self._parse_aggregate_function(col_expr)
-                    agg_exprs.append(agg_expr)
+                    # Check if it's a window function or aggregate function
+                    if col_expr.upper().startswith("WINDOW("):
+                        # Handle window function expressions
+                        agg_expr = self._parse_window_function_select(col_expr)
+                        agg_exprs.append(agg_expr)
+                    else:
+                        # Handle aggregate functions
+                        agg_expr = self._parse_aggregate_function(col_expr)
+                        agg_exprs.append(agg_expr)
                 else:
-                    # Regular column (should be in groupBy)
-                    agg_exprs.append(F.col(col_expr))
+                    # Regular column - check if it's in groupBy or needs aggregation
+                    if " as " in col_expr:
+                        # Handle column aliasing like "sensor_data.sensorId as sensor_id"
+                        parts = col_expr.split(" as ")
+                        original_col = parts[0].strip()
+                        alias = parts[1].strip()
+                        
+                        # Check if this column is in the groupBy
+                        if original_col in group_cols:
+                            agg_exprs.append(F.col(original_col).alias(alias))
+                        else:
+                            # Use first() for non-grouped columns (they should be the same within each group)
+                            agg_exprs.append(F.first(original_col).alias(alias))
+                    else:
+                        # Simple column reference
+                        if col_expr in group_cols:
+                            agg_exprs.append(F.col(col_expr))
+                        else:
+                            # Use first() for non-grouped columns
+                            agg_exprs.append(F.first(col_expr))
             else:
-                agg_exprs.append(F.col(str(col_expr)))
+                col_str = str(col_expr)
+                if col_str in group_cols:
+                    agg_exprs.append(F.col(col_str))
+                else:
+                    agg_exprs.append(F.first(col_str))
         
         return df_grouped.agg(*agg_exprs)
     
     def _parse_aggregate_function(self, col_expr: str):
         """Parse aggregate function expressions."""
+        # Handle aliasing in aggregate functions
+        alias_name = None
+        if " as " in col_expr:
+            parts = col_expr.split(" as ")
+            col_expr = parts[0].strip()
+            alias_name = parts[1].strip()
+        
         if col_expr.startswith("COUNT("):
             if "COUNT(*)" in col_expr:
-                return F.count("*").alias("reading_count")
+                result_alias = alias_name or "reading_count"
+                return F.count("*").alias(result_alias)
             else:
                 col_name = col_expr[6:-1]  # Remove COUNT( and )
-                return F.count(col_name).alias(f"count_{col_name}")
+                result_alias = alias_name or f"count_{col_name.split('.')[-1]}"
+                return F.count(col_name).alias(result_alias)
         elif col_expr.startswith("AVG("):
             col_name = col_expr[4:-1]  # Remove AVG( and )
-            alias_name = f"avg_{col_name.split('.')[-1]}"  # Handle nested columns
-            return F.avg(col_name).alias(alias_name)
+            result_alias = alias_name or f"avg_{col_name.split('.')[-1]}"
+            return F.avg(col_name).alias(result_alias)
         elif col_expr.startswith("MIN("):
             col_name = col_expr[4:-1]  # Remove MIN( and )
-            alias_name = f"min_{col_name.split('.')[-1]}"
-            return F.min(col_name).alias(alias_name)
+            result_alias = alias_name or f"min_{col_name.split('.')[-1]}"
+            return F.min(col_name).alias(result_alias)
         elif col_expr.startswith("MAX("):
             col_name = col_expr[4:-1]  # Remove MAX( and )
-            alias_name = f"max_{col_name.split('.')[-1]}"
-            return F.max(col_name).alias(alias_name)
+            result_alias = alias_name or f"max_{col_name.split('.')[-1]}"
+            return F.max(col_name).alias(result_alias)
         elif col_expr.startswith("SUM("):
             col_name = col_expr[4:-1]  # Remove SUM( and )
-            alias_name = f"sum_{col_name.split('.')[-1]}"
-            return F.sum(col_name).alias(alias_name)
+            result_alias = alias_name or f"sum_{col_name.split('.')[-1]}"
+            return F.sum(col_name).alias(result_alias)
         else:
             raise ValueError(f"Unsupported aggregate function: {col_expr}")
+    
+    def _parse_window_function(self, col_expr: str):
+        """Parse window function for groupBy clause."""
+        # Expected format: window(ingest_ts, '5 minutes')
+        if col_expr.upper().startswith("WINDOW("):
+            # Extract parameters from window(column, duration)
+            content = col_expr[7:-1]  # Remove WINDOW( and )
+            parts = content.split(',')
+            if len(parts) >= 2:
+                time_col = parts[0].strip()
+                duration = parts[1].strip().strip("'\"")
+                return F.window(F.col(time_col), duration)
+        raise ValueError(f"Unsupported window function format: {col_expr}")
+    
+    def _parse_window_function_select(self, col_expr: str):
+        """Parse window function expressions in SELECT clause."""
+        # Handle aliasing in window functions
+        alias_name = None
+        if " as " in col_expr:
+            parts = col_expr.split(" as ")
+            col_expr = parts[0].strip()
+            alias_name = parts[1].strip()
+        
+        # Expected formats: 
+        # - window(ingest_ts, '5 minutes').start
+        # - window(ingest_ts, '5 minutes').end
+        if ".start" in col_expr:
+            window_expr = col_expr.replace(".start", "")
+            window_func = self._parse_window_function(window_expr)
+            result_alias = alias_name or "time_start"
+            return window_func.start.alias(result_alias)
+        elif ".end" in col_expr:
+            window_expr = col_expr.replace(".end", "")
+            window_func = self._parse_window_function(window_expr)
+            result_alias = alias_name or "time_end"
+            return window_func.end.alias(result_alias)
+        else:
+            raise ValueError(f"Unsupported window function select format: {col_expr}")
     
     def _apply_select(self, df, select_cols):
         """Apply select without grouping."""

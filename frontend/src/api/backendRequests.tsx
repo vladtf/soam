@@ -738,6 +738,21 @@ export const previewDashboardTile = (id: number): Promise<unknown[]> => {
   });
 };
 
+export const previewDashboardTileConfig = (tileConfig: {
+  computation_id: number;
+  viz_type: string;
+  config: any;
+}): Promise<unknown[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<unknown[]>(`${backendUrl}/api/dashboard/tiles/preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(tileConfig),
+  });
+};
+
 export interface DashboardTileExamplesResponse {
   examples: { id: string; title: string; tile: Omit<DashboardTileDef, 'id'> }[];
   vizTypes: string[];

@@ -118,6 +118,23 @@ def get_tile_examples(db: Session = Depends(get_db)):
                     "config": {"valueField": "avg_temp", "label": "Avg Temp"},
                     "enabled": True
                 }
+            },
+            {
+                "id": "timeseries-chart",
+                "title": "Time series chart",
+                "tile": {
+                    "name": "Time Series Chart",
+                    "computation_id": cid,
+                    "viz_type": "timeseries",
+                    "config": {
+                        "timeField": "time_start",
+                        "valueField": "avg_temperature",
+                        "chartHeight": 250,
+                        "refreshInterval": 30000,
+                        "autoRefresh": True
+                    },
+                    "enabled": True
+                }
             }
         ]
     data = {
@@ -143,3 +160,24 @@ def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManage
     executor = ComputationExecutor(spark)
     data = executor.execute_definition(defn, comp.dataset)
     return success_response(data, "Dashboard tile preview executed successfully")
+
+
+@router.post("/tiles/preview", response_model=ApiResponse)
+@handle_api_errors_sync("preview dashboard tile configuration")
+def preview_tile_config(tile_config: dict, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
+    """Preview a dashboard tile using tile configuration (for new tiles)."""
+    # Validate required fields
+    computation_id = tile_config.get("computation_id")
+    if not computation_id:
+        raise bad_request_error("computation_id is required")
+    
+    comp = db.get(Computation, computation_id)
+    if not comp:
+        raise bad_request_error("Computation not found")
+    
+    defn = json.loads(comp.definition) if comp.definition else {}
+    
+    # Execute computation using the new executor
+    executor = ComputationExecutor(spark)
+    data = executor.execute_definition(defn, comp.dataset)
+    return success_response(data, "Dashboard tile configuration preview executed successfully")
