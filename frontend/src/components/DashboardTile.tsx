@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Table } from 'react-bootstrap';
-// @ts-ignore - Temporary fix for recharts import
+// @ts-ignore - TypeScript type declarations issue with recharts package
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export type VizType = 'table' | 'stat' | 'timeseries';
@@ -19,7 +19,7 @@ export const DashboardTile: React.FC<{ title: string; viz: VizType; data: any[];
   = ({ title, viz, data, config }) => {
   
   if (viz === 'stat') {
-    const valueField = (config?.valueField as string) || Object.keys(data?.[0] || {})[1];
+    const valueField = (config?.valueField as string) || 'avg_temperature';
     const val = data?.[0]?.[valueField];
     return (
       <Card className="shadow-sm border-body h-100 d-flex flex-column">
@@ -36,55 +36,56 @@ export const DashboardTile: React.FC<{ title: string; viz: VizType; data: any[];
     const valueField = (config?.valueField as string) || 'avg_temperature';
     const chartHeight = (config?.chartHeight as number) || 250;
     
-    // Debug logging
-    console.log('Timeseries debug:', {
-      viz,
-      data,
-      dataLength: data?.length,
-      timeField,
-      valueField,
-      chartHeight,
-      sampleData: data?.[0],
-      hasTimeField: data?.[0]?.[timeField],
-      hasValueField: data?.[0]?.[valueField]
-    });
-    
     return (
       <Card className="shadow-sm border-body h-100 d-flex flex-column">
         <Card.Header className="fw-semibold flex-shrink-0">{title}</Card.Header>
         <Card.Body className="flex-grow-1 p-2 d-flex flex-column" style={{ minHeight: 0 }}>
           <div className="flex-grow-1" style={{ minHeight: chartHeight }}>
             {data && data.length > 0 ? (
-              <div>
-                <div className="small text-success mb-2">Chart should render here with {data.length} data points</div>
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey={timeField} />
-                    <YAxis />
-                    <Tooltip />
-                    <Line type="monotone" dataKey={valueField} stroke="#0d6efd" strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <LineChart data={data}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey={timeField} 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value: any) => {
+                      try {
+                        const date = new Date(value);
+                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      } catch {
+                        return String(value);
+                      }
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip 
+                    labelFormatter={(value: any) => {
+                      try {
+                        const date = new Date(value);
+                        return date.toLocaleString();
+                      } catch {
+                        return String(value);
+                      }
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey={valueField} 
+                    stroke="#0d6efd" 
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, stroke: '#0d6efd', strokeWidth: 2, fill: '#fff' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             ) : (
               <div className="d-flex align-items-center justify-content-center h-100 text-body-secondary">
                 <div className="text-center">
                   <div>No data available</div>
                   <small>Configure {timeField} and {valueField} fields</small>
-                  <br />
-                  <small>Data length: {data?.length || 0}</small>
                 </div>
               </div>
             )}
-            
-            {/* Debug info - remove this after fixing */}
-            <div className="small text-muted mt-2">
-              <div>Debug: Field={timeField}, Value={valueField}, DataCount={data?.length}</div>
-              {data?.length > 0 && (
-                <div>Sample: {timeField}={data[0]?.[timeField]}, {valueField}={data[0]?.[valueField]}</div>
-              )}
-            </div>
           </div>
         </Card.Body>
       </Card>

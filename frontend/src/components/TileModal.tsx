@@ -537,9 +537,9 @@ export const TileModal: React.FC<TileModalProps> = ({
                 <br />• <code>autoRefresh</code>: Enable automatic refresh (default: true)
                 <br />• <code>cacheSec</code>: Cache duration in seconds
                 <br />• <code>columns</code>: Array of column names for table visualization
-                <br />• <code>valueField</code>: Field name for stat visualization
-                <br />• <code>timeField</code>: Time field for timeseries (default: 'time_start')
-                <br />• <code>chartHeight</code>: Height in pixels for timeseries charts
+                <br />• <code>valueField</code>: Field name for stat and timeseries Y-axis values
+                <br />• <code>timeField</code>: Time field for timeseries X-axis (default: 'time_start')
+                <br />• <code>chartHeight</code>: Height in pixels for timeseries charts (default: 250)
               </Form.Text>
               {configErrors.length > 0 && configValid && (
                 <Alert variant="danger" className="mt-2 mb-0 py-2">

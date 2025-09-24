@@ -115,7 +115,7 @@ def get_tile_examples(db: Session = Depends(get_db)):
                     "name": "Average Value",
                     "computation_id": cid,
                     "viz_type": "stat",
-                    "config": {"valueField": "avg_temp", "label": "Avg Temp"},
+                    "config": {"valueField": "avg_temperature", "label": "Avg Temp"},
                     "enabled": True
                 }
             },
