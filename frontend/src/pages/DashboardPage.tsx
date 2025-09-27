@@ -269,7 +269,7 @@ const DashboardPage: React.FC = () => {
               const currentTileCount = tiles.length;
               const defaultLayout = {
                 w: 12,
-                h: 2,
+                h: 4,
                 x: 0,
                 y: currentTileCount * 6
               };
