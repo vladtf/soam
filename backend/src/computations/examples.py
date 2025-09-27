@@ -121,7 +121,7 @@ EXAMPLE_DEFINITIONS: List[Dict[str, Any]] = [
             ],
             "groupBy": ["window(ingest_ts, '1 minute')"],
             "orderBy": [
-                {"col": "time_start", "dir": "desc"}
+                {"col": "time_start", "dir": "asc"}
             ],
             "limit": 50
         }

@@ -35,14 +35,21 @@ export const DashboardTile: React.FC<{ title: string; viz: VizType; data: any[];
     const timeField = (config?.timeField as string) || 'time_start';
     const valueField = (config?.valueField as string) || 'avg_temperature';
     
+    // Ensure time series data is sorted chronologically for proper chart display
+    const sortedData = data.length > 0 ? [...data].sort((a: any, b: any) => {
+      const timeA = new Date(a[timeField]).getTime();
+      const timeB = new Date(b[timeField]).getTime();
+      return timeA - timeB; // Sort ascending (oldest to newest)
+    }) : data;
+    
     return (
       <Card className="shadow-sm border-body h-100 d-flex flex-column">
         <Card.Header className="fw-semibold flex-shrink-0">{title}</Card.Header>
         <Card.Body className="flex-grow-1 p-2 d-flex flex-column" style={{ minHeight: 0 }}>
           <div className="flex-grow-1" style={{ minHeight: 0 }}>
-            {data && data.length > 0 ? (
+            {sortedData && sortedData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data}>
+                <LineChart data={sortedData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey={timeField} 

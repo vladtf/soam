@@ -61,6 +61,17 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
         const data = await previewDashboardTile(tile.id!);
         if (!mounted) return;
         const arr = Array.isArray(data) ? data : [];
+        
+        // Ensure time series data is sorted chronologically for proper chart display
+        if (tile.viz_type === 'timeseries') {
+          const timeField = (tile.config as any)?.timeField || 'time_start';
+          arr.sort((a: any, b: any) => {
+            const timeA = new Date(a[timeField]).getTime();
+            const timeB = new Date(b[timeField]).getTime();
+            return timeA - timeB; // Sort ascending (oldest to newest)
+          });
+        }
+        
         setRows(arr);
         const now = Date.now();
         setCache({ rows: arr, at: now });
