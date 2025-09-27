@@ -59,7 +59,7 @@ EXAMPLE_DEFINITIONS: List[Dict[str, Any]] = [
             ],
             "where": [
                 {"col": "normalized_data.temperature", "op": "IS NOT NULL"},
-                {"col": "ingest_date", "op": ">=", "value": "2024-08-01"}
+                # {"col": "ingest_date", "op": ">=", "value": "2024-08-01"}
             ],
             "groupBy": ["ingest_date", "ingestion_id"],
             "orderBy": [
@@ -103,13 +103,13 @@ EXAMPLE_DEFINITIONS: List[Dict[str, Any]] = [
     },
     {
         "id": "average-temperature",
-        "title": "Average Temperature by 5-Minute Windows",
-        "description": "Calculate average temperature readings grouped by 5-minute time windows from enriched data.",
+        "title": "Average Temperature by 1-Minute Windows",
+        "description": "Calculate average temperature readings grouped by 1-minute time windows from enriched data.",
         "dataset": "enriched",
         "definition": {
             "select": [
-                "window(ingest_ts, '5 minutes').start as time_start",
-                "window(ingest_ts, '5 minutes').end as time_end",
+                "window(ingest_ts, '1 minute').start as time_start",
+                "window(ingest_ts, '1 minute').end as time_end",
                 "AVG(normalized_data.temperature) as avg_temperature",
                 "COUNT(*) as reading_count",
                 "MIN(normalized_data.temperature) as min_temperature",
@@ -117,9 +117,9 @@ EXAMPLE_DEFINITIONS: List[Dict[str, Any]] = [
             ],
             "where": [
                 {"col": "normalized_data.temperature", "op": "IS NOT NULL"},
-                {"col": "ingest_date", "op": ">=", "value": "2024-08-01"}
+                # {"col": "ingest_date", "op": ">=", "value": "2024-08-01"}
             ],
-            "groupBy": ["window(ingest_ts, '5 minutes')"],
+            "groupBy": ["window(ingest_ts, '1 minute')"],
             "orderBy": [
                 {"col": "time_start", "dir": "desc"}
             ],

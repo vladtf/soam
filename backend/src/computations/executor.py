@@ -311,7 +311,7 @@ class ComputationExecutor:
     
     def _parse_window_function(self, col_expr: str):
         """Parse window function for groupBy clause."""
-        # Expected format: window(ingest_ts, '5 minutes')
+        # Expected format: window(ingest_ts, '1 minute')
         if col_expr.upper().startswith("WINDOW("):
             # Extract parameters from window(column, duration)
             content = col_expr[7:-1]  # Remove WINDOW( and )
@@ -332,8 +332,8 @@ class ComputationExecutor:
             alias_name = parts[1].strip()
         
         # Expected formats: 
-        # - window(ingest_ts, '5 minutes').start
-        # - window(ingest_ts, '5 minutes').end
+        # - window(ingest_ts, '1 minute').start
+        # - window(ingest_ts, '1 minute').end
         if ".start" in col_expr:
             window_expr = col_expr.replace(".start", "")
             window_func = self._parse_window_function(window_expr)
