@@ -71,6 +71,7 @@ class DataAccessManager:
                 self.session_manager.spark.read.format("delta")
                 .load(self.gold_temp_avg_path)
                 .filter(F.col("time_start") >= F.current_timestamp() - F.expr(f"INTERVAL {minutes} MINUTES"))
+                .orderBy(F.col("time_start").asc())  # Order by time ascending (oldest to newest)
             )
             rows = df.collect()
             return [row.asDict() for row in rows]
@@ -104,6 +105,7 @@ class DataAccessManager:
                 self.session_manager.spark.read.format("delta")
                 .load(self.gold_alerts_path)
                 .filter(F.col("event_time") >= F.current_timestamp() - F.expr(f"INTERVAL {since_minutes} minutes"))
+                .orderBy(F.col("event_time").asc())  # Order by event time ascending (oldest to newest)
             )
             return [row.asDict() for row in df.collect()]
             

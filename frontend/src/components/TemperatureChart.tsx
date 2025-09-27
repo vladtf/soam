@@ -27,6 +27,15 @@ const TemperatureChart: React.FC<TemperatureChartProps> = ({
   lastUpdated,
   refreshInterval = 15000 // Default to 15000ms if not provided
 }) => {
+  // Ensure data is sorted chronologically by time_start
+  const sortedData = React.useMemo(() => {
+    return [...data].sort((a, b) => {
+      const timeA = new Date(a.time_start).getTime();
+      const timeB = new Date(b.time_start).getTime();
+      return timeA - timeB; // Sort ascending (oldest to newest)
+    });
+  }, [data]);
+
   return (
     <Card className="mb-3 shadow-sm border-body">
       <Card.Body className="bg-body-tertiary">
@@ -63,7 +72,7 @@ const TemperatureChart: React.FC<TemperatureChartProps> = ({
           // Use ResponsiveContainer to fill the entire card
           <ResponsiveContainer width="100%" height={400}>
             <LineChart
-              data={timeRange === 0 ? data : data.slice(-timeRange)}
+              data={timeRange === 0 ? sortedData : sortedData.slice(-timeRange)}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
