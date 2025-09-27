@@ -166,8 +166,8 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
             <Spinner animation="border" size="sm" className="me-2" />Loading…
           </div>
         ) : tile.viz_type === 'timeseries' ? (
-          <div className="border rounded p-2 bg-body-tertiary">
-            <ResponsiveContainer width="100%" height={Math.max(120, Number((tile.config as any)?.chartHeight ?? 200))}>
+          <div className="border rounded p-2 bg-body-tertiary flex-grow-1 d-flex flex-column" style={{ minHeight: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <LineChart data={(rows as any[]) || []}>
                 <XAxis dataKey={(tile.config as any)?.timeField || 'time_start'} hide={false} tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} />
