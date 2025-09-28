@@ -77,9 +77,12 @@ const TemperatureChart: React.FC<TemperatureChartProps> = ({
           {loading ? (
             <div className="text-body-secondary d-flex align-items-center justify-content-center flex-grow-1">Loading...</div>
           ) : (
-            // Use ResponsiveContainer with fixed height that fits parent
-            <div style={{ height: '300px', overflow: 'hidden' }}>
-              <ResponsiveContainer width="100%" height="100%">
+            // Use ResponsiveContainer with horizontal scrolling for many data points
+            <div style={{ height: '300px', overflowX: 'auto', overflowY: 'hidden' }}>
+              <ResponsiveContainer 
+                width={Math.max(800, (timeRange === 0 ? sortedData : sortedData.slice(-timeRange)).length * 20)} 
+                height="100%"
+              >
                 <LineChart
                   data={timeRange === 0 ? sortedData : sortedData.slice(-timeRange)}
                 >
