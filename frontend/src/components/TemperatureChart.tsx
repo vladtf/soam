@@ -20,10 +20,10 @@ interface TemperatureChartProps {
   refreshInterval?: number; // Add refreshInterval prop
 }
 
-const TemperatureChart: React.FC<TemperatureChartProps> = ({ 
-  data, 
-  loading, 
-  timeRange, 
+const TemperatureChart: React.FC<TemperatureChartProps> = ({
+  data,
+  loading,
+  timeRange,
   onTimeRangeChange,
   lastUpdated,
   refreshInterval = 15000 // Default to 15000ms if not provided
@@ -73,47 +73,47 @@ const TemperatureChart: React.FC<TemperatureChartProps> = ({
             <option value={0}>All</option>
           </select>
         </div>
-        <div className="flex-grow-1 d-flex flex-column" style={{ minHeight: '300px', maxHeight: '500px' }}>
+        <div className="flex-grow-1 d-flex flex-column">
           {loading ? (
             <div className="text-body-secondary d-flex align-items-center justify-content-center flex-grow-1">Loading...</div>
           ) : (
-            // Use ResponsiveContainer with constrained height
-            <div className="flex-grow-1" style={{ minHeight: '300px' }}>
+            // Use ResponsiveContainer with fixed height that fits parent
+            <div style={{ height: '300px', overflow: 'hidden' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={timeRange === 0 ? sortedData : sortedData.slice(-timeRange)}
                 >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="time_start" // Updated to use time_start
-                label={{ value: 'Time', position: 'insideBottomRight', offset: -5, style: { textAnchor: 'end', fontSize: 11 } }}
-              />
-              <YAxis 
-                label={{ value: 'Avg Temp (°C)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 11 } }}
-                tickFormatter={(value: any) => formatDisplayValue(value)}
-              />
-              <Tooltip 
-                content={({ active, payload, label }: any) => {
-                  if (active && payload && payload.length) {
-                    const date = label ? new Date(label).toLocaleString() : label;
-                    return (
-                      <div className="bg-white border rounded shadow-sm p-2" style={{ fontSize: '12px' }}>
-                        <p className="mb-1">{date}</p>
-                        {payload.map((entry: any, index: number) => (
-                          <p key={index} className="mb-0" style={{ color: entry.color }}>
-                            {entry.dataKey === 'avg_temp' ? 'Average Temperature' : entry.dataKey} : {formatDisplayValue(entry.value)}°C
-                          </p>
-                        ))}
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Legend />
-              <Line type="monotone" dataKey="avg_temp" stroke="#8884d8" />
-            </LineChart>
-          </ResponsiveContainer>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="time_start" // Updated to use time_start
+                    label={{ value: 'Time', position: 'insideBottomRight', offset: -5, style: { textAnchor: 'end', fontSize: 11 } }}
+                  />
+                  <YAxis
+                    label={{ value: 'Avg Temp (°C)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 11 } }}
+                    tickFormatter={(value: any) => formatDisplayValue(value)}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }: any) => {
+                      if (active && payload && payload.length) {
+                        const date = label ? new Date(label).toLocaleString() : label;
+                        return (
+                          <div className="bg-white border rounded shadow-sm p-2" style={{ fontSize: '12px' }}>
+                            <p className="mb-1">{date}</p>
+                            {payload.map((entry: any, index: number) => (
+                              <p key={index} className="mb-0" style={{ color: entry.color }}>
+                                {entry.dataKey === 'avg_temp' ? 'Average Temperature' : entry.dataKey} : {formatDisplayValue(entry.value)}°C
+                              </p>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="avg_temp" stroke="#8884d8" />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           )}
         </div>

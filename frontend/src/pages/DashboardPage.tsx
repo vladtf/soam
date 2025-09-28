@@ -82,8 +82,8 @@ const DashboardPage: React.FC = () => {
         nextLayouts[String(t.id)] = {
           i: String(t.id),
           x: Number(lay.x ?? 0), // Default to left edge
-          y: Number(lay.y ?? idx * 4), // Stack tiles vertically
-          w: Number(lay.w ?? 12), // Default to full width
+          y: Number(lay.y ?? idx * 5), // Stack tiles with consistent spacing
+          w: Number(lay.w ?? 12), // Default to full width (fill container horizontally)
           h: Number(lay.h ?? 4),
           static: false,
         } as Layout;
@@ -173,7 +173,7 @@ const DashboardPage: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Temperature Chart */}
+      {/* Enrichment Status */}
       <Row className="g-3 mt-1">
         <Col md={12}>
           <EnrichmentStatusCard 
@@ -184,8 +184,8 @@ const DashboardPage: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Temperature Alerts */}
-      <Row className="g-3 mt-1">
+      {/* Temperature Chart and Alerts */}
+      <Row className="g-3 mt-1" style={{ height: '500px' }}>
         <Col md={8}>
           <TemperatureChart
             data={averageTemperature}
@@ -265,13 +265,13 @@ const DashboardPage: React.FC = () => {
               });
               toast.success('Dashboard tile updated successfully');
             } else {
-              // Create new tile with default layout
+              // Create new tile with default layout to fill container horizontally
               const currentTileCount = tiles.length;
               const defaultLayout = {
-                w: 12,
-                h: 4,
-                x: 0,
-                y: currentTileCount * 6
+                w: 12,    // Full width across all 12 columns
+                h: 4,     // Standard height
+                x: 0,     // Always start at left edge
+                y: currentTileCount * 5  // Stack with minimal gap between tiles
               };
               
               const tileData = {

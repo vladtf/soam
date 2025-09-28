@@ -1,0 +1,18 @@
+/* Dashboard Grid Responsive Styles */
+.layout {
+  width: 100% !important;
+}
+
+.react-grid-layout {
+  width: 100% !important;
+}
+
+.react-grid-item {
+  box-sizing: border-box;
+}
+
+/* Ensure charts fill their containers completely */
+.recharts-responsive-container {
+  width: 100% !important;
+  height: 100% !important;
+}

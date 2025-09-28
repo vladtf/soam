@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import GridLayout from 'react-grid-layout';
 import { DashboardTileDef } from '../api/backendRequests';
 import { TileWithData } from './TileWithData';
@@ -20,26 +20,42 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({
   onTileEdit,
   onTileDelete
 }) => {
+  const [containerWidth, setContainerWidth] = useState(1200);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+      }
+    };
+
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
   const handleLayoutChange = (newLayout: GridLayout.Layout[]) => {
     onLayoutChange(newLayout);
   };
 
   return (
-    <GridLayout
-      className="layout"
-      layout={layout}
-      cols={12}
-      rowHeight={120}
-      width={1200}
-      onLayoutChange={handleLayoutChange}
-      isDraggable={dragEnabled}
-      isResizable={dragEnabled}
-      autoSize={true}
-      margin={[10, 10]}
-      containerPadding={[0, 0]}
-      useCSSTransforms={true}
-      draggableHandle=".tile-drag-handle"
-    >
+    <div ref={containerRef} style={{ width: '100%' }}>
+      <GridLayout
+        className="layout"
+        layout={layout}
+        cols={12}
+        rowHeight={120}
+        width={containerWidth}
+        onLayoutChange={handleLayoutChange}
+        isDraggable={dragEnabled}
+        isResizable={dragEnabled}
+        autoSize={true}
+        margin={[10, 10]}
+        containerPadding={[0, 0]}
+        useCSSTransforms={true}
+        draggableHandle=".tile-drag-handle"
+      >
       {tiles.map((tile) => (
         <div key={tile.id}>
           <TileWithData
@@ -51,5 +67,6 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({
         </div>
       ))}
     </GridLayout>
+    </div>
   );
 };
