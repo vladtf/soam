@@ -473,14 +473,38 @@ class DataAccessManager:
         }
         
         try:
-            # Get ingestion ID breakdown
+            # Get ingestion ID breakdown - use sampling for large datasets to avoid blocking
             if "ingestion_id" in enriched_df.columns:
-                ingestion_breakdown = enriched_df.groupBy("ingestion_id").count().collect()
-                quality["ingestion_id_breakdown"] = [
-                    {"ingestion_id": row["ingestion_id"], "count": row["count"]}
-                    for row in ingestion_breakdown
-                ]
-                quality["unique_ingestion_ids"] = len(ingestion_breakdown)
+                # Check if dataset is small enough for full count
+                if enriched_df.rdd.isEmpty():
+                    quality["ingestion_id_breakdown"] = []
+                    quality["unique_ingestion_ids"] = 0
+                else:
+                    try:
+                        # Sample data first to check if it's reasonable to count
+                        sample_df = enriched_df.sample(fraction=0.1, seed=42)
+                        sample_breakdown = sample_df.groupBy("ingestion_id").count().collect()
+                        
+                        if len(sample_breakdown) < 20:  # Small number of ingestion IDs
+                            # Safe to get full breakdown
+                            ingestion_breakdown = enriched_df.groupBy("ingestion_id").count().collect()
+                            quality["ingestion_id_breakdown"] = [
+                                {"ingestion_id": row["ingestion_id"], "count": row["count"]}
+                                for row in ingestion_breakdown
+                            ]
+                            quality["unique_ingestion_ids"] = len(ingestion_breakdown)
+                        else:
+                            # Too many ingestion IDs, use sample data
+                            quality["ingestion_id_breakdown"] = [
+                                {"ingestion_id": row["ingestion_id"], "count": row["count"] * 10}  # Rough estimate
+                                for row in sample_breakdown[:10]  # Limit to top 10
+                            ]
+                            quality["unique_ingestion_ids"] = len(sample_breakdown)
+                            logger.debug("Using sampled ingestion ID breakdown to avoid blocking")
+                    except Exception as breakdown_error:
+                        logger.debug("Could not get ingestion breakdown: %s", breakdown_error)
+                        quality["ingestion_id_breakdown"] = []
+                        quality["unique_ingestion_ids"] = 0
             # Analyze sensor_data and normalized_data fields (fields with actual data)
             fields_with_data = set()
             normalized_fields = set()

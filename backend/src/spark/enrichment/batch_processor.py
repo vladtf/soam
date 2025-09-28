@@ -128,12 +128,33 @@ class BatchProcessor:
 
             # Log final count (this is after write, so it's necessary)
             try:
-                # Use a more efficient way to get count after write
-                kept: int = filtered_df.count()
-                logger.info("Union enrichment: wrote %d rows to enriched", kept)
+                # PERFORMANCE FIX: Use isEmpty() check instead of expensive count() for large datasets
+                # Only use count() if we can get it quickly
+                if filtered_df.rdd.isEmpty():
+                    logger.info("Union enrichment: wrote 0 rows to enriched")
+                else:
+                    # Try to get count quickly, if it takes too long, just log that data was written
+                    try:
+                        # Use a timeout-like approach by checking a small sample first
+                        sample_df = filtered_df.sample(fraction=0.01, seed=42)
+                        if sample_df.rdd.isEmpty():
+                            # Very small dataset, safe to count
+                            kept: int = filtered_df.count()
+                            logger.info("Union enrichment: wrote %d rows to enriched", kept)
+                        else:
+                            # Larger dataset, estimate or skip exact count to avoid blocking
+                            sample_count = sample_df.count()
+                            if sample_count > 0:
+                                estimated_count = sample_count * 100
+                                logger.info("Union enrichment: wrote ~%d rows to enriched", estimated_count)
+                            else:
+                                logger.info("Union enrichment: wrote data to enriched (large batch)")
+                    except Exception as count_error:
+                        logger.debug("Could not estimate row count: %s", count_error)
+                        logger.info("Union enrichment: wrote data to enriched (count unavailable)")
             except Exception as e:
-                logger.warning(f"Could not get exact count after write: {e}")
-                logger.info("Union enrichment: wrote data to enriched (count unavailable)")
+                logger.warning(f"Could not determine write status: {e}")
+                logger.info("Union enrichment: write completed")
 
         except Exception as e:
             logger.error(f"Error in union enrichment foreachBatch: {e}")

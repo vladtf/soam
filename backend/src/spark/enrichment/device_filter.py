@@ -99,18 +99,51 @@ class DeviceFilter:
             allowed_ids: Set of allowed ingestion IDs
             has_wildcard: Whether wildcard registration exists
         """
-        # Debug: Log sample of ingestion_ids in the batch
-        if "ingestion_id" in batch_df.columns:
-            sample_ids: List[str] = [r[0] for r in batch_df.select("ingestion_id").distinct().limit(5).collect()]
-            logger.info("Device filter: sample ingestion_ids in batch: %s", sample_ids)
+        try:
+            # Debug: Log sample of ingestion_ids in the batch (non-blocking)
+            if "ingestion_id" in batch_df.columns:
+                sample_ids: List[str] = [r[0] for r in batch_df.select("ingestion_id").distinct().limit(5).collect()]
+                logger.info("Device filter: sample ingestion_ids in batch: %s", sample_ids)
 
-        # Additional debug: count before and after filtering
-        total_before: int = batch_df.count()
-        total_after: int = filtered_df.count()
-        logger.info("Device filter: %d rows before filter, %d rows after filter", total_before, total_after)
+            # PERFORMANCE FIX: Use RDD isEmpty() check instead of expensive count() operations
+            # This prevents blocking the FastAPI event loop with long-running Spark jobs
+            is_batch_empty = batch_df.rdd.isEmpty()
+            is_filtered_empty = filtered_df.rdd.isEmpty()
+            
+            if is_batch_empty:
+                logger.info("Device filter: batch is empty")
+                return
+                
+            if is_filtered_empty:
+                logger.info("Device filter: all rows filtered out - possible ingestion_id mismatch")
+                return
+            
+            # Only use count() operations if we really need precise numbers AND batch is small
+            # For large batches, use sampling to estimate instead of blocking operations
+            try:
+                # Quick check: if we can get count fast (small batch), use it
+                # Otherwise, use estimation to avoid blocking
+                sample_batch = batch_df.sample(fraction=0.01, seed=42)
+                if not sample_batch.rdd.isEmpty():
+                    sample_before = sample_batch.count()
+                    estimated_before = min(sample_before * 100, 10000)  # Rough estimate, cap at 10k
+                    
+                    sample_filtered = filtered_df.sample(fraction=0.01, seed=42)
+                    sample_after = sample_filtered.count() if not sample_filtered.rdd.isEmpty() else 0
+                    estimated_after = min(sample_after * 100, 10000)  # Rough estimate, cap at 10k
+                    
+                    logger.info("Device filter: ~%d rows before filter, ~%d rows after filter", 
+                              estimated_before, estimated_after)
+                else:
+                    logger.info("Device filter: processing small batch")
+                    
+            except Exception as count_error:
+                logger.debug("Device filter: could not estimate counts: %s", count_error)
+                logger.info("Device filter: batch processed (counts unavailable)")
 
-        # If we expected filtering but nothing was filtered out, there might be a data mismatch
-        if not has_wildcard and allowed_ids and total_before > 0 and total_after == total_before:
-            logger.warning("Device filter: Expected filtering but no rows were filtered out - possible ingestion_id mismatch")
-        elif not has_wildcard and allowed_ids and total_after == 0:
-            logger.warning("Device filter: All rows filtered out - ingestion_id mismatch between registered devices and incoming data")
+            # Log warnings based on emptiness checks rather than precise counts
+            if not has_wildcard and allowed_ids and not is_batch_empty and is_filtered_empty:
+                logger.warning("Device filter: All rows filtered out - ingestion_id mismatch between registered devices and incoming data")
+                
+        except Exception as e:
+            logger.warning("Device filter: could not log filtering stats: %s", e)

@@ -1,8 +1,12 @@
 """Routes for user-defined dashboard tiles built on computations."""
+import asyncio
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-import json
 
 from src.api.models import DashboardTileCreate, DashboardTileUpdate, DashboardTileResponse, ApiResponse
 from src.api.response_utils import success_response, not_found_error, bad_request_error
@@ -15,7 +19,11 @@ from src.utils.logging import get_logger
 from src.utils.api_utils import handle_api_errors_sync
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"]) 
+router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+# Thread pool for dashboard tile preview operations
+# This prevents blocking the FastAPI event loop during Spark computations
+_dashboard_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dashboard-api") 
 
 
 @router.get("/tiles", response_model=ApiResponse)
@@ -145,39 +153,61 @@ def get_tile_examples(db: Session = Depends(get_db)):
 
 
 @router.post("/tiles/{tile_id}/preview", response_model=ApiResponse)
-@handle_api_errors_sync("preview dashboard tile")
-def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
-    tile = db.get(DashboardTile, tile_id)
-    if not tile:
-        raise not_found_error("Dashboard tile not found")
-    comp = db.get(Computation, tile.computation_id)
-    if not comp:
-        raise bad_request_error("Computation not found")
+async def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
+    def _execute_tile_preview():
+        """Execute tile preview in thread pool."""
+        tile = db.get(DashboardTile, tile_id)
+        if not tile:
+            raise not_found_error("Dashboard tile not found")
+        comp = db.get(Computation, tile.computation_id)
+        if not comp:
+            raise bad_request_error("Computation not found")
+        
+        defn = json.loads(comp.definition) if comp.definition else {}
+        
+        # Execute computation using the new executor
+        executor = ComputationExecutor(spark)
+        return executor.execute_definition(defn, comp.dataset)
     
-    defn = json.loads(comp.definition) if comp.definition else {}
-    
-    # Execute computation using the new executor
-    executor = ComputationExecutor(spark)
-    data = executor.execute_definition(defn, comp.dataset)
-    return success_response(data, "Dashboard tile preview executed successfully")
+    try:
+        # Run Spark computation in thread pool to prevent blocking FastAPI event loop
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(_dashboard_executor, _execute_tile_preview)
+        return success_response(data, "Dashboard tile preview executed successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Dashboard tile preview failed")
+        raise bad_request_error(str(e))
 
 
 @router.post("/tiles/preview", response_model=ApiResponse)
-@handle_api_errors_sync("preview dashboard tile configuration")
-def preview_tile_config(tile_config: dict, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
+async def preview_tile_config(tile_config: dict, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
     """Preview a dashboard tile using tile configuration (for new tiles)."""
-    # Validate required fields
-    computation_id = tile_config.get("computation_id")
-    if not computation_id:
-        raise bad_request_error("computation_id is required")
+    def _execute_config_preview():
+        """Execute tile config preview in thread pool."""
+        # Validate required fields
+        computation_id = tile_config.get("computation_id")
+        if not computation_id:
+            raise bad_request_error("computation_id is required")
+        
+        comp = db.get(Computation, computation_id)
+        if not comp:
+            raise bad_request_error("Computation not found")
+        
+        defn = json.loads(comp.definition) if comp.definition else {}
+        
+        # Execute computation using the new executor
+        executor = ComputationExecutor(spark)
+        return executor.execute_definition(defn, comp.dataset)
     
-    comp = db.get(Computation, computation_id)
-    if not comp:
-        raise bad_request_error("Computation not found")
-    
-    defn = json.loads(comp.definition) if comp.definition else {}
-    
-    # Execute computation using the new executor
-    executor = ComputationExecutor(spark)
-    data = executor.execute_definition(defn, comp.dataset)
-    return success_response(data, "Dashboard tile configuration preview executed successfully")
+    try:
+        # Run Spark computation in thread pool to prevent blocking FastAPI event loop
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(_dashboard_executor, _execute_config_preview)
+        return success_response(data, "Dashboard tile configuration preview executed successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Dashboard tile config preview failed")
+        raise bad_request_error(str(e))

@@ -1,5 +1,7 @@
 """Routers for user-defined computations."""
+import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -18,6 +20,10 @@ from src.computations.service import ComputationService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["computations"])
+
+# Thread pool for running Spark computations asynchronously
+# This prevents blocking the FastAPI event loop during expensive Spark operations
+_computation_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="computation-api")
 
 
 @router.get("/computations/examples", response_model=ApiResponse)
@@ -40,21 +46,28 @@ def get_sources(config: ConfigDep, client: MinioClientDep):
 
 
 @router.post("/computations/examples/{example_id}/preview", response_model=ApiResponse)
-def preview_example_computation(example_id: str, spark: SparkManager = Depends(get_spark_manager)):
+async def preview_example_computation(example_id: str, spark: SparkManager = Depends(get_spark_manager)):
     """Preview an example computation by ID."""
     example = get_example_by_id(example_id)
     if not example:
         raise not_found_error("Example computation not found")
     
-    try:
+    def _execute_preview():
+        """Execute preview computation in thread pool."""
         service = ComputationService(db=None, spark_manager=spark)
         result = service.preview_example(example_id, example)
+        return {
+            "example": example,
+            "result": result,
+            "row_count": len(result)
+        }
+    
+    try:
+        # Run Spark computation in thread pool to prevent blocking FastAPI event loop
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(_computation_executor, _execute_preview)
         return success_response(
-            {
-                "example": example,
-                "result": result,
-                "row_count": len(result)
-            }, 
+            data, 
             f"Example computation '{example['title']}' executed successfully"
         )
     except HTTPException:
@@ -66,11 +79,22 @@ def preview_example_computation(example_id: str, spark: SparkManager = Depends(g
 
 
 @router.get("/computations/schemas", response_model=ApiResponse)
-def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager = Depends(get_spark_manager)):
+async def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager = Depends(get_spark_manager)):
     """Return detected sources plus inferred column schemas for each source using Spark."""
-    sources = detect_available_sources(config, client)
-    schemas = infer_schemas(sources, spark)
-    return success_response({"sources": sources, "schemas": schemas}, "Schemas retrieved successfully")
+    def _get_schemas():
+        """Get schemas in thread pool."""
+        sources = detect_available_sources(config, client)
+        schemas = infer_schemas(sources, spark)
+        return {"sources": sources, "schemas": schemas}
+    
+    try:
+        # Run Spark operation in thread pool to prevent blocking FastAPI event loop
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(_computation_executor, _get_schemas)
+        return success_response(data, "Schemas retrieved successfully")
+    except Exception as e:
+        logger.exception("Schema inference failed")
+        raise internal_server_error("Failed to retrieve schemas", str(e))
 
 
 @router.get("/computations", response_model=ApiListResponse[ComputationResponse])
@@ -135,11 +159,17 @@ def delete_computation(comp_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/computations/{comp_id}/preview", response_model=ApiResponse)
-def preview_computation(comp_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
+async def preview_computation(comp_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
     """Preview a computation's results."""
-    try:
+    def _execute_computation_preview():
+        """Execute computation preview in thread pool."""
         service = ComputationService(db, spark)
-        result = service.preview_computation(comp_id)
+        return service.preview_computation(comp_id)
+    
+    try:
+        # Run Spark computation in thread pool to prevent blocking FastAPI event loop
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_computation_executor, _execute_computation_preview)
         return success_response(result, "Computation preview executed successfully")
     except HTTPException:
         # Let FastAPI handle HTTPExceptions directly
