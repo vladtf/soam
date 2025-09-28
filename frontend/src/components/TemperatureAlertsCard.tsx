@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, ListGroup, Button } from 'react-bootstrap';
 import { FaBell, FaCog } from 'react-icons/fa';
 import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
+import { formatDisplayValue } from '../utils/numberUtils';
 import TemperatureThresholdModal from './TemperatureThresholdModal';
 
 interface TemperatureAlert {
@@ -43,8 +44,8 @@ const TemperatureAlertsCard: React.FC<TemperatureAlertsCardProps> = ({
   };
   return (
     <>
-      <Card className="mb-3 shadow-sm border-body">
-        <Card.Body className="bg-body-tertiary">
+      <Card className="mb-3 shadow-sm border-body h-100 d-flex flex-column">
+        <Card.Body className="bg-body-tertiary d-flex flex-column">
           <div className="d-flex justify-content-between align-items-start mb-2">
             <Card.Title className="mb-0">
               <FaBell className="me-2" /> Temperature Alerts
@@ -65,21 +66,25 @@ const TemperatureAlertsCard: React.FC<TemperatureAlertsCardProps> = ({
               </Button>
             </div>
           </div>
-          {loading ? (
-            <div className="text-body-secondary">Loading...</div>
-          ) : alerts.length > 0 ? (
-            <ListGroup variant="flush">
-              {alerts.map((alert, index) => (
-                <ListGroup.Item key={index}>
-                  <strong>Sensor:</strong> {alert.sensorId} |{' '}
-                  <strong>Temp:</strong> {alert.temperature}°C |{' '}
-                  <strong>Time:</strong> <span className="text-body-secondary">{alert.event_time}</span>
-                </ListGroup.Item>
-              ))}
-            </ListGroup>
-          ) : (
-            <div className="text-body-secondary">No alerts found.</div>
-          )}
+          <div className="flex-grow-1 d-flex flex-column">
+            {loading ? (
+              <div className="text-body-secondary d-flex align-items-center justify-content-center flex-grow-1">Loading...</div>
+            ) : alerts.length > 0 ? (
+              <div className="flex-grow-1" style={{ overflow: 'auto' }}>
+                <ListGroup variant="flush">
+                  {alerts.map((alert, index) => (
+                    <ListGroup.Item key={index}>
+                      <strong>Sensor:</strong> {alert.sensorId} |{' '}
+                      <strong>Temp:</strong> {formatDisplayValue(alert.temperature)}°C |{' '}
+                      <strong>Time:</strong> <span className="text-body-secondary">{alert.event_time}</span>
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              </div>
+            ) : (
+              <div className="text-body-secondary d-flex align-items-center justify-content-center flex-grow-1">No alerts found.</div>
+            )}
+          </div>
         </Card.Body>
       </Card>
 

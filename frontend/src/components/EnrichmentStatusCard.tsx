@@ -3,6 +3,7 @@ import { Card, Spinner, Badge, ListGroup, Button, Row, Col } from 'react-bootstr
 import ThemedTable from './ThemedTable';
 import { EnrichmentSummary, fetchEnrichmentSummary } from '../api/backendRequests';
 import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
+import { formatDisplayValue } from '../utils/numberUtils';
 import WithTooltip from './WithTooltip';
 
 interface Props {
@@ -158,7 +159,7 @@ const EnrichmentStatusCard: React.FC<Props> = ({
                     </thead>
                     <tbody>
                       {Object.entries(summary.registered_by_partition || {}).map(([k, v]) => (
-                        <tr key={k}><td>{k}</td><td>{v}</td></tr>
+                        <tr key={k}><td>{k}</td><td>{formatDisplayValue(v)}</td></tr>
                       ))}
                     </tbody>
                   </ThemedTable>
@@ -197,8 +198,8 @@ const EnrichmentStatusCard: React.FC<Props> = ({
                   <Card.Body className="py-2">
                     <ListGroup variant="flush" className="small">
                       <ListGroup.Item className="px-0 border-0">Exists: {summary.gold?.exists ? 'yes' : 'no'}</ListGroup.Item>
-                      <ListGroup.Item className="px-0 border-0">Rows: {summary.gold?.recent_rows || 0}</ListGroup.Item>
-                      <ListGroup.Item className="px-0 border-0">Sensors: {summary.gold?.recent_sensors || 0}</ListGroup.Item>
+                      <ListGroup.Item className="px-0 border-0">Rows: {formatDisplayValue(summary.gold?.recent_rows || 0)}</ListGroup.Item>
+                      <ListGroup.Item className="px-0 border-0">Sensors: {formatDisplayValue(summary.gold?.recent_sensors || 0)}</ListGroup.Item>
                     </ListGroup>
                   </Card.Body>
                 </Card>
@@ -214,18 +215,18 @@ const EnrichmentStatusCard: React.FC<Props> = ({
                     <Card.Body className="py-2">
                       <ListGroup variant="flush" className="small">
                         <ListGroup.Item className="px-0 border-0">
-                          Records Processed: <Badge bg="primary">{summary.enriched.processing_metrics.records_processed}</Badge>
+                          Records Processed: <Badge bg="primary">{formatDisplayValue(summary.enriched.processing_metrics.records_processed)}</Badge>
                         </ListGroup.Item>
                         <ListGroup.Item className="px-0 border-0">
-                          Records Failed: <Badge bg={summary.enriched.processing_metrics.records_failed > 0 ? "warning" : "success"}>{summary.enriched.processing_metrics.records_failed}</Badge>
+                          Records Failed: <Badge bg={summary.enriched.processing_metrics.records_failed > 0 ? "warning" : "success"}>{formatDisplayValue(summary.enriched.processing_metrics.records_failed)}</Badge>
                         </ListGroup.Item>
                         {typeof summary.enriched.processing_metrics.error_rate_percent === 'number' && (
                           <ListGroup.Item className="px-0 border-0">
-                            Error Rate: <Badge bg={summary.enriched.processing_metrics.error_rate_percent > 5 ? "danger" : "success"}>{summary.enriched.processing_metrics.error_rate_percent}%</Badge>
+                            Error Rate: <Badge bg={summary.enriched.processing_metrics.error_rate_percent > 5 ? "danger" : "success"}>{formatDisplayValue(summary.enriched.processing_metrics.error_rate_percent)}%</Badge>
                           </ListGroup.Item>
                         )}
                         {typeof summary.enriched.processing_metrics.processing_duration_seconds === 'number' && (
-                          <ListGroup.Item className="px-0 border-0">Duration: {summary.enriched.processing_metrics.processing_duration_seconds}s</ListGroup.Item>
+                          <ListGroup.Item className="px-0 border-0">Duration: {formatDisplayValue(summary.enriched.processing_metrics.processing_duration_seconds)}s</ListGroup.Item>
                         )}
                         {typeof summary.enriched.processing_metrics.records_per_second === 'number' && (
                           <ListGroup.Item className="px-0 border-0">Rate: {summary.enriched.processing_metrics.records_per_second} rec/s</ListGroup.Item>

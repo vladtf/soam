@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useError } from '../context/ErrorContext';
 import { useAuth } from '../context/AuthContext';
+import { formatDisplayValue, isNumericValue } from '../utils/numberUtils';
 import {
   fetchSensorData,
   SensorData,
@@ -182,6 +183,12 @@ export const usePipelineData = () => {
   const renderValue = (v: unknown) => {
     if (v === null || v === undefined) return '-';
     if (typeof v === 'object') return JSON.stringify(v);
+    
+    // Format numeric values to 2 decimal places for consistent display
+    if (isNumericValue(v)) {
+      return formatDisplayValue(v);
+    }
+    
     const s = String(v);
     return s.length > 80 ? s.slice(0, 77) + '…' : s;
   };
