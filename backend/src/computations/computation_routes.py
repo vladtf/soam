@@ -158,6 +158,21 @@ def delete_computation(comp_id: int, db: Session = Depends(get_db)):
         raise internal_server_error("Failed to delete computation", str(e))
 
 
+@router.get("/computations/{comp_id}/dependencies", response_model=ApiResponse)
+def check_computation_dependencies(comp_id: int, db: Session = Depends(get_db)):
+    """Check if computation has dependent dashboard tiles before deletion."""
+    try:
+        service = ComputationService(db)
+        dependencies = service.check_computation_dependencies(comp_id)
+        return success_response(dependencies, "Dependencies checked successfully")
+    except HTTPException:
+        # Let FastAPI handle HTTPExceptions (like 404) directly
+        raise
+    except Exception as e:
+        logger.error("Error checking computation dependencies: %s", e)
+        raise internal_server_error("Failed to check dependencies", str(e))
+
+
 @router.post("/computations/{comp_id}/preview", response_model=ApiResponse)
 async def preview_computation(comp_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
     """Preview a computation's results."""

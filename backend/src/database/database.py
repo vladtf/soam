@@ -191,3 +191,31 @@ def ensure_device_ownership_columns():
     except Exception:
         # Non-fatal; table might not exist yet or DB may not support ALTER
         pass
+
+
+def ensure_computation_recommended_tile_type_column():
+    """Ensure recommended_tile_type column exists on computations.
+    
+    This is a lightweight, idempotent migration for adding tile type recommendations.
+    """
+    try:
+        dialect = engine.url.get_backend_name()
+        with engine.connect() as conn:
+            if 'sqlite' in dialect:
+                rows = conn.exec_driver_sql("PRAGMA table_info('computations')").fetchall()
+                existing = {row[1] for row in rows}  # name is at index 1
+                if 'recommended_tile_type' not in existing:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE computations ADD COLUMN recommended_tile_type VARCHAR(32) NULL"
+                    )
+            else:
+                # Best-effort for other DBs
+                try:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE computations ADD COLUMN recommended_tile_type VARCHAR(32) NULL"
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        # Non-fatal; table might not exist yet or DB may not support ALTER
+        pass

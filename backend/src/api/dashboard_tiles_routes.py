@@ -17,6 +17,7 @@ from src.api.dependencies import get_spark_manager
 from src.spark.spark_manager import SparkManager
 from src.utils.logging import get_logger
 from src.utils.api_utils import handle_api_errors_sync
+from src.dashboard.examples import get_tile_examples
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -97,58 +98,9 @@ def delete_tile(tile_id: int, db: Session = Depends(get_db)):
 
 @router.get("/examples", response_model=ApiResponse)
 @handle_api_errors_sync("get dashboard tile examples")
-def get_tile_examples(db: Session = Depends(get_db)):
-    """Provide example tiles wired to available computations for guidance."""
-    comps = db.query(Computation).all()
-    examples = []
-    if comps:
-        # Take first computation as example source
-        cid = comps[0].id
-        examples = [
-            {
-                "id": "table-basic",
-                "title": "Table of results",
-                "tile": {
-                    "name": "Results Table",
-                    "computation_id": cid,
-                    "viz_type": "table",
-                    "config": {"columns": []},
-                    "enabled": True
-                }
-            },
-            {
-                "id": "stat-avg",
-                "title": "Single stat",
-                "tile": {
-                    "name": "Average Value",
-                    "computation_id": cid,
-                    "viz_type": "stat",
-                    "config": {"valueField": "avg_temperature", "label": "Avg Temp"},
-                    "enabled": True
-                }
-            },
-            {
-                "id": "timeseries-chart",
-                "title": "Time series chart",
-                "tile": {
-                    "name": "Time Series Chart",
-                    "computation_id": cid,
-                    "viz_type": "timeseries",
-                    "config": {
-                        "timeField": "time_start",
-                        "valueField": "avg_temperature",
-                        "chartHeight": 250,
-                        "refreshInterval": 30000,
-                        "autoRefresh": True
-                    },
-                    "enabled": True
-                }
-            }
-        ]
-    data = {
-        "examples": examples,
-        "vizTypes": ["table", "stat", "timeseries"],
-    }
+def get_dashboard_tile_examples(db: Session = Depends(get_db)):
+    """Provide example tiles wired to computations with their recommended tile types."""
+    data = get_tile_examples(db)
     return success_response(data=data, message="Dashboard tile examples retrieved successfully")
 
 
@@ -161,7 +113,13 @@ async def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: Spark
             raise not_found_error("Dashboard tile not found")
         comp = db.get(Computation, tile.computation_id)
         if not comp:
-            raise bad_request_error("Computation not found")
+            # Return a special error structure that frontend can detect
+            return {
+                "error": "COMPUTATION_DELETED",
+                "message": f"The computation (ID: {tile.computation_id}) used by this tile has been deleted. Please edit the tile to select a new computation.",
+                "tile_name": tile.name,
+                "computation_id": tile.computation_id
+            }
         
         defn = json.loads(comp.definition) if comp.definition else {}
         
@@ -193,7 +151,12 @@ async def preview_tile_config(tile_config: dict, db: Session = Depends(get_db), 
         
         comp = db.get(Computation, computation_id)
         if not comp:
-            raise bad_request_error("Computation not found")
+            # Return a special error structure that frontend can detect
+            return {
+                "error": "COMPUTATION_DELETED",
+                "message": f"The computation (ID: {computation_id}) has been deleted. Please select a different computation.",
+                "computation_id": computation_id
+            }
         
         defn = json.loads(comp.definition) if comp.definition else {}
         

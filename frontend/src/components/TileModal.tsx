@@ -92,6 +92,14 @@ export const TileModal: React.FC<TileModalProps> = ({
         viz_type: editing.viz_type,
         config: editing.config || {}
       });
+      
+      // Check if computation was deleted
+      if (result && typeof result === 'object' && (result as any).error === 'COMPUTATION_DELETED') {
+        toast.error((result as any).message);
+        setTilePreviewData(null);
+        return;
+      }
+      
       setTilePreviewData(result);
     } catch (error) {
       console.error('Error previewing tile:', error);

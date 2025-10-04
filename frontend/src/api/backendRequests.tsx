@@ -606,6 +606,7 @@ export interface ComputationDef {
   description?: string;
   dataset: string;
   definition: Record<string, unknown>;
+  recommended_tile_type?: string; // 'table' | 'stat' | 'timeseries'
   enabled?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -639,6 +640,21 @@ export const updateComputation = (id: number, payload: Partial<ComputationDef>):
 export const deleteComputation = (id: number): Promise<{ status?: string; message?: string }> => {
   const { backendUrl } = getConfig();
   return doFetch<{ status?: string; message?: string }>(`${backendUrl}/api/computations/${id}`, { method: 'DELETE' });
+};
+
+export const checkComputationDependencies = (id: number): Promise<{
+  computation: { id: number; name: string };
+  dependent_tiles: Array<{ id: number; name: string; viz_type: string; enabled: boolean }>;
+  can_delete: boolean;
+  has_dependencies: boolean;
+}> => {
+  const { backendUrl } = getConfig();
+  return doFetch<{
+    computation: { id: number; name: string };
+    dependent_tiles: Array<{ id: number; name: string; viz_type: string; enabled: boolean }>;
+    can_delete: boolean;
+    has_dependencies: boolean;
+  }>(`${backendUrl}/api/computations/${id}/dependencies`);
 };
 
 export const previewComputation = (id: number): Promise<unknown[]> => {

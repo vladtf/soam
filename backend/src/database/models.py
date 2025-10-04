@@ -69,6 +69,7 @@ class Computation(Base):
     description = Column(Text, nullable=True)
     dataset = Column(String(64), nullable=False)  # e.g., 'silver', 'alerts', 'sensors'
     definition = Column(Text, nullable=False)     # JSON string of the computation definition
+    recommended_tile_type = Column(String(32), nullable=True)  # 'table', 'stat', 'timeseries'
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -89,6 +90,7 @@ class Computation(Base):
             "description": self.description,
             "dataset": self.dataset,
             "definition": parsed_def,
+            "recommended_tile_type": self.recommended_tile_type,
             "enabled": self.enabled,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

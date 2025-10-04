@@ -7,6 +7,9 @@ import { DashboardTileDef, previewDashboardTile } from '../api/backendRequests';
 import WithTooltip from './WithTooltip';
 import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
 
+// Error type constants
+const ERROR_COMPUTATION_DELETED = 'COMPUTATION_DELETED';
+
 // Default refresh interval in milliseconds
 const DEFAULT_REFRESH_INTERVAL_MS = 30000;
 
@@ -26,6 +29,8 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
   const [rows, setRows] = useState<unknown[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isComputationDeleted, setIsComputationDeleted] = useState<boolean>(false);
   const [tsKey, setTsKey] = useState<number>(0);
   const [cache, setCache] = useState<{ rows: unknown[]; at: number } | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
@@ -60,6 +65,15 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
         }
         const data = await previewDashboardTile(tile.id!);
         if (!mounted) return;
+        
+        // Check if computation was deleted
+        if (data && typeof data === 'object' && (data as any).error === ERROR_COMPUTATION_DELETED) {
+          setIsComputationDeleted(true);
+          setError((data as any).message);
+          setRows([]);
+          return;
+        }
+        
         const arr = Array.isArray(data) ? data : [];
         
         // Ensure time series data is sorted chronologically for proper chart display
@@ -73,11 +87,16 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
         }
         
         setRows(arr);
+        setIsComputationDeleted(false);
+        setError(null);
         const now = Date.now();
         setCache({ rows: arr, at: now });
         setLastRefreshed(new Date(now));
-      } catch {
+      } catch (err) {
         if (!mounted) return;
+        // Set error state for any fetch failures
+        setError('Failed to load tile data');
+        setIsComputationDeleted(false);
         // Don't clear existing data on error if we have it
         if (!hasExistingData) {
           setRows([]);
@@ -172,7 +191,37 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
       </div>
 
       <div className="flex-grow-1 d-flex flex-column" style={{ minHeight: 0 }}>
-        {loading && rows === null ? (
+        {isComputationDeleted ? (
+          <div className="d-flex align-items-center justify-content-center flex-grow-1 text-center p-3 border rounded bg-body-tertiary">
+            <div>
+              <div className="text-danger mb-2">
+                <span style={{ fontSize: '2rem' }}>⚠️</span>
+              </div>
+              <div className="fw-bold text-danger">Computation Deleted</div>
+              <div className="text-muted small mt-1">{error}</div>
+              <div className="mt-2">
+                <Button size="sm" variant="primary" onClick={() => onEdit && onEdit()}>
+                  Select New Computation
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="d-flex align-items-center justify-content-center flex-grow-1 text-center p-3 border rounded bg-body-tertiary">
+            <div>
+              <div className="text-warning mb-2">
+                <span style={{ fontSize: '2rem' }}>⚠️</span>
+              </div>
+              <div className="fw-bold text-warning">Error Loading Data</div>
+              <div className="text-muted small mt-1">{error}</div>
+              <div className="mt-2">
+                <Button size="sm" variant="outline-secondary" onClick={handleManualRefresh}>
+                  Retry
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : loading && rows === null ? (
           <div className="text-body-secondary border rounded p-2 bg-body-tertiary">
             <Spinner animation="border" size="sm" className="me-2" />Loading…
           </div>

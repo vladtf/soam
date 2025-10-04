@@ -50,6 +50,7 @@ class ComputationService:
             description=payload.description,
             dataset=validated_dataset,
             definition=json.dumps(payload.definition),
+            recommended_tile_type=payload.recommended_tile_type,
             enabled=payload.enabled,
             created_by=validated_username,
         )
@@ -101,6 +102,10 @@ class ComputationService:
                 changes.append("definition updated")
                 computation.definition = json.dumps(payload.definition)
         
+        if payload.recommended_tile_type is not None and payload.recommended_tile_type != computation.recommended_tile_type:
+            changes.append(f"recommended_tile_type: '{computation.recommended_tile_type}' -> '{payload.recommended_tile_type}'")
+            computation.recommended_tile_type = payload.recommended_tile_type
+        
         if payload.enabled is not None and payload.enabled != computation.enabled:
             changes.append(f"enabled: {computation.enabled} -> {payload.enabled}")
             computation.enabled = payload.enabled
@@ -130,6 +135,37 @@ class ComputationService:
         self.db.commit()
         
         logger.info("Computation deleted: %s (id: %d)", computation.name, comp_id)
+    
+    def check_computation_dependencies(self, comp_id: int) -> Dict[str, Any]:
+        """Check if computation has dependent dashboard tiles."""
+        from src.database.models import DashboardTile
+        
+        computation = self.db.get(Computation, comp_id)
+        if not computation:
+            raise not_found_error("Computation not found")
+        
+        # Find tiles that use this computation
+        dependent_tiles = self.db.query(DashboardTile).filter(
+            DashboardTile.computation_id == comp_id
+        ).all()
+        
+        return {
+            "computation": {
+                "id": computation.id,
+                "name": computation.name
+            },
+            "dependent_tiles": [
+                {
+                    "id": tile.id,
+                    "name": tile.name,
+                    "viz_type": tile.viz_type,
+                    "enabled": tile.enabled
+                }
+                for tile in dependent_tiles
+            ],
+            "can_delete": True,  # We'll allow deletion but warn about consequences
+            "has_dependencies": len(dependent_tiles) > 0
+        }
     
     def preview_computation(self, comp_id: int) -> List[dict]:
         """Preview a computation's results."""

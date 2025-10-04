@@ -189,6 +189,7 @@ class ComputationCreate(BaseModel):
     description: Optional[str] = None
     dataset: str = Field(..., description="Target dataset: silver | alerts | sensors")
     definition: Dict[str, Any] = Field(..., description="JSON computation definition")
+    recommended_tile_type: Optional[str] = Field(None, description="Recommended tile type: table | stat | timeseries")
     enabled: bool = True
     created_by: str = Field(..., description="User who created this computation")
 
@@ -197,6 +198,7 @@ class ComputationUpdate(BaseModel):
     description: Optional[str] = None
     dataset: Optional[str] = None
     definition: Optional[Dict[str, Any]] = None
+    recommended_tile_type: Optional[str] = None
     enabled: Optional[bool] = None
     updated_by: str = Field(..., description="User who updated this computation")
 
@@ -207,6 +209,7 @@ class ComputationResponse(BaseModel):
     description: Optional[str] = None
     dataset: str
     definition: Dict[str, Any]
+    recommended_tile_type: Optional[str] = None
     enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

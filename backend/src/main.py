@@ -29,7 +29,7 @@ from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_confi
 from src.logging_config import setup_logging
 from src.middleware import RequestIdMiddleware
 from src.spark import spark_routes
-from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns, ensure_computation_ownership_columns, ensure_device_ownership_columns
+from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns, ensure_computation_ownership_columns, ensure_device_ownership_columns, ensure_computation_recommended_tile_type_column
 from src.spark.enrichment.cleaner import DataCleaner
 from src.spark.enrichment.usage_tracker import NormalizationRuleUsageTracker
 from src.api.settings_routes import ensure_default_settings
@@ -128,6 +128,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         ensure_device_ownership_columns()
     except Exception as e:
         logger.warning("Could not ensure device ownership columns: %s", e)
+
+    try:
+        ensure_computation_recommended_tile_type_column()
+    except Exception as e:
+        logger.warning("Could not ensure computation recommended_tile_type column: %s", e)
 
     # Seed normalization rules (no-op if already present)
     try:

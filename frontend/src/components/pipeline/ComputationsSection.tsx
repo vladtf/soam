@@ -17,6 +17,7 @@ import {
   ComputationExample,
   ComputationSuggestion,
   getCopilotHealth,
+  checkComputationDependencies,
 } from '../../api/backendRequests';
 import { useAuth } from '../../context/AuthContext';
 import { extractComputationErrorMessage, extractPreviewErrorMessage, extractDeleteErrorMessage } from '../../utils/errorHandling';
@@ -116,15 +117,30 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this computation?')) {
-      try {
+    try {
+      // First check for dependencies
+      const deps = await checkComputationDependencies(id);
+      
+      let confirmMessage = `Are you sure you want to delete the computation "${deps.computation.name}"?`;
+      
+      if (deps.has_dependencies) {
+        const tileNames = deps.dependent_tiles.map(tile => `• ${tile.name} (${tile.viz_type})`).join('\n');
+        confirmMessage = `⚠️ WARNING: The computation "${deps.computation.name}" is used by ${deps.dependent_tiles.length} dashboard tile(s):\n\n${tileNames}\n\nDeleting this computation will cause these tiles to show "Computation Deleted" errors.\n\nAre you sure you want to continue?`;
+      }
+      
+      if (window.confirm(confirmMessage)) {
         await deleteComputation(id);
         toast.success('Computation deleted successfully');
+        if (deps.has_dependencies) {
+          toast.warning(`${deps.dependent_tiles.length} dashboard tile(s) will now show errors until updated`, {
+            autoClose: 5000
+          });
+        }
         onComputationsChange();
-      } catch (error) {
-        console.error('Error deleting computation:', error);
-        toast.error(extractDeleteErrorMessage(error));
       }
+    } catch (error) {
+      console.error('Error during computation deletion:', error);
+      toast.error(extractDeleteErrorMessage(error));
     }
   };
 

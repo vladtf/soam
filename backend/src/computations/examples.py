@@ -106,6 +106,7 @@ EXAMPLE_DEFINITIONS: List[Dict[str, Any]] = [
         "title": "Average Temperature by 1-Minute Windows",
         "description": "Calculate average temperature readings grouped by 1-minute time windows from enriched data.",
         "dataset": "enriched",
+        "recommended_tile_type": "timeseries",
         "definition": {
             "select": [
                 "window(ingest_ts, '1 minute').start as time_start",
@@ -124,6 +125,53 @@ EXAMPLE_DEFINITIONS: List[Dict[str, Any]] = [
                 {"col": "time_start", "dir": "asc"}
             ],
             "limit": 50
+        }
+    },
+    {
+        "id": "temperature-alerts",
+        "title": "Temperature Alerts (gold_alerts)",
+        "description": "Current temperature alerts where readings exceed the configured threshold.",
+        "dataset": "gold_alerts",
+        "recommended_tile_type": "table",
+        "definition": {
+            "select": [
+                "sensorId",
+                "temperature", 
+                "event_time",
+                "alert_type"
+            ],
+            "where": [
+                {"col": "alert_type", "op": "==", "value": "TEMP_OVER_LIMIT"}
+            ],
+            "orderBy": [
+                {"col": "event_time", "dir": "desc"}
+            ],
+            "limit": 100
+        }
+    },
+    {
+        "id": "temperature-over-threshold",
+        "title": "Temperature Over Threshold Detection (Throttled)",
+        "description": "Detect temperature readings that exceed the configured threshold (30°C default) with time-based throttling. Shows max one alert per sensor per minute, matching the streaming alert detector logic.",
+        "dataset": "enriched",
+        "recommended_tile_type": "table",
+        "definition": {
+            "select": [
+                "ingestion_id as sensorId",
+                "MAX(normalized_data.temperature) as temperature", 
+                "MAX(ingest_ts) as event_time",
+                "window(ingest_ts, '1 minute').start as window_start",
+                "window(ingest_ts, '1 minute').end as window_end"
+            ],
+            "where": [
+                {"col": "normalized_data.temperature", "op": "IS NOT NULL"},
+                {"col": "normalized_data.temperature", "op": ">", "value": "30.0"}
+            ],
+            "groupBy": ["window(ingest_ts, '1 minute')", "ingestion_id"],
+            "orderBy": [
+                {"col": "window_start", "dir": "desc"}
+            ],
+            "limit": 100
         }
     }
 ]
