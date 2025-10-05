@@ -128,28 +128,6 @@ EXAMPLE_DEFINITIONS: List[Dict[str, Any]] = [
         }
     },
     {
-        "id": "temperature-alerts",
-        "title": "Temperature Alerts (gold_alerts)",
-        "description": "Current temperature alerts where readings exceed the configured threshold.",
-        "dataset": "gold_alerts",
-        "recommended_tile_type": "table",
-        "definition": {
-            "select": [
-                "sensorId",
-                "temperature", 
-                "event_time",
-                "alert_type"
-            ],
-            "where": [
-                {"col": "alert_type", "op": "==", "value": "TEMP_OVER_LIMIT"}
-            ],
-            "orderBy": [
-                {"col": "event_time", "dir": "desc"}
-            ],
-            "limit": 100
-        }
-    },
-    {
         "id": "temperature-over-threshold",
         "title": "Temperature Over Threshold Detection (Throttled)",
         "description": "Detect temperature readings that exceed the configured threshold (30°C default) with time-based throttling. Shows max one alert per sensor per minute, matching the streaming alert detector logic.",

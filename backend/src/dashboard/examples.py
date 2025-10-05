@@ -70,28 +70,6 @@ DASHBOARD_TILE_EXAMPLES = [
         }
     },
     {
-        "id": "temperature-alerts-table",
-        "title": "Temperature Alerts",
-        "description": "Real-time temperature alert monitoring table",
-        "viz_type": "table",
-        "preferred_computation_type": "table",
-        "config": {
-            "columns": ["sensorId", "temperature", "event_time", "alert_type"],
-            "refreshInterval": 15000,
-            "autoRefresh": True
-        },
-        "template": {
-            "name": "Temperature Alerts",
-            "viz_type": "table",
-            "config": {
-                "columns": ["sensorId", "temperature", "event_time", "alert_type"],
-                "refreshInterval": 15000,
-                "autoRefresh": True
-            },
-            "enabled": True
-        }
-    },
-    {
         "id": "temperature-over-threshold-table",
         "title": "Live Temperature Over Threshold",
         "description": "Monitor live temperature readings exceeding threshold",
