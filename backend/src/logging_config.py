@@ -78,7 +78,8 @@ def setup_logging(service_name: str, log_file: str | None = None) -> None:
 
     # Tame noisy third-party loggers
     noisy_level = os.getenv("NOISY_LOG_LEVEL", "WARNING").upper()
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "urllib3", "botocore", "minio"):
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "urllib3", "botocore", "minio", 
+                 "py4j", "py4j.clientserver", "neo4j", "neo4j.pool", "neo4j.io"):
         logging.getLogger(name).setLevel(getattr(logging, noisy_level, logging.WARNING))
 
     setup_logging._configured = True  # type: ignore[attr-defined]

@@ -166,6 +166,46 @@ class NormalizationRuleResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
+# ===============================
+# Value Transformation Rules
+# ===============================
+
+class ValueTransformationRuleCreate(BaseModel):
+    ingestion_id: Optional[str] = Field(None, description="Specific ingestion source (null = global rule)")
+    field_name: str = Field(..., description="Field name to apply transformation to")
+    transformation_type: str = Field(..., description="Type of transformation: filter, aggregate, convert, validate")
+    transformation_config: Dict[str, Any] = Field(..., description="Transformation configuration as JSON")
+    order_priority: int = Field(default=100, description="Execution order (lower = earlier)")
+    enabled: bool = Field(default=True)
+    created_by: str = Field(..., description="Username of the user creating this rule")
+
+
+class ValueTransformationRuleUpdate(BaseModel):
+    ingestion_id: Optional[str] = Field(None)
+    field_name: Optional[str] = Field(None)
+    transformation_type: Optional[str] = Field(None)
+    transformation_config: Optional[Dict[str, Any]] = Field(None)
+    order_priority: Optional[int] = Field(None)
+    enabled: Optional[bool] = Field(None)
+    updated_by: str = Field(..., description="Username of the user updating this rule")
+
+
+class ValueTransformationRuleResponse(BaseModel):
+    id: int
+    ingestion_id: Optional[str] = None
+    field_name: str
+    transformation_type: str
+    transformation_config: str  # JSON string for consistency with frontend interface
+    order_priority: int
+    enabled: bool
+    applied_count: int | None = 0
+    last_applied_at: Optional[str] = None
+    created_by: str
+    updated_by: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
 class FeedbackCreate(BaseModel):
     """Schema for creating feedback."""
     email: str = Field(..., description="User email address")

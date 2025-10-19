@@ -3,6 +3,7 @@ Spark streaming job management.
 """
 import logging
 import time
+import threading
 from typing import Optional
 from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
@@ -57,6 +58,11 @@ class StreamingManager:
         # Query names (union schema is now default)
         self.AVG_QUERY_NAME = "temperature_5min_averages"
         self.ALERT_QUERY_NAME = "temperature_alert_detector"
+        
+        # Thread locks to prevent concurrent stream starts
+        self._avg_query_lock = threading.Lock()
+        self._alert_query_lock = threading.Lock()
+        self._ensure_streams_lock = threading.Lock()
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
         """Return active StreamingQuery by name if present."""
@@ -153,35 +159,54 @@ class StreamingManager:
             logger.error(f"Failed to start alert stream: {e}")
 
     def ensure_streams_running(self) -> None:
-        """Ensure streaming jobs are running, start them if not."""
-        try:
-            # Ensure enrichment first, as downstream jobs rely on it
-            self.enrichment_manager.ensure_enrichment_running()
+        """Ensure streaming jobs are running, start them if not.
+        
+        Thread-safe: Uses locks to prevent concurrent stream starts.
+        """
+        # Use a global lock to prevent multiple threads from entering this method
+        with self._ensure_streams_lock:
+            try:
+                # Ensure enrichment first, as downstream jobs rely on it
+                self.enrichment_manager.ensure_enrichment_running()
 
-            # Check temperature stream
-            if self.avg_query is None or not self.avg_query.isActive:
-                logger.info("Temperature stream not active, attempting to start...")
-                existing = self._get_query_by_name(self.AVG_QUERY_NAME)
-                if existing and existing.isActive:
-                    self.avg_query = existing
-                else:
-                    self.start_temperature_stream()
+                # Check temperature stream with lock
+                with self._avg_query_lock:
+                    if self.avg_query is None or not self.avg_query.isActive:
+                        logger.info("Temperature stream not active, attempting to start...")
+                        existing = self._get_query_by_name(self.AVG_QUERY_NAME)
+                        if existing and existing.isActive:
+                            self.avg_query = existing
+                            logger.info("Reattached to existing temperature stream")
+                        else:
+                            self.start_temperature_stream()
 
-            # Check alert stream
-            if self.alert_query is None or not self.alert_query.isActive:
-                logger.info("Alert stream not active, attempting to start...")
-                existing = self._get_query_by_name(self.ALERT_QUERY_NAME)
-                if existing and existing.isActive:
-                    self.alert_query = existing
-                else:
-                    self.start_alert_stream()
+                # Check alert stream with lock
+                with self._alert_query_lock:
+                    if self.alert_query is None or not self.alert_query.isActive:
+                        logger.info("Alert stream not active, attempting to start...")
+                        existing = self._get_query_by_name(self.ALERT_QUERY_NAME)
+                        if existing and existing.isActive:
+                            self.alert_query = existing
+                            logger.info("Reattached to existing alert stream")
+                        else:
+                            self.start_alert_stream()
 
-        except Exception as e:
-            logger.error(f"Error ensuring streams are running: {e}")
+            except Exception as e:
+                logger.error(f"Error ensuring streams are running: {e}")
 
     def start_temperature_stream(self) -> None:
-        """Start the temperature averaging stream from union schema enriched data."""
+        """Start the temperature averaging stream from union schema enriched data.
+        
+        Should be called with _avg_query_lock held to prevent concurrent starts.
+        """
         spark = self.session_manager.spark
+        
+        # Double-check that query isn't already running
+        existing = self._get_query_by_name(self.AVG_QUERY_NAME)
+        if existing and existing.isActive:
+            logger.info(f"Temperature stream already running, reusing existing query")
+            self.avg_query = existing
+            return
         
         # Stop any existing query with the same name first
         self._stop_existing_query(self.AVG_QUERY_NAME)
@@ -282,8 +307,18 @@ class StreamingManager:
             raise
 
     def start_alert_stream(self) -> None:
-        """Start the temperature alert stream from union schema enriched data."""
+        """Start the temperature alert stream from union schema enriched data.
+        
+        Should be called with _alert_query_lock held to prevent concurrent starts.
+        """
         spark = self.session_manager.spark
+        
+        # Double-check that query isn't already running
+        existing = self._get_query_by_name(self.ALERT_QUERY_NAME)
+        if existing and existing.isActive:
+            logger.info(f"Alert stream already running, reusing existing query")
+            self.alert_query = existing
+            return
         
         # Stop any existing query with the same name first
         self._stop_existing_query(self.ALERT_QUERY_NAME)

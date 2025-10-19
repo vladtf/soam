@@ -60,6 +60,44 @@ class NormalizationRule(Base):
         }
 
 
+class ValueTransformationRule(Base):
+    """User-defined value transformation rule for filtering, aggregating, and modifying data values before processing."""
+    __tablename__ = "value_transformation_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ingestion_id = Column(String(255), nullable=True, index=True)  # NULL = global rule
+    field_name = Column(String(255), nullable=False, index=True)   # Field to apply transformation to
+    transformation_type = Column(String(64), nullable=False)       # 'filter', 'aggregate', 'convert', 'validate'
+    transformation_config = Column(Text, nullable=False)           # JSON config for the transformation
+    order_priority = Column(Integer, nullable=False, default=100)  # Execution order (lower = earlier)
+    enabled = Column(Boolean, nullable=False, default=True)
+    applied_count = Column(Integer, nullable=False, server_default="0")
+    last_applied_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Ownership and audit fields
+    created_by = Column(String(255), nullable=False)
+    updated_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "ingestion_id": self.ingestion_id,
+            "field_name": self.field_name,
+            "transformation_type": self.transformation_type,
+            "transformation_config": self.transformation_config,
+            "order_priority": self.order_priority,
+            "enabled": self.enabled,
+            "applied_count": getattr(self, "applied_count", 0),
+            "last_applied_at": self.last_applied_at.isoformat() if getattr(self, "last_applied_at", None) else None,
+            "created_by": self.created_by,
+            "updated_by": self.updated_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class Computation(Base):
     """User-defined computation stored as a JSON definition."""
     __tablename__ = "computations"

@@ -163,3 +163,47 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
         db.rollback()
         logger.error("Error deleting normalization rule %d: %s", rule_id, e)
         raise internal_server_error("Failed to delete normalization rule", str(e))
+
+
+@router.patch("/normalization/{rule_id}/toggle", response_model=ApiResponse)
+def toggle_rule(rule_id: int, db: Session = Depends(get_db)):
+    """Toggle the enabled/disabled state of a normalization rule."""
+    try:
+        rule = db.query(NormalizationRule).filter(NormalizationRule.id == rule_id).first()
+        if not rule:
+            raise not_found_error("Rule not found")
+
+        # Toggle the enabled state
+        old_state = rule.enabled
+        rule.enabled = not rule.enabled
+        
+        db.commit()
+        db.refresh(rule)
+        
+        logger.info("✅ Normalization rule %d toggled: %s -> %s (%s -> %s)", 
+                   rule_id, old_state, rule.enabled, rule.raw_key, rule.canonical_key)
+        
+        rule_response = NormalizationRuleResponse(
+            id=rule.id,
+            ingestion_id=rule.ingestion_id,
+            raw_key=rule.raw_key,
+            canonical_key=rule.canonical_key,
+            enabled=rule.enabled,
+            applied_count=getattr(rule, "applied_count", 0),
+            last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
+            created_by=rule.created_by,
+            updated_by=rule.updated_by,
+            created_at=rule.created_at.isoformat() if rule.created_at else None,
+            updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
+        )
+        
+        return success_response(
+            data=rule_response,
+            message=f"Rule {'enabled' if rule.enabled else 'disabled'} successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("❌ Error toggling normalization rule %d: %s", rule_id, e)
+        raise internal_server_error("Failed to toggle normalization rule", str(e))

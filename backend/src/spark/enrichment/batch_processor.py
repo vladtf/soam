@@ -5,6 +5,7 @@ import logging
 from typing import Optional, Tuple, Set
 from pyspark.sql import DataFrame
 from .device_filter import DeviceFilter
+from .value_transformer import ValueTransformationProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class BatchProcessor:
         """
         self.enriched_path: str = enriched_path
         self.device_filter: DeviceFilter = DeviceFilter()
+        self.value_transformer: ValueTransformationProcessor = ValueTransformationProcessor()
 
     def log_batch_sample(self, batch_df: DataFrame, stage: str = "raw") -> None:
         """Log sample batch data for debugging (non-blocking version).
@@ -107,6 +109,24 @@ class BatchProcessor:
 
             # Log filtering statistics
             self.device_filter.log_filtering_stats(batch_df, filtered_df, allowed_ids, has_wildcard)
+
+            # Apply value transformations
+            try:
+                transformed_df: DataFrame = self.value_transformer.apply_transformations(filtered_df)
+                logger.info("✅ Applied value transformations to batch")
+                
+                # Check if transformations resulted in empty DataFrame
+                if transformed_df.rdd.isEmpty():
+                    logger.info("Union enrichment: no rows after value transformations - skipping write")
+                    return
+                    
+                # Use transformed DataFrame for further processing
+                filtered_df = transformed_df
+                
+            except Exception as e:
+                logger.error("❌ Error applying value transformations: %s", e)
+                # Continue with original filtered_df on transformation errors
+                logger.warning("⚠️ Continuing with original data due to transformation error")
 
             # Log normalized field information for debugging (use sampling to avoid blocking)
             if logger.isEnabledFor(logging.DEBUG):

@@ -10,6 +10,8 @@ import {
   fetchPartitions,
   NormalizationRule,
   listNormalizationRules,
+  ValueTransformationRule,
+  listValueTransformationRules,
   ComputationDef,
   listComputations,
   registerDevice,
@@ -41,20 +43,25 @@ export const usePipelineData = () => {
   // Normalization rules state
   const [normalizationRules, setNormalizationRules] = useState<NormalizationRule[]>([]);
   
+  // Value transformation rules state
+  const [valueTransformationRules, setValueTransformationRules] = useState<ValueTransformationRule[]>([]);
+  
   // Computations state
   const [computations, setComputations] = useState<ComputationDef[]>([]);
   
   // Load all pipeline data
   const loadPipelineData = async () => {
     try {
-      const [parts, rules, comps] = await Promise.all([
+      const [parts, rules, valueRules, comps] = await Promise.all([
         fetchPartitions(),
         listNormalizationRules(),
+        listValueTransformationRules(),
         listComputations(),
       ]);
       
       setPartitions(parts);
       setNormalizationRules(rules);
+      setValueTransformationRules(valueRules);
       setComputations(comps || []); // Ensure it's always an array
     } catch (err) {
       console.error('Error loading pipeline data:', err);
@@ -205,6 +212,7 @@ export const usePipelineData = () => {
     name,
     description,
     normalizationRules,
+    valueTransformationRules,
     computations,
     filteredRules,
     relatedComputations,

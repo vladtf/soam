@@ -5,6 +5,7 @@ import {
   createNormalizationRule,
   updateNormalizationRule,
   deleteNormalizationRule,
+  toggleNormalizationRule,
   SensorData,
 } from '../../api/backendRequests';
 import { useAuth } from '../../context/AuthContext';
@@ -94,6 +95,15 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
     }
   };
 
+  const handleToggle = async (id: number) => {
+    try {
+      await toggleNormalizationRule(id);
+      onRulesChange();
+    } catch (error) {
+      console.error('Error toggling rule:', error);
+    }
+  };
+
   const handleAddNew = () => {
     setForm({ ...emptyForm, ingestion_id: activePartition });
     setEditingId(null);
@@ -165,21 +175,30 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
                        rule.created_at ? new Date(rule.created_at).toLocaleString() : '-'}
                     </td>
                     <td>
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
-                        className="me-1"
-                        onClick={() => handleEdit(rule)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        onClick={() => handleDelete(rule.id)}
-                      >
-                        Delete
-                      </Button>
+                      <div className="d-flex gap-1">
+                        <Button
+                          variant={rule.enabled ? 'outline-warning' : 'outline-success'}
+                          size="sm"
+                          onClick={() => handleToggle(rule.id)}
+                          title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                        >
+                          {rule.enabled ? '⏸️' : '▶️'}
+                        </Button>
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          onClick={() => handleEdit(rule)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={() => handleDelete(rule.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

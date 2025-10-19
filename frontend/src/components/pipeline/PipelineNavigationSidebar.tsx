@@ -1,11 +1,12 @@
 import React from 'react';
 import { Nav, Card, Badge } from 'react-bootstrap';
-import { SensorData, Device, NormalizationRule, ComputationDef } from '../../api/backendRequests';
+import { SensorData, Device, NormalizationRule, ComputationDef, ValueTransformationRule } from '../../api/backendRequests';
 
 interface PipelineNavigationSidebarProps {
   sensorData: SensorData[];
   devices: Device[];
   filteredRules: NormalizationRule[];
+  valueTransformationRules: ValueTransformationRule[];
   relatedComputations: ComputationDef[];
 }
 
@@ -13,6 +14,7 @@ const PipelineNavigationSidebar: React.FC<PipelineNavigationSidebarProps> = ({
   sensorData,
   devices,
   filteredRules,
+  valueTransformationRules,
   relatedComputations,
 }) => {
   return (
@@ -48,8 +50,18 @@ const PipelineNavigationSidebar: React.FC<PipelineNavigationSidebarProps> = ({
                 className="d-flex align-items-center justify-content-between mb-2 text-nowrap"
                 style={{ fontSize: '0.9rem' }}
               >
-                <span>🔧 Rules</span>
+                <span>🔧 Normalization</span>
                 <Badge bg="secondary" style={{ fontSize: '0.7rem' }}>{filteredRules.length}</Badge>
+              </Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link
+                eventKey="value-transformations"
+                className="d-flex align-items-center justify-content-between mb-2 text-nowrap"
+                style={{ fontSize: '0.9rem' }}
+              >
+                <span>🔄 Transforms</span>
+                <Badge bg="secondary" style={{ fontSize: '0.7rem' }}>{valueTransformationRules.length}</Badge>
               </Nav.Link>
             </Nav.Item>
             <Nav.Item>

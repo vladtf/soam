@@ -3,6 +3,7 @@ Main enrichment manager for Spark streaming enrichment processes.
 """
 import logging
 import time
+import threading
 from typing import Optional, List
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
@@ -39,6 +40,9 @@ class EnrichmentManager:
         # Query management
         self.ENRICH_QUERY_NAME: str = "sensor_data_enrichment"
         self.enrich_query: Optional[StreamingQuery] = None
+        
+        # Thread lock to prevent concurrent stream starts
+        self._enrich_query_lock = threading.Lock()
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
         """Return active StreamingQuery by name if present.
@@ -602,9 +606,18 @@ class EnrichmentManager:
         - Ingestion-specific normalization rules
         - Raw data preservation for debugging
         
+        Should be called with _enrich_query_lock held to prevent concurrent starts.
+        
         Raises:
             Exception: If schema inference fails due to no data or other issues
         """
+        # Double-check that query isn't already running
+        existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
+        if existing and existing.isActive:
+            logger.info(f"Enrichment stream already running, reusing existing query")
+            self.enrich_query = existing
+            return
+        
         # Stop existing query
         self._stop_existing_query()
 
@@ -658,17 +671,22 @@ class EnrichmentManager:
             raise
 
     def ensure_enrichment_running(self) -> None:
-        """Ensure enrichment stream is running, start it if not."""
-        try:
-            if self.enrich_query is None or not self.enrich_query.isActive:
-                logger.info("Enrichment stream not active, attempting to start...")
-                existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
-                if existing and existing.isActive:
-                    self.enrich_query = existing
-                else:
-                    self.start_enrichment_stream()
-        except Exception as e:
-            logger.error(f"Error ensuring enrichment stream is running: {e}")
+        """Ensure enrichment stream is running, start it if not.
+        
+        Thread-safe: Uses lock to prevent concurrent stream starts.
+        """
+        with self._enrich_query_lock:
+            try:
+                if self.enrich_query is None or not self.enrich_query.isActive:
+                    logger.info("Enrichment stream not active, attempting to start...")
+                    existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
+                    if existing and existing.isActive:
+                        self.enrich_query = existing
+                        logger.info("Reattached to existing enrichment stream")
+                    else:
+                        self.start_enrichment_stream()
+            except Exception as e:
+                logger.error(f"Error ensuring enrichment stream is running: {e}")
 
     def stop_enrichment_stream(self) -> None:
         """Stop enrichment stream gracefully."""

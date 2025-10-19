@@ -13,6 +13,7 @@ from src.api import error_routes
 from src.api import device_routes
 from src.api import normalization_routes
 from src.api import normalization_preview_routes
+from src.api import value_transformation_routes
 from src.api.routers import schema as schema_routes
 from src.copilot import copilot_routes
 from src.api import dashboard_tiles_routes
@@ -246,6 +247,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback_routes.router)
     app.include_router(normalization_routes.router)
     app.include_router(normalization_preview_routes.router)
+    app.include_router(value_transformation_routes.router)
     app.include_router(error_routes.router)
     app.include_router(computation_routes.router)
     app.include_router(copilot_routes.router)

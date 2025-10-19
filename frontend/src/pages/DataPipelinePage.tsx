@@ -10,6 +10,7 @@ import PipelineNavigationSidebar from '../components/pipeline/PipelineNavigation
 import PipelineOverviewTab from '../components/pipeline/PipelineOverviewTab';
 import SensorDataTab from '../components/pipeline/SensorDataTab';
 import NormalizationTab from '../components/pipeline/NormalizationTab';
+import ValueTransformationsTab from '../components/pipeline/ValueTransformationsTab';
 import ComputationsTab from '../components/pipeline/ComputationsTab';
 import DevicesTab from '../components/pipeline/DevicesTab';
 
@@ -17,7 +18,7 @@ const DataPipelinePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   
   // Define valid tab keys as a memoized constant
-  const validTabs = useMemo(() => ['overview', 'sensors', 'normalization', 'computations', 'devices'], []);
+  const validTabs = useMemo(() => ['overview', 'sensors', 'normalization', 'value-transformations', 'computations', 'devices'], []);
   
   // Get current tab directly from URL (single source of truth)
   const activeTab = useMemo(() => {
@@ -47,6 +48,7 @@ const DataPipelinePage: React.FC = () => {
     description,
     computations,
     filteredRules,
+    valueTransformationRules,
     relatedComputations,
     tableColumns,
     
@@ -119,6 +121,7 @@ const DataPipelinePage: React.FC = () => {
               sensorData={sensorData}
               devices={devices}
               filteredRules={filteredRules}
+              valueTransformationRules={valueTransformationRules}
               relatedComputations={relatedComputations}
             />
           </Col>
@@ -157,6 +160,12 @@ const DataPipelinePage: React.FC = () => {
                   sampleData={sensorData}
                   tableColumns={tableColumns}
                   renderValue={renderValue}
+                />
+              </Tab.Pane>
+
+              <Tab.Pane eventKey="value-transformations">
+                <ValueTransformationsTab
+                  activePartition={activePartition}
                 />
               </Tab.Pane>
 

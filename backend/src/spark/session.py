@@ -60,6 +60,13 @@ class SparkSessionManager:
         )
         
         spark.sparkContext.setLogLevel("WARN")
+        
+        # Specifically suppress py4j verbose logging
+        py4j_logger = logging.getLogger("py4j")
+        py4j_logger.setLevel(logging.WARNING)
+        py4j_clientserver_logger = logging.getLogger("py4j.clientserver")
+        py4j_clientserver_logger.setLevel(logging.WARNING)
+        
         return spark
     
     def is_connected(self) -> bool:
