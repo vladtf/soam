@@ -190,33 +190,64 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `TileModal.tsx` - Tile creation/editing with live preview
 - `DashboardHeader.tsx` - Dashboard controls and settings
 
-**Data Visualization:**
+**Data Visualization & Status Cards:**
 - `TemperatureChart.tsx` - Time series temperature visualization
 - `StatisticsCards.tsx` - System metrics display
 - `SparkApplicationsCard.tsx` - Spark cluster status
 - `TemperatureAlertsCard.tsx` - Real-time alert display
 - `EnrichmentStatusCard.tsx` - Data pipeline status
+- `ValueTransformationStatusCard.tsx` - Transformation rule status
+
+**Pipeline Components (`pipeline/`):**
+- `PipelineNavigationSidebar.tsx` - Navigation sidebar with rule counts
+- `PipelineOverview.tsx` - Pipeline status overview card
+- `PipelineOverviewTab.tsx` - Overview tab content
+- `SensorDataTab.tsx` - Sensor data browsing tab
+- `NormalizationTab.tsx` - Normalization rules management tab
+- `NormalizationRulesSection.tsx` - Normalization rules table and CRUD
+- `ValueTransformationsTab.tsx` - **COMPLETE**: Value transformation rules management with full CRUD operations, field selection, and examples
+- `ComputationsTab.tsx` - SQL computations tab
+- `ComputationsSection.tsx` - Computations table and management
+- `DevicesTab.tsx` - Device registration and management tab
+- `SchemaConfiguration.tsx` - Schema configuration component
 
 **Data Management:**
-- `sensor-data/` - Sensor data browsing components
-- `computations/` - SQL computation management UI
-- `pipeline/` - Data pipeline monitoring components
+- `sensor-data/` - Sensor data browsing and filtering components
+- `computations/` - SQL computation management UI components
 
-**Utility Components:**
-- `ErrorBoundary.tsx` - Global error handling
+**Navigation & Layout:**
+- `AppNavbar.tsx` - Main application navigation bar
+- `PageHeader.tsx` - Reusable page header component
+- `Footer.tsx` - Application footer
+
+**Utility & Support Components:**
+- `ErrorBoundary.tsx` - Global error handling wrapper
+- `withErrorBoundary.tsx` - HOC for error boundary
+- `ErrorCenter.tsx` - Error logging and display center
+- `DevErrorOverlay.tsx` - Development error overlay
+- `ErrorTestComponent.tsx` - Error testing component
+- `DebugPanel.tsx` - Debug information panel
+- `DebugFloatingButton.tsx` - Floating debug button
 - `MetadataViewer.tsx` - JSON data inspector
-- `ThemedReactJson.tsx` - Styled JSON viewer
+- `ThemedReactJson.tsx` - Styled JSON viewer with theme support
+- `ThemedTable.tsx` - Themed table component
 - `WithTooltip.tsx` - Reusable tooltip wrapper
+- `DynamicConfigForm.tsx` - Dynamic form configuration
+- `DynamicFields.tsx` - Dynamic field rendering
 
 **Pages (`frontend/src/pages/`):**
+- `Home.tsx` - Landing page with system overview
 - `DashboardPage.tsx` - **MAIN**: Modular dashboard with user-defined tiles
-- `DataPipelinePage.tsx` - Spark streaming monitoring
-- `DataSourcesPage.tsx` - Ingestor data source management
-- `MinioBrowserPage.tsx` - Object storage browser
-- `MetadataPage.tsx` - Schema metadata explorer
-- `TroubleshootingPage.tsx` - Advanced diagnostics interface
-- `SettingsPage.tsx` - Application settings
-- `OntologyPage.tsx` - Neo4j graph visualization
+- `DataPipelinePage.tsx` - **COMPREHENSIVE**: Unified pipeline management with tabs for sensors, normalization, transformations, computations, and devices
+- `DataSourcesPage.tsx` - Ingestor data source management (MQTT, REST API)
+- `MinioBrowserPage.tsx` - Object storage browser and file explorer
+- `MetadataPage.tsx` - Schema metadata explorer with field statistics
+- `TroubleshootingPage.tsx` - Advanced diagnostics and pipeline tracing
+- `SettingsPage.tsx` - Application settings and configuration
+- `OntologyPage.tsx` - Neo4j graph visualization and building management
+- `FeedbackPage.tsx` - User feedback and bug report collection
+- `NewEventsPage.tsx` - Event monitoring and alerts
+- `MapPage.tsx` - Geospatial visualization (if enabled)
 
 **Type Definitions (`frontend/src/types/`):**
 - `dataSource.ts` - TypeScript interfaces for modular data source system
