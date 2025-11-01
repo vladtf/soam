@@ -6,6 +6,7 @@
 *.sqlite
 *.bin
 *.exe
+*.pdf
 node_modules/
 __pycache__/
 backend/.env
