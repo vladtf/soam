@@ -113,10 +113,12 @@ System remains operational and accessible despite failures.
 ### 2. **Reliability**
 System delivers correct, uncorrupted data without loss.
 
-**Threats**: Packet loss/corruption, message duplication, out-of-order delivery, storage corruption
+**Threats**: Storage corruption, data loss during transmission
 
 **Implementation**:
-- SHA256 checksums for corruption detection
-- Sequence numbers for duplicate/missing detection
-- Acknowledgment-based retries
-- Idempotent processing with deduplication
+- User authentication and authorization
+- Sensor authentication via MQTT client certificates
+- User authentication through Azure AD integration
+- Data labeling with source metadata and quality scores
+- Automated backup policies with 30-day retention in MinIO
+- Point-in-time recovery capability for critical data
