@@ -4,7 +4,7 @@
 @startuml
 !theme plain
 skinparam defaultTextAlignment center
-skinparam linetype ortho
+skinparam linetype polyline
 skinparam nodesep 80
 skinparam ranksep 60
 skinparam rectangle {
@@ -30,16 +30,22 @@ together {
         rectangle "Sensors" as S #E3F2FD
         rectangle "Local Buffer" as LB #E3F2FD
         S -[hidden]right-> LB
-        S -[hidden]right-> LB
     }
 
     cloud "Azure Cloud" {
+     
         rectangle "Azure Service Bus" as ASB #E8F5E9
-        
+   
         package "Kubernetes Cluster" {
             package "Ingestion Layer" {
                 rectangle "MQTT Server" as MQTT #E8F5E9
                 rectangle "Ingestor\n1..N" as ING #E8F5E9
+                MQTT -[hidden]right-> ING
+
+            }
+
+            package "Storage Layer" {
+                rectangle "MinIO Cluster\n1..3" as MINIO #FFE0B2
             }
 
             package "Processing Layer" {
@@ -47,9 +53,7 @@ together {
                 rectangle "Spark Workers\n1..N" as SW #FFF9C4
             }
 
-            package "Storage Layer" {
-                rectangle "MinIO Cluster\n1..3" as MINIO #FFE0B2
-            }
+
 
             ' Second Row - Application and Monitoring
             together {
@@ -73,15 +77,15 @@ together {
 ' Data Flow
 S -right-> LB : offline\nbuffer
 S -down-> ASB
-LB -right-> MQTT
+LB --> MQTT
 MQTT -right-> ING
-ASB -right-> ING
-ING -right-> SM
-SM -right-> SW
-SW -right-> MINIO
-FE -right-> BE
-BE -right-> SW
-BE -right-> MINIO
+ASB --> ING
+ING -right-> MINIO
+SM <-> SW
+SW <-> MINIO
+FE <-> BE
+BE <-> SM
+
 
 ' Metrics Flow
 MQTT -[#blue,dotted]down-> PROM
@@ -91,7 +95,6 @@ SW -[#blue,dotted]down-> PROM
 MINIO -[#blue,dotted]down-> PROM
 CADV -right-> PROM : container\nmetrics
 PROM -right-> GRAF
-
 @enduml
 ```
 
