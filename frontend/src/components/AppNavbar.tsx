@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Navbar, Nav, Container, Button, Dropdown, Badge, NavDropdown } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useError } from '../context/ErrorContext';
@@ -8,7 +9,8 @@ import { isErrorReportingEnabled, setErrorReportingEnabled } from '../errors';
 
 const AppNavbar: React.FC = () => {
   const { theme, mode, toggleMode } = useTheme();
-  const { username, login, logout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
   const isDark = theme === 'dark';
 
   // backend connectivity status
@@ -43,12 +45,17 @@ const AppNavbar: React.FC = () => {
     const id = setInterval(ping, 10000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
-  const promptLogin = () => {
-    const name = window.prompt('Enter your username (letters, numbers, dot, dash, underscore):', username ?? '');
-    if (name) login(name);
+
+  const handleSignIn = () => {
+    navigate('/login');
+  };
+
+  const handleSignOut = () => {
+    logout();
+    navigate('/');
   };
   
-  const initials = useMemo(() => (username ? username.trim().slice(0, 2).toUpperCase() : ''), [username]);
+  const initials = useMemo(() => (user?.username ? user.username.trim().slice(0, 2).toUpperCase() : ''), [user]);
   const { openCenter } = useError();
   const [errorReporting, setErrorReporting] = useState<boolean>(false);
 
@@ -129,8 +136,8 @@ const AppNavbar: React.FC = () => {
               {mode === 'auto' ? 'A' : isDark ? 'Light' : 'Dark'}
             </Button>
             <Dropdown align="end">
-              <Dropdown.Toggle size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} className="d-flex align-items-center" aria-label={username ? `User menu for ${username}` : 'User menu'}>
-                {username ? (
+              <Dropdown.Toggle size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} className="d-flex align-items-center" aria-label={isAuthenticated ? `User menu for ${user?.username}` : 'User menu'}>
+                {isAuthenticated && user ? (
                   <span className="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary text-white" style={{ 
                     width: 'clamp(24px, 4vw, 32px)', 
                     height: 'clamp(24px, 4vw, 32px)', 
@@ -141,13 +148,25 @@ const AppNavbar: React.FC = () => {
                 ) : 'Sign in'}
               </Dropdown.Toggle>
               <Dropdown.Menu>
-                {!username && (
-                  <Dropdown.Item onClick={promptLogin}>Sign in</Dropdown.Item>
+                {!isAuthenticated && (
+                  <Dropdown.Item onClick={handleSignIn}>Sign in</Dropdown.Item>
                 )}
-                {username && (
+                {isAuthenticated && user && (
                   <>
-                    <Dropdown.Header>Signed in as @{username}</Dropdown.Header>
-                    <Dropdown.Item onClick={promptLogin}>Change user…</Dropdown.Item>
+                    <Dropdown.Header>
+                      <div>Signed in as <strong>@{user.username}</strong></div>
+                      <div className="mt-1">
+                        {(user.roles || []).map((role) => (
+                          <Badge 
+                            key={role} 
+                            bg={role === 'admin' ? 'danger' : role === 'user' ? 'primary' : 'secondary'} 
+                            className="me-1"
+                          >
+                            {role.toUpperCase()}
+                          </Badge>
+                        ))}
+                      </div>
+                    </Dropdown.Header>
                     <Dropdown.Divider />
                     <Dropdown.Item
                       as="button"
@@ -166,7 +185,7 @@ const AppNavbar: React.FC = () => {
                       </span>
                     </Dropdown.Item>
                     <Dropdown.Divider />
-                    <Dropdown.Item onClick={logout}>Sign out</Dropdown.Item>
+                    <Dropdown.Item onClick={handleSignOut}>Sign out</Dropdown.Item>
                   </>
                 )}
               </Dropdown.Menu>

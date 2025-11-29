@@ -18,6 +18,10 @@ sqlalchemy = "==2.0.23"
 colorlog = "*"
 openai = "*"
 python-dotenv = "*"
+python-jose = {extras = ["cryptography"], version = "*"}
+passlib = {extras = ["bcrypt"], version = "*"}
+bcrypt = "==4.0.1"
+email-validator = "*"
 
 [dev-packages]
 

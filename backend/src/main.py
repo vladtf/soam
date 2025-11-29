@@ -23,6 +23,7 @@ from src.api import settings_routes
 from src.api import troubleshooting
 from src.neo4j import building_routes
 from src.computations import computation_routes
+from src.auth import routes as auth_routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -33,6 +34,7 @@ from src.spark import spark_routes
 from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns, ensure_computation_ownership_columns, ensure_device_ownership_columns, ensure_computation_recommended_tile_type_column
 from src.spark.enrichment.cleaner import DataCleaner
 from src.spark.enrichment.usage_tracker import NormalizationRuleUsageTracker
+from src.auth.init_admin import init_default_admin
 from src.api.settings_routes import ensure_default_settings
 
 # Configure structured logging once
@@ -143,7 +145,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error("Error seeding normalization rules: %s", e)
 
-    # Initialize default settings
+    # Initialize default settings and admin user
     try:
         from src.database.database import SessionLocal
         from src.utils.settings_manager import settings_manager
@@ -153,10 +155,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             ensure_default_settings(db)
             # Also ensure settings manager has fresh data
             settings_manager.clear_cache()
+            
+            # Initialize default admin user
+            init_default_admin(db)
         finally:
             db.close()
     except Exception as e:
-        logger.warning("Could not initialize default settings: %s", e)
+        logger.warning("Could not initialize default settings or admin user: %s", e)
 
     # Start background aggregator for normalization rule usage
     try:
@@ -239,6 +244,7 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
+    app.include_router(auth_routes.router)
     app.include_router(building_routes.router)
     app.include_router(spark_routes.router)
     app.include_router(health_routes.router)

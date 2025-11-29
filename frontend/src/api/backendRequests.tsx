@@ -1,6 +1,7 @@
 import { getConfig } from '../config';
 import { Building } from '../models/Building';
 import { fetchWithErrorHandling, NetworkError } from '../utils/networkErrorHandler';
+import { withAuth } from '../utils/authUtils';
 
 export interface SensorData {
   sensorId?: string;
@@ -27,12 +28,15 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
 };
 
 // Enhanced fetch handler with better error handling and development debugging
-async function doFetch<T>(url: string, options?: RequestInit): Promise<T> {
+async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean = false): Promise<T> {
   const startTime = Date.now();
+  
+  // Apply auth headers if requested
+  const fetchOptions = useAuth ? withAuth(options) : options;
   
   try {
     // Use our enhanced fetch with error handling
-    const response = await fetchWithErrorHandling(url, options);
+    const response = await fetchWithErrorHandling(url, fetchOptions);
     
     let resultRaw: unknown;
     try {

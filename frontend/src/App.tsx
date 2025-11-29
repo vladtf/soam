@@ -21,6 +21,7 @@ import MetadataPage from './pages/MetadataPage';
 import DataSourcesPage from './pages/DataSourcesPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import DebugFloatingButton from './components/DebugFloatingButton';
+import LoginPage from './pages/LoginPage';
 import './utils/devTools'; // Initialize dev tools
 
 function App() {
@@ -36,6 +37,7 @@ function App() {
               <AppNavbar />
               <Routes>
                 <Route path="/" element={<Home />} />
+                <Route path="/login" element={<LoginPage />} />
                 <Route path="/pipeline" element={<DataPipelinePage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/ontology" element={<OntologyPage />} />

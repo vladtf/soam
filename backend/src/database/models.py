@@ -7,6 +7,55 @@ from src.database.database import Base
 import enum
 
 
+class UserRole(str, enum.Enum):
+    """User role enumeration for RBAC."""
+    ADMIN = "admin"
+    USER = "user"
+    VIEWER = "viewer"
+
+
+class User(Base):
+    """User model for authentication and authorization."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    # Roles stored as JSON list of role values, e.g. ["admin", "user"]
+    roles = Column(JSON, default=["user"], nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def get_roles(self) -> list:
+        """Get list of UserRole enums from stored roles."""
+        if not self.roles:
+            return []
+        return [UserRole(r) for r in self.roles if r in [e.value for e in UserRole]]
+
+    def has_role(self, role: UserRole) -> bool:
+        """Check if user has a specific role."""
+        return role.value in (self.roles or [])
+
+    def has_any_role(self, roles: list) -> bool:
+        """Check if user has any of the specified roles."""
+        role_values = [r.value if isinstance(r, UserRole) else r for r in roles]
+        return any(r in (self.roles or []) for r in role_values)
+
+    def to_dict(self) -> dict:
+        """Convert the model to a dictionary (excludes password_hash)."""
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "roles": self.roles or [],
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class Feedback(Base):
     """Feedback model for storing user feedback and bug reports."""
     __tablename__ = "feedbacks"
