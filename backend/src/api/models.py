@@ -243,6 +243,7 @@ class ComputationCreate(BaseModel):
     dataset: str = Field(..., description="Target dataset: silver | alerts | sensors")
     definition: Dict[str, Any] = Field(..., description="JSON computation definition")
     recommended_tile_type: Optional[str] = Field(None, description="Recommended tile type: table | stat | timeseries")
+    sensitivity: Optional[str] = Field(None, description="Custom sensitivity level (public, internal, confidential, restricted). If not provided, will be calculated from source devices.")
     enabled: bool = True
     created_by: str = Field(..., description="User who created this computation")
 
@@ -252,6 +253,7 @@ class ComputationUpdate(BaseModel):
     dataset: Optional[str] = None
     definition: Optional[Dict[str, Any]] = None
     recommended_tile_type: Optional[str] = None
+    sensitivity: Optional[str] = Field(None, description="Custom sensitivity level override")
     enabled: Optional[bool] = None
     updated_by: str = Field(..., description="User who updated this computation")
 

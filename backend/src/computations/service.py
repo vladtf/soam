@@ -46,7 +46,18 @@ class ComputationService:
             raise conflict_error("Computation name already exists")
         
         # Calculate inherited sensitivity from source devices
-        sensitivity, source_devices = calculate_computation_sensitivity(self.db, payload.definition)
+        calculated_sensitivity, source_devices = calculate_computation_sensitivity(self.db, payload.definition)
+        
+        # Use custom sensitivity if provided, otherwise use calculated
+        if payload.sensitivity:
+            try:
+                final_sensitivity = DataSensitivity(payload.sensitivity.lower())
+                logger.info("Using custom sensitivity '%s' for computation '%s' (calculated was '%s')",
+                           final_sensitivity.value, payload.name, calculated_sensitivity.value)
+            except ValueError:
+                raise bad_request_error(f"Invalid sensitivity level: {payload.sensitivity}. Valid values: public, internal, confidential, restricted")
+        else:
+            final_sensitivity = calculated_sensitivity
         
         # Create computation
         computation = Computation(
@@ -57,7 +68,7 @@ class ComputationService:
             recommended_tile_type=payload.recommended_tile_type,
             enabled=payload.enabled,
             created_by=validated_username,
-            sensitivity=sensitivity,
+            sensitivity=final_sensitivity,
             source_devices=source_devices,
         )
         
@@ -108,12 +119,27 @@ class ComputationService:
                 changes.append("definition updated")
                 computation.definition = json.dumps(payload.definition)
                 
-                # Recalculate sensitivity when definition changes
-                new_sensitivity, new_source_devices = calculate_computation_sensitivity(self.db, payload.definition)
+                # Recalculate sensitivity when definition changes (only if no custom sensitivity is being set)
+                if payload.sensitivity is None:
+                    new_sensitivity, new_source_devices = calculate_computation_sensitivity(self.db, payload.definition)
+                    if new_sensitivity != computation.sensitivity:
+                        changes.append(f"sensitivity (auto): {computation.sensitivity.value if computation.sensitivity else 'public'} -> {new_sensitivity.value}")
+                    computation.sensitivity = new_sensitivity
+                    computation.source_devices = new_source_devices
+                else:
+                    # Just update source devices
+                    _, new_source_devices = calculate_computation_sensitivity(self.db, payload.definition)
+                    computation.source_devices = new_source_devices
+        
+        # Handle explicit sensitivity update
+        if payload.sensitivity is not None:
+            try:
+                new_sensitivity = DataSensitivity(payload.sensitivity.lower())
                 if new_sensitivity != computation.sensitivity:
                     changes.append(f"sensitivity: {computation.sensitivity.value if computation.sensitivity else 'public'} -> {new_sensitivity.value}")
-                computation.sensitivity = new_sensitivity
-                computation.source_devices = new_source_devices
+                    computation.sensitivity = new_sensitivity
+            except ValueError:
+                raise bad_request_error(f"Invalid sensitivity level: {payload.sensitivity}. Valid values: public, internal, confidential, restricted")
         
         if payload.recommended_tile_type is not None and payload.recommended_tile_type != computation.recommended_tile_type:
             changes.append(f"recommended_tile_type: '{computation.recommended_tile_type}' -> '{payload.recommended_tile_type}'")

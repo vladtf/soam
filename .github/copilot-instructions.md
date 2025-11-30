@@ -239,7 +239,6 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `ComputationsTable.tsx` - Computations list and management table
 - `CopilotAssistant.tsx` - AI-powered SQL generation assistant
 - `DefinitionValidator.ts` - SQL definition validation utilities
-- `EditorModal.tsx` - SQL computation editor modal
 - `PreviewModal.tsx` - Computation result preview modal
 
 **Sensor Data Components (`sensor-data/`):**

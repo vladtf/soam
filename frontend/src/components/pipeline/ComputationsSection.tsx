@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Button, Table, Badge, Modal, Form, Row, Col, Spinner } from 'react-bootstrap';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Button, Table, Badge, Modal, Form, Row, Col, Spinner, Alert } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import {
   FaPlus, FaEdit, FaTrash, FaEye, FaCog, FaInfoCircle,
   FaTrophy, FaMedal, FaAward, FaStar, FaBell, FaBroadcastTower,
-  FaRobot, FaTimes, FaSave, FaFileAlt, FaChartBar
+  FaRobot, FaTimes, FaSave, FaFileAlt, FaChartBar, FaShieldAlt, FaExclamationTriangle
 } from 'react-icons/fa';
 import {
   ComputationDef,
@@ -18,6 +18,9 @@ import {
   ComputationSuggestion,
   getCopilotHealth,
   checkComputationDependencies,
+  analyzeComputationSensitivity,
+  AnalyzeSensitivityResponse,
+  DataSensitivity,
 } from '../../api/backendRequests';
 import { useAuth } from '../../context/AuthContext';
 import { extractComputationErrorMessage, extractPreviewErrorMessage, extractDeleteErrorMessage } from '../../utils/errorHandling';
@@ -55,6 +58,29 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
   const [examplesLoading, setExamplesLoading] = useState(true);
   const [examplePreviewData, setExamplePreviewData] = useState<{ result: unknown[]; row_count: number } | null>(null);
   const [previewingExample, setPreviewingExample] = useState<string | null>(null);
+  
+  // Sensitivity analysis state
+  const [sensitivityInfo, setSensitivityInfo] = useState<AnalyzeSensitivityResponse | null>(null);
+  const [analyzingSensitivity, setAnalyzingSensitivity] = useState(false);
+
+  // Debounced sensitivity analysis
+  const analyzeSensitivity = useCallback(async (definition: Record<string, unknown>) => {
+    if (!definition || Object.keys(definition).length === 0) {
+      setSensitivityInfo(null);
+      return;
+    }
+    
+    setAnalyzingSensitivity(true);
+    try {
+      const result = await analyzeComputationSensitivity(definition);
+      setSensitivityInfo(result);
+    } catch (error) {
+      console.error('Error analyzing sensitivity:', error);
+      setSensitivityInfo(null);
+    } finally {
+      setAnalyzingSensitivity(false);
+    }
+  }, []);
 
   useEffect(() => {
     const loadExamples = async () => {
@@ -114,6 +140,12 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     setForm(computation);
     setEditingId(computation.id || null);
     setShowModal(true);
+    // Analyze sensitivity for the current definition
+    if (computation.definition) {
+      analyzeSensitivity(computation.definition);
+    } else {
+      setSensitivityInfo(null);
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -184,6 +216,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     });
     setEditingId(null);
     setShowModal(true);
+    setSensitivityInfo(null); // Clear sensitivity for new computation
   };
 
   const useExample = (example: ComputationExample) => {
@@ -194,6 +227,8 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
       definition: example.definition,
       description: example.description || '',
     });
+    // Analyze sensitivity for the example definition
+    analyzeSensitivity(example.definition);
   };
 
   const handlePreviewExample = async (exampleId: string) => {
@@ -386,7 +421,7 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
       </Card>
 
       {/* Add/Edit Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered>
+      <Modal show={showModal} onHide={() => { setShowModal(false); setSensitivityInfo(null); }} size="xl" centered>
         <Modal.Header closeButton>
           <Modal.Title>
             {editingId ? (
@@ -541,8 +576,11 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                     try {
                       const definition = JSON.parse(e.target.value);
                       setForm({ ...form, definition });
+                      // Analyze sensitivity when definition changes
+                      analyzeSensitivity(definition);
                     } catch {
                       // Invalid JSON, don't update
+                      setSensitivityInfo(null);
                     }
                   }}
                   placeholder={`{
@@ -589,6 +627,97 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
                   </div>
                 </div>
               </Form.Group>
+            </div>
+
+            {/* Data Sensitivity Section */}
+            <div className="mb-4">
+              <h6 className="text-primary mb-3">
+                <FaShieldAlt className="me-2" />
+                Data Sensitivity
+                {analyzingSensitivity && <Spinner animation="border" size="sm" className="ms-2" />}
+              </h6>
+              <div className="p-3 bg-light rounded">
+                {sensitivityInfo ? (
+                  <>
+                    <div className="d-flex align-items-center gap-2 mb-3">
+                      <span className="fw-bold">Calculated Sensitivity:</span>
+                      <Badge 
+                        bg={
+                          sensitivityInfo.sensitivity === 'restricted' ? 'danger' :
+                          sensitivityInfo.sensitivity === 'confidential' ? 'warning' :
+                          sensitivityInfo.sensitivity === 'internal' ? 'info' : 'secondary'
+                        }
+                        className="text-uppercase"
+                      >
+                        {sensitivityInfo.sensitivity}
+                      </Badge>
+                    </div>
+                    
+                    {/* Custom Sensitivity Override */}
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-bold">
+                        Custom Sensitivity (Optional)
+                      </Form.Label>
+                      <Form.Select
+                        value={form.sensitivity || ''}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                          const value = e.target.value as DataSensitivity | '';
+                          setForm({ ...form, sensitivity: value || undefined });
+                        }}
+                        className="w-auto"
+                      >
+                        <option value="">Auto (use calculated)</option>
+                        <option value="public">Public</option>
+                        <option value="internal">Internal</option>
+                        <option value="confidential">Confidential</option>
+                        <option value="restricted">Restricted</option>
+                      </Form.Select>
+                      <Form.Text className="text-muted">
+                        {form.sensitivity 
+                          ? <>Overriding calculated sensitivity ({sensitivityInfo.sensitivity}) with: <strong className="text-uppercase">{form.sensitivity}</strong></>
+                          : "Leave as 'Auto' to inherit sensitivity from source devices."
+                        }
+                      </Form.Text>
+                    </Form.Group>
+                    
+                    {sensitivityInfo.warning && (
+                      <Alert variant="warning" className="py-2 mb-2">
+                        <FaExclamationTriangle className="me-2" />
+                        {sensitivityInfo.warning}
+                      </Alert>
+                    )}
+                    
+                    {sensitivityInfo.source_devices.length > 0 && (
+                      <div className="small text-muted">
+                        <strong>Source Devices ({sensitivityInfo.source_devices.length}):</strong>
+                        <div className="mt-1">
+                          {sensitivityInfo.source_devices.slice(0, 5).map((device, idx) => (
+                            <Badge key={idx} bg="light" text="dark" className="me-1 mb-1">
+                              {device.name || device.ingestion_id}
+                              <span className="ms-1 text-muted">({device.sensitivity})</span>
+                            </Badge>
+                          ))}
+                          {sensitivityInfo.source_devices.length > 5 && (
+                            <Badge bg="light" text="muted" className="me-1 mb-1">
+                              +{sensitivityInfo.source_devices.length - 5} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {sensitivityInfo.source_devices.length === 0 && (
+                      <div className="small text-muted">
+                        No specific devices referenced. Sensitivity is based on all accessible devices.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-muted">
+                    Enter a valid computation definition to analyze data sensitivity.
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Settings Section */}
