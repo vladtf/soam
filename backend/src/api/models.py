@@ -110,17 +110,28 @@ class ApiListResponse(BaseModel, Generic[T]):
 # Devices (Registration)
 # ===============================
 
+class DataSensitivityEnum(str):
+    """Data sensitivity levels for access control."""
+    PUBLIC = "public"
+    INTERNAL = "internal"
+    CONFIDENTIAL = "confidential"
+    RESTRICTED = "restricted"
+
 class DeviceCreate(BaseModel):
     ingestion_id: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
     enabled: bool = True
+    sensitivity: str = Field(default="internal", description="Data sensitivity level: public, internal, confidential, restricted")
+    data_retention_days: int = Field(default=90, ge=1, le=3650, description="Data retention period in days")
     created_by: str = Field(..., description="User who created this device")
 
 class DeviceUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     enabled: Optional[bool] = None
+    sensitivity: Optional[str] = Field(default=None, description="Data sensitivity level")
+    data_retention_days: Optional[int] = Field(default=None, ge=1, le=3650)
     updated_by: str = Field(..., description="User who updated this device")
 
 class DeviceResponse(BaseModel):
@@ -129,6 +140,8 @@ class DeviceResponse(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     enabled: bool
+    sensitivity: str = "internal"
+    data_retention_days: int = 90
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     created_by: Optional[str] = None
@@ -255,6 +268,8 @@ class ComputationResponse(BaseModel):
     updated_at: Optional[str] = None
     created_by: Optional[str] = None
     updated_by: Optional[str] = None
+    sensitivity: str = "public"
+    source_devices: List[str] = []
 
 
 # ===============================
@@ -289,6 +304,9 @@ class DashboardTileResponse(BaseModel):
     enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    sensitivity: str = "public"
+    access_restricted: bool = False  # True if user doesn't have permission to view data
+    restriction_message: Optional[str] = None  # Message to show when access is restricted
 
 
 # ===============================

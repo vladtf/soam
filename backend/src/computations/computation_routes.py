@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from src.api.models import ComputationCreate, ComputationUpdate, ComputationResponse, ApiResponse, ApiListResponse
 from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
 from src.database.database import get_db
+from src.database.models import Device
 from src.api.dependencies import get_spark_manager, ConfigDep, MinioClientDep
 from src.spark.spark_manager import SparkManager
 
@@ -16,6 +17,7 @@ from src.spark.spark_manager import SparkManager
 from src.computations.examples import EXAMPLE_DEFINITIONS, get_example_by_id, get_dsl_info
 from src.computations.sources import detect_available_sources, infer_schemas
 from src.computations.service import ComputationService
+from src.computations.sensitivity import calculate_computation_sensitivity, SENSITIVITY_ORDER
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,50 @@ def get_sources(config: ConfigDep, client: MinioClientDep):
     """Get available data sources."""
     sources = detect_available_sources(config, client)
     return success_response({"sources": sources}, "Sources retrieved successfully")
+
+
+@router.post("/computations/analyze-sensitivity", response_model=ApiResponse)
+def analyze_computation_sensitivity(payload: dict, db: Session = Depends(get_db)):
+    """
+    Analyze the sensitivity of a computation definition before creation.
+    
+    This helps users understand what sensitivity level their computation will inherit
+    based on the devices referenced in their definition.
+    
+    Payload:
+        definition: The computation DSL definition (select, where, orderBy, etc.)
+    """
+    definition = payload.get("definition", {})
+    
+    # Calculate sensitivity
+    sensitivity, source_devices = calculate_computation_sensitivity(db, definition)
+    
+    # Get device details for each source
+    device_details = []
+    if source_devices:
+        devices = db.query(Device).filter(Device.ingestion_id.in_(source_devices)).all()
+        for device in devices:
+            device_details.append({
+                "ingestion_id": device.ingestion_id,
+                "name": device.name,
+                "sensitivity": device.sensitivity.value if device.sensitivity else "public",
+            })
+    
+    # Generate warning message if sensitivity is elevated
+    warning = None
+    if sensitivity.value in ["confidential", "restricted"]:
+        warning = (
+            f"⚠️ This computation will have {sensitivity.value.upper()} sensitivity "
+            f"because it references devices with that sensitivity level. "
+            f"Only users with appropriate roles will be able to view tiles using this computation."
+        )
+    
+    return success_response({
+        "sensitivity": sensitivity.value,
+        "source_devices": device_details,
+        "warning": warning,
+        "sensitivity_levels": [s.value for s in SENSITIVITY_ORDER],
+    }, "Sensitivity analysis completed")
 
 
 @router.post("/computations/examples/{example_id}/preview", response_model=ApiResponse)

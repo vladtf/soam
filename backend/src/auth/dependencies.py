@@ -90,6 +90,42 @@ async def get_current_user_optional(
         return None
 
 
+def get_user_roles_from_token(authorization: str | None, db: Session) -> List[str]:
+    """
+    Extract user roles from JWT token without raising exceptions.
+    
+    Useful for optional access control where you want to check permissions
+    but not require authentication.
+    
+    Args:
+        authorization: The Authorization header value (e.g., "Bearer <token>")
+        db: Database session
+        
+    Returns:
+        List of role strings if token is valid, empty list otherwise
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return []
+    
+    token = authorization.replace("Bearer ", "")
+    try:
+        payload = decode_token(token)
+        if not payload:
+            return []
+        username = payload.get("sub")
+        if not username:
+            return []
+        
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            return []
+        
+        # Return role values as strings (not UserRole enums)
+        return [r.value if hasattr(r, 'value') else str(r) for r in user.get_roles()]
+    except Exception:
+        return []
+
+
 def require_roles(allowed_roles: List[UserRole]) -> Callable:
     """
     Dependency factory for role-based access control.

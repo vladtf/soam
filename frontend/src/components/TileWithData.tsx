@@ -6,6 +6,7 @@ import { DashboardTile } from './DashboardTile';
 import { DashboardTileDef, previewDashboardTile } from '../api/backendRequests';
 import WithTooltip from './WithTooltip';
 import { formatRelativeTime, formatRefreshPeriod } from '../utils/timeUtils';
+import { FaLock, FaShieldAlt } from 'react-icons/fa';
 
 // Error type constants
 const ERROR_COMPUTATION_DELETED = 'COMPUTATION_DELETED';
@@ -141,6 +142,40 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
 
   return (
     <div className="h-100 d-flex flex-column">
+      {/* Check if tile is access restricted */}
+      {tile.access_restricted ? (
+        <div className="h-100 d-flex flex-column">
+          <div className="d-flex justify-content-between align-items-center mb-1">
+            <div className="fw-semibold d-flex align-items-center gap-2">
+              <FaLock className="text-secondary" />
+              <span className="text-muted">{tile.name}</span>
+            </div>
+          </div>
+          <div className="flex-grow-1 d-flex align-items-center justify-content-center text-center p-4 border rounded bg-body-tertiary">
+            <div>
+              <div className="mb-3">
+                <FaShieldAlt size={48} className="text-secondary opacity-50" />
+              </div>
+              <div className="fw-bold text-secondary mb-2">Access Restricted</div>
+              <div className="text-muted small">
+                {tile.restriction_message || 'You do not have permission to view this tile.'}
+              </div>
+              {tile.sensitivity && (
+                <div className="mt-2">
+                  <span className={`badge bg-${
+                    tile.sensitivity === 'restricted' ? 'danger' :
+                    tile.sensitivity === 'confidential' ? 'warning' :
+                    tile.sensitivity === 'internal' ? 'info' : 'secondary'
+                  } text-uppercase`}>
+                    {tile.sensitivity} data
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="d-flex justify-content-between align-items-center mb-1">
         <div className="fw-semibold d-flex align-items-center gap-2" title={dragEnabled ? 'Drag to move tile' : ''}>
           <span
@@ -151,6 +186,18 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
             ⠿
           </span>
           <span>{tile.name}</span>
+          {tile.sensitivity && tile.sensitivity !== 'public' && (
+            <WithTooltip tip={`This tile contains ${tile.sensitivity} data`}>
+              <span className={`badge bg-${
+                tile.sensitivity === 'restricted' ? 'danger' :
+                tile.sensitivity === 'confidential' ? 'warning' :
+                tile.sensitivity === 'internal' ? 'info' : 'secondary'
+              } text-uppercase small`}>
+                <FaShieldAlt className="me-1" size={10} />
+                {tile.sensitivity}
+              </span>
+            </WithTooltip>
+          )}
         </div>
         <ButtonGroup size="sm" className="tile-controls" onMouseDown={(e) => e.stopPropagation()}>
           <WithTooltip tip="Reload the data for this tile">
@@ -242,6 +289,8 @@ export const TileWithData: React.FC<TileWithDataProps> = ({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

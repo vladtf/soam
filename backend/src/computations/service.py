@@ -2,11 +2,12 @@
 import json
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
-from src.database.models import Computation
+from src.database.models import Computation, DataSensitivity
 from src.api.models import ComputationCreate, ComputationUpdate, ComputationResponse
 from src.api.response_utils import not_found_error, conflict_error, bad_request_error
 from src.computations.validation import validate_dataset, validate_username, validate_computation_definition
 from src.computations.executor import ComputationExecutor
+from src.computations.sensitivity import calculate_computation_sensitivity
 from src.spark.spark_manager import SparkManager
 from src.utils.logging import get_logger
 
@@ -44,6 +45,9 @@ class ComputationService:
         if self.db.query(Computation).filter(Computation.name == payload.name).first():
             raise conflict_error("Computation name already exists")
         
+        # Calculate inherited sensitivity from source devices
+        sensitivity, source_devices = calculate_computation_sensitivity(self.db, payload.definition)
+        
         # Create computation
         computation = Computation(
             name=payload.name,
@@ -53,6 +57,8 @@ class ComputationService:
             recommended_tile_type=payload.recommended_tile_type,
             enabled=payload.enabled,
             created_by=validated_username,
+            sensitivity=sensitivity,
+            source_devices=source_devices,
         )
         
         self.db.add(computation)
@@ -101,6 +107,13 @@ class ComputationService:
             if json_hash(payload.definition) != json_hash(old_def):
                 changes.append("definition updated")
                 computation.definition = json.dumps(payload.definition)
+                
+                # Recalculate sensitivity when definition changes
+                new_sensitivity, new_source_devices = calculate_computation_sensitivity(self.db, payload.definition)
+                if new_sensitivity != computation.sensitivity:
+                    changes.append(f"sensitivity: {computation.sensitivity.value if computation.sensitivity else 'public'} -> {new_sensitivity.value}")
+                computation.sensitivity = new_sensitivity
+                computation.source_devices = new_source_devices
         
         if payload.recommended_tile_type is not None and payload.recommended_tile_type != computation.recommended_tile_type:
             changes.append(f"recommended_tile_type: '{computation.recommended_tile_type}' -> '{payload.recommended_tile_type}'")

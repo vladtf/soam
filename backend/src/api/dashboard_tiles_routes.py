@@ -1,20 +1,21 @@
 """Routes for user-defined dashboard tiles built on computations."""
 import asyncio
 import json
-import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 
 from src.api.models import DashboardTileCreate, DashboardTileUpdate, DashboardTileResponse, ApiResponse
 from src.api.response_utils import success_response, not_found_error, bad_request_error
 from src.database.database import get_db
-from src.database.models import DashboardTile, Computation
+from src.database.models import DashboardTile, Computation, DataSensitivity
 from src.computations.executor import ComputationExecutor
+from src.computations.sensitivity import can_access_sensitivity, get_restriction_message
 from src.api.dependencies import get_spark_manager
 from src.spark.spark_manager import SparkManager
+from src.auth.dependencies import get_user_roles_from_token
 from src.utils.logging import get_logger
 from src.utils.api_utils import handle_api_errors_sync
 from src.dashboard.examples import get_tile_examples
@@ -24,14 +25,48 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 # Thread pool for dashboard tile preview operations
 # This prevents blocking the FastAPI event loop during Spark computations
-_dashboard_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dashboard-api") 
+_dashboard_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dashboard-api")
+
+
+def _apply_access_control(tile_dict: dict, user_roles: List[str]) -> dict:
+    """Apply access control to a tile based on user roles and sensitivity."""
+    sensitivity_str = tile_dict.get("sensitivity", "public")
+    try:
+        sensitivity = DataSensitivity(sensitivity_str)
+    except ValueError:
+        sensitivity = DataSensitivity.PUBLIC
+    
+    can_access = can_access_sensitivity(user_roles, sensitivity)
+    logger.debug("🔐 Access check: tile=%s, sensitivity=%s, user_roles=%s, can_access=%s",
+                 tile_dict.get("name"), sensitivity_str, user_roles, can_access)
+    
+    if can_access:
+        tile_dict["access_restricted"] = False
+        tile_dict["restriction_message"] = None
+    else:
+        tile_dict["access_restricted"] = True
+        tile_dict["restriction_message"] = get_restriction_message(sensitivity, user_roles)
+    
+    return tile_dict
 
 
 @router.get("/tiles", response_model=ApiResponse)
 @handle_api_errors_sync("list dashboard tiles")
-def list_tiles(db: Session = Depends(get_db)):
+def list_tiles(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """List all dashboard tiles with access control."""
+    user_roles = get_user_roles_from_token(authorization, db)
+    
     rows = db.query(DashboardTile).order_by(DashboardTile.created_at.desc()).all()
-    tiles_data = [DashboardTileResponse(**r.to_dict()) for r in rows]
+    tiles_data = []
+    
+    for row in rows:
+        tile_dict = row.to_dict()
+        tile_dict = _apply_access_control(tile_dict, user_roles)
+        tiles_data.append(DashboardTileResponse(**tile_dict))
+    
     return success_response(data=tiles_data, message="Dashboard tiles retrieved successfully")
 
 
@@ -43,6 +78,7 @@ def create_tile(payload: DashboardTileCreate, db: Session = Depends(get_db)):
     if not comp:
         raise HTTPException(status_code=400, detail="Computation not found")
     
+    # Inherit sensitivity from computation
     row = DashboardTile(
         name=payload.name,
         computation_id=payload.computation_id,
@@ -50,6 +86,7 @@ def create_tile(payload: DashboardTileCreate, db: Session = Depends(get_db)):
         config=json.dumps(payload.config or {}),
         layout=json.dumps(payload.layout) if payload.layout is not None else None,
         enabled=payload.enabled,
+        sensitivity=comp.sensitivity,  # Inherit from computation
     )
     db.add(row)
     db.commit()
@@ -67,9 +104,12 @@ def update_tile(tile_id: int, payload: DashboardTileUpdate, db: Session = Depend
     if payload.name is not None:
         row.name = payload.name
     if payload.computation_id is not None:
-        if not db.get(Computation, payload.computation_id):
+        comp = db.get(Computation, payload.computation_id)
+        if not comp:
             raise HTTPException(status_code=400, detail="Computation not found")
         row.computation_id = payload.computation_id
+        # Update sensitivity when computation changes
+        row.sensitivity = comp.sensitivity
     if payload.viz_type is not None:
         row.viz_type = payload.viz_type
     if payload.config is not None:

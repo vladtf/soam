@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for application storage.
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float, JSON, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, JSON, Enum as SAEnum
 from sqlalchemy.sql import func
 from src.database.database import Base
 import enum
@@ -12,6 +12,14 @@ class UserRole(str, enum.Enum):
     ADMIN = "admin"
     USER = "user"
     VIEWER = "viewer"
+
+
+class DataSensitivity(str, enum.Enum):
+    """Data sensitivity classification for access control and retention policies."""
+    PUBLIC = "public"           # Non-sensitive, open access (weather, air quality)
+    INTERNAL = "internal"       # Business data, internal use only (energy usage, occupancy)
+    CONFIDENTIAL = "confidential"  # Sensitive, restricted access (location tracking)
+    RESTRICTED = "restricted"    # Highly sensitive, strict controls (personal identifiers)
 
 
 class User(Base):
@@ -164,6 +172,15 @@ class Computation(Base):
     # Ownership tracking
     created_by = Column(String(255), nullable=False)
     updated_by = Column(String(255), nullable=True)
+    
+    # Data sensitivity - inherited from source devices (highest sensitivity wins)
+    sensitivity = Column(
+        SAEnum(DataSensitivity),
+        default=DataSensitivity.PUBLIC,
+        nullable=False
+    )
+    # JSON list of source device ingestion_ids used in this computation
+    source_devices = Column(JSON, default=[], nullable=False)
 
     def to_dict(self) -> dict:
         import json as _json
@@ -183,6 +200,8 @@ class Computation(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "created_by": getattr(self, "created_by", "unknown"),
             "updated_by": getattr(self, "updated_by", None),
+            "sensitivity": self.sensitivity.value if self.sensitivity else DataSensitivity.PUBLIC.value,
+            "source_devices": self.source_devices or [],
         }
 
 
@@ -199,6 +218,13 @@ class DashboardTile(Base):
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Data sensitivity - inherited from computation (auto-updated when tile is created/linked)
+    sensitivity = Column(
+        SAEnum(DataSensitivity),
+        default=DataSensitivity.PUBLIC,
+        nullable=False
+    )
 
     def to_dict(self) -> dict:
         import json as _json
@@ -220,6 +246,7 @@ class DashboardTile(Base):
             "enabled": self.enabled,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "sensitivity": self.sensitivity.value if self.sensitivity else DataSensitivity.PUBLIC.value,
         }
 
 
@@ -241,6 +268,14 @@ class Device(Base):
     # Ownership tracking
     created_by = Column(String(255), nullable=False)
     updated_by = Column(String(255), nullable=True)
+    
+    # Data sensitivity classification
+    sensitivity = Column(
+        SAEnum(DataSensitivity),
+        default=DataSensitivity.INTERNAL,
+        nullable=False
+    )
+    data_retention_days = Column(Integer, default=90, nullable=False)  # Auto-delete after N days
 
     def to_dict(self) -> dict:
         return {
@@ -253,6 +288,8 @@ class Device(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "created_by": getattr(self, "created_by", "unknown"),
             "updated_by": getattr(self, "updated_by", None),
+            "sensitivity": self.sensitivity.value if self.sensitivity else DataSensitivity.INTERNAL.value,
+            "data_retention_days": self.data_retention_days or 90,
         }
 
 

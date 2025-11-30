@@ -2,6 +2,7 @@ import React, { useMemo, useCallback } from 'react';
 import { Container, Row, Col, Tab } from 'react-bootstrap';
 import { useSearchParams } from 'react-router-dom';
 import { usePipelineData } from '../hooks/usePipelineData';
+import { useAuth } from '../context/AuthContext';
 
 // Import components
 import TopControlsBar from '../components/sensor-data/TopControlsBar';
@@ -16,6 +17,7 @@ import DevicesTab from '../components/pipeline/DevicesTab';
 
 const DataPipelinePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isAdmin } = useAuth();
   
   // Define valid tab keys as a memoized constant
   const validTabs = useMemo(() => ['overview', 'sensors', 'normalization', 'value-transformations', 'computations', 'devices'], []);
@@ -46,6 +48,8 @@ const DataPipelinePage: React.FC = () => {
     ingestionId,
     name,
     description,
+    sensitivity,
+    dataRetentionDays,
     computations,
     filteredRules,
     valueTransformationRules,
@@ -59,6 +63,8 @@ const DataPipelinePage: React.FC = () => {
     setIngestionId,
     setName,
     setDescription,
+    setSensitivity,
+    setDataRetentionDays,
     
     // Handlers
     handleDataRefresh,
@@ -190,6 +196,11 @@ const DataPipelinePage: React.FC = () => {
                   setName={setName}
                   description={description}
                   setDescription={setDescription}
+                  sensitivity={sensitivity}
+                  setSensitivity={setSensitivity}
+                  dataRetentionDays={dataRetentionDays}
+                  setDataRetentionDays={setDataRetentionDays}
+                  isAdmin={isAdmin}
                   onRegister={handleRegisterDevice}
                   onToggle={handleToggleDevice}
                   onDelete={handleDeleteDevice}

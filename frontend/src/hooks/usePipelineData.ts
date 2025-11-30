@@ -7,6 +7,7 @@ import {
   SensorData,
   listDevices,
   Device,
+  DataSensitivity,
   fetchPartitions,
   NormalizationRule,
   listNormalizationRules,
@@ -39,6 +40,8 @@ export const usePipelineData = () => {
   const [ingestionId, setIngestionId] = useState<string>('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [sensitivity, setSensitivity] = useState<DataSensitivity>('internal');
+  const [dataRetentionDays, setDataRetentionDays] = useState<number>(90);
   
   // Normalization rules state
   const [normalizationRules, setNormalizationRules] = useState<NormalizationRule[]>([]);
@@ -142,10 +145,15 @@ export const usePipelineData = () => {
         description,
         enabled: true,
         created_by: username,
+        sensitivity,
+        data_retention_days: dataRetentionDays,
       });
+      // Reset form fields
       setIngestionId('');
       setName('');
       setDescription('');
+      setSensitivity('internal');
+      setDataRetentionDays(90);
       loadSensorData();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -211,6 +219,8 @@ export const usePipelineData = () => {
     ingestionId,
     name,
     description,
+    sensitivity,
+    dataRetentionDays,
     normalizationRules,
     valueTransformationRules,
     computations,
@@ -225,6 +235,8 @@ export const usePipelineData = () => {
     setIngestionId,
     setName,
     setDescription,
+    setSensitivity,
+    setDataRetentionDays,
     
     // Handlers
     handleDataRefresh,

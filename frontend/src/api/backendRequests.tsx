@@ -28,10 +28,11 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
 };
 
 // Enhanced fetch handler with better error handling and development debugging
-async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean = false): Promise<T> {
+// Auth is enabled by default - all requests will include the Authorization header if token is available
+async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean = true): Promise<T> {
   const startTime = Date.now();
   
-  // Apply auth headers if requested
+  // Apply auth headers if requested (default: true)
   const fetchOptions = useAuth ? withAuth(options) : options;
   
   try {
@@ -707,6 +708,9 @@ export interface ComputationDef {
   updated_at?: string;
   created_by?: string;
   updated_by?: string;
+  // Sensitivity inherited from source devices
+  sensitivity?: DataSensitivity;
+  source_devices?: string[];
 }
 
 export const listComputations = (): Promise<ComputationDef[]> => {
@@ -786,6 +790,29 @@ export const previewExampleComputation = (exampleId: string): Promise<{ example:
   });
 };
 
+// Analyze computation sensitivity based on definition references
+export interface SensitivitySourceDevice {
+  ingestion_id: string;
+  name: string | null;
+  sensitivity: DataSensitivity;
+}
+
+export interface AnalyzeSensitivityResponse {
+  sensitivity: DataSensitivity;
+  source_devices: SensitivitySourceDevice[];
+  warning: string | null;
+  sensitivity_levels: string[];
+}
+
+export const analyzeComputationSensitivity = (definition: Record<string, unknown>): Promise<AnalyzeSensitivityResponse> => {
+  const { backendUrl } = getConfig();
+  return doFetch<AnalyzeSensitivityResponse>(`${backendUrl}/api/computations/analyze-sensitivity`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ definition }),
+  });
+};
+
 export const fetchComputationSources = (): Promise<{ sources: string[] }> => {
   const { backendUrl } = getConfig();
   return doFetch<{ sources: string[] }>(`${backendUrl}/api/computations/sources`);
@@ -812,6 +839,11 @@ export interface DashboardTileDef {
   enabled?: boolean;
   created_at?: string;
   updated_at?: string;
+  // Sensitivity inherited from computation
+  sensitivity?: DataSensitivity;
+  // Access control fields (set by server based on user role)
+  access_restricted?: boolean;
+  restriction_message?: string;
 }
 
 export const listDashboardTiles = (): Promise<DashboardTileDef[]> => {
@@ -875,6 +907,16 @@ export const fetchDashboardTileExamples = (): Promise<DashboardTileExamplesRespo
 };
 
 // Devices API
+export type DataSensitivity = 'public' | 'internal' | 'confidential' | 'restricted';
+
+export interface SensitivityLevel {
+  value: DataSensitivity;
+  label: string;
+  description: string;
+  access: string;
+  badge_color: string;
+}
+
 export interface Device {
   id?: number;
   sensor_id: string;
@@ -882,10 +924,25 @@ export interface Device {
   name?: string;
   description?: string;
   enabled?: boolean;
+  sensitivity?: DataSensitivity;
+  data_retention_days?: number;
   created_at?: string;
   updated_at?: string;
   created_by?: string;
   updated_by?: string;
+}
+
+export interface DeviceAuditLog {
+  id: number;
+  user_id: number;
+  username: string;
+  device_id?: number;
+  device_ingestion_id?: string;
+  action: string;
+  sensitivity?: DataSensitivity;
+  ip_address?: string;
+  details?: string;
+  created_at: string;
 }
 
 export const listDevices = (): Promise<Device[]> => {
@@ -893,16 +950,41 @@ export const listDevices = (): Promise<Device[]> => {
   return doFetch<Device[]>(`${backendUrl}/api/devices`);
 };
 
-export const registerDevice = (payload: { ingestion_id: string; sensor_id?: string; name?: string; description?: string; enabled?: boolean; created_by: string }): Promise<Device> => {
+export const getSensitivityLevels = (): Promise<SensitivityLevel[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<SensitivityLevel[]>(`${backendUrl}/api/devices/sensitivity-levels`);
+};
+
+export interface RegisterDevicePayload {
+  ingestion_id: string;
+  sensor_id?: string;
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+  sensitivity?: DataSensitivity;
+  data_retention_days?: number;
+  created_by: string;
+}
+
+export const registerDevice = (payload: RegisterDevicePayload): Promise<Device> => {
   const { backendUrl } = getConfig();
   return doFetch<Device>(`${backendUrl}/api/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: true, ...payload }),
+    body: JSON.stringify({ enabled: true, sensitivity: 'internal', data_retention_days: 90, ...payload }),
   });
 };
 
-export const updateDevice = (id: number, payload: { name?: string; description?: string; enabled?: boolean; updated_by: string }): Promise<Device> => {
+export interface UpdateDevicePayload {
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+  sensitivity?: DataSensitivity;
+  data_retention_days?: number;
+  updated_by: string;
+}
+
+export const updateDevice = (id: number, payload: UpdateDevicePayload): Promise<Device> => {
   const { backendUrl } = getConfig();
   return doFetch<Device>(`${backendUrl}/api/devices/${id}`, {
     method: 'PATCH',

@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Modal, Row, Col, Form, Alert, Button, Card, Spinner, Badge } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import { 
   FaPlus, FaEdit, FaEye, FaLightbulb, FaInfoCircle, FaCog, 
   FaToggleOn, FaTrophy, FaMedal, FaAward, FaStar, FaBell, 
-  FaBroadcastTower, FaTimes, FaSave, FaFileAlt, FaChartBar
+  FaBroadcastTower, FaTimes, FaSave, FaFileAlt, FaChartBar,
+  FaShieldAlt, FaExclamationTriangle
 } from 'react-icons/fa';
 import WithTooltip from '../../components/WithTooltip';
-import type { ComputationDef, ComputationExample } from '../../api/backendRequests';
-import { previewExampleComputation } from '../../api/backendRequests';
+import type { ComputationDef, ComputationExample, AnalyzeSensitivityResponse } from '../../api/backendRequests';
+import { previewExampleComputation, analyzeComputationSensitivity } from '../../api/backendRequests';
 import type { SchemaMap } from './DefinitionValidator';
 import { validateDefinition } from './DefinitionValidator';
 import { extractPreviewErrorMessage } from '../../utils/errorHandling';
@@ -30,6 +31,29 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
   const [defErrors, setDefErrors] = useState<string[]>([]);
   const [previewData, setPreviewData] = useState<{ result: unknown[]; row_count: number } | null>(null);
   const [previewingExample, setPreviewingExample] = useState<string | null>(null);
+  
+  // Sensitivity analysis state
+  const [sensitivityInfo, setSensitivityInfo] = useState<AnalyzeSensitivityResponse | null>(null);
+  const [analyzingSensitivity, setAnalyzingSensitivity] = useState(false);
+
+  // Debounced sensitivity analysis
+  const analyzeSensitivity = useCallback(async (definition: Record<string, unknown>) => {
+    if (!definition || Object.keys(definition).length === 0) {
+      setSensitivityInfo(null);
+      return;
+    }
+    
+    setAnalyzingSensitivity(true);
+    try {
+      const result = await analyzeComputationSensitivity(definition);
+      setSensitivityInfo(result);
+    } catch (error) {
+      console.error('Error analyzing sensitivity:', error);
+      setSensitivityInfo(null);
+    } finally {
+      setAnalyzingSensitivity(false);
+    }
+  }, []);
 
   // sync defText from editing
   useEffect(() => {
@@ -37,7 +61,13 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
     setDefValid(true);
     setDefErrors([]);
     setPreviewData(null); // Clear preview when editing changes
-  }, [editing]);
+    setSensitivityInfo(null); // Clear sensitivity when editing changes
+    
+    // Analyze sensitivity for the current definition
+    if (editing?.definition) {
+      analyzeSensitivity(editing.definition);
+    }
+  }, [editing, analyzeSensitivity]);
 
   const handlePreviewExample = async (exampleId: string) => {
     setPreviewingExample(exampleId);
@@ -344,9 +374,12 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
                           setEditing((s) => ({ ...(s as ComputationDef), definition: obj }));
                           const errs = validateDefinition(obj, editing?.dataset, schemas);
                           setDefErrors(errs);
+                          // Analyze sensitivity when definition changes
+                          analyzeSensitivity(obj);
                         } catch {
                           setDefValid(false);
                           setDefErrors([]);
+                          setSensitivityInfo(null);
                         }
                       }}
                       style={{ 
@@ -357,16 +390,7 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
                         minHeight: '300px',
                         maxHeight: '600px'
                       }}
-                      placeholder={`{
-  "select": ["temperature", "humidity", "timestamp"],
-  "where": {
-    "column": "temperature",
-    "operator": ">",
-    "value": 25
-  },
-  "orderBy": [{"column": "timestamp", "direction": "DESC"}],
-  "limit": 100
-}`}
+                      placeholder={'{\n  "select": ["temperature", "humidity", "timestamp"],\n  "where": {\n    "column": "temperature",\n    "operator": ">",\n    "value": 25\n  },\n  "orderBy": [{"column": "timestamp", "direction": "DESC"}],\n  "limit": 100\n}'}
                     />
                   </WithTooltip>
                   <Form.Control.Feedback type="invalid">
@@ -401,6 +425,74 @@ const EditorModal: React.FC<Props> = ({ show, editing, setEditing, sources, exam
                     </Alert>
                   )}
                 </Form.Group>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          {/* Sensitivity Analysis Section */}
+          <Col md={12}>
+            <Card className={`border-${sensitivityInfo?.sensitivity === 'restricted' ? 'danger' : sensitivityInfo?.sensitivity === 'confidential' ? 'warning' : sensitivityInfo?.sensitivity === 'internal' ? 'info' : 'secondary'}`}>
+              <Card.Header className={`py-2 ${sensitivityInfo?.sensitivity === 'restricted' ? 'bg-danger text-white' : sensitivityInfo?.sensitivity === 'confidential' ? 'bg-warning' : sensitivityInfo?.sensitivity === 'internal' ? 'bg-info text-white' : 'bg-secondary text-white'}`}>
+                <h6 className="mb-0">
+                  <FaShieldAlt className="me-2" />
+                  Data Sensitivity
+                  {analyzingSensitivity && <Spinner animation="border" size="sm" className="ms-2" />}
+                </h6>
+              </Card.Header>
+              <Card.Body className="py-3">
+                {sensitivityInfo ? (
+                  <>
+                    <div className="d-flex align-items-center gap-2 mb-2">
+                      <span className="fw-bold">Inherited Sensitivity:</span>
+                      <Badge 
+                        bg={
+                          sensitivityInfo.sensitivity === 'restricted' ? 'danger' :
+                          sensitivityInfo.sensitivity === 'confidential' ? 'warning' :
+                          sensitivityInfo.sensitivity === 'internal' ? 'info' : 'secondary'
+                        }
+                        className="text-uppercase"
+                      >
+                        {sensitivityInfo.sensitivity}
+                      </Badge>
+                    </div>
+                    
+                    {sensitivityInfo.warning && (
+                      <Alert variant="warning" className="py-2 mb-2">
+                        <FaExclamationTriangle className="me-2" />
+                        {sensitivityInfo.warning}
+                      </Alert>
+                    )}
+                    
+                    {sensitivityInfo.source_devices.length > 0 && (
+                      <div className="small text-muted">
+                        <strong>Source Devices ({sensitivityInfo.source_devices.length}):</strong>
+                        <div className="mt-1">
+                          {sensitivityInfo.source_devices.slice(0, 5).map((device, idx) => (
+                            <Badge key={idx} bg="light" text="dark" className="me-1 mb-1">
+                              {device.name || device.ingestion_id}
+                              <span className="ms-1 text-muted">({device.sensitivity})</span>
+                            </Badge>
+                          ))}
+                          {sensitivityInfo.source_devices.length > 5 && (
+                            <Badge bg="light" text="muted" className="me-1 mb-1">
+                              +{sensitivityInfo.source_devices.length - 5} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {sensitivityInfo.source_devices.length === 0 && (
+                      <div className="small text-muted">
+                        No specific devices referenced. Sensitivity is based on all accessible devices.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-muted small">
+                    {defValid ? 'Enter a valid definition to analyze data sensitivity.' : 'Fix JSON errors to analyze sensitivity.'}
+                  </div>
+                )}
               </Card.Body>
             </Card>
           </Col>

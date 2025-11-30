@@ -1,9 +1,9 @@
 import React from 'react';
 import { Row, Col, Card, Badge, Button } from 'react-bootstrap';
-import { SensorData, Device } from '../../api/backendRequests';
+import { SensorData, Device, DataSensitivity } from '../../api/backendRequests';
 import RegisterDeviceCard from '../sensor-data/RegisterDeviceCard';
 import DevicesTableCard from '../sensor-data/DevicesTableCard';
-import { FaWrench } from 'react-icons/fa';
+import { FaWrench, FaShieldAlt } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 
 interface DevicesTabProps {
@@ -16,11 +16,23 @@ interface DevicesTabProps {
   setName: (name: string) => void;
   description: string;
   setDescription: (description: string) => void;
+  sensitivity: DataSensitivity;
+  setSensitivity: (sensitivity: DataSensitivity) => void;
+  dataRetentionDays: number;
+  setDataRetentionDays: (days: number) => void;
   onRegister: (e: React.FormEvent) => void;
   onToggle: (id: number) => void;
   onDelete: (id: number) => void;
   renderValue: (v: unknown) => string;
+  isAdmin?: boolean;
 }
+
+const SENSITIVITY_COLORS: Record<DataSensitivity, string> = {
+  public: 'success',
+  internal: 'info',
+  confidential: 'warning',
+  restricted: 'danger',
+};
 
 const DevicesTab: React.FC<DevicesTabProps> = ({
   devices,
@@ -32,10 +44,15 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
   setName,
   description,
   setDescription,
+  sensitivity,
+  setSensitivity,
+  dataRetentionDays,
+  setDataRetentionDays,
   onRegister,
   onToggle,
   onDelete,
   renderValue,
+  isAdmin = false,
 }) => {
   const navigate = useNavigate();
   return (
@@ -50,8 +67,13 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
             setName={setName}
             description={description}
             setDescription={setDescription}
+            sensitivity={sensitivity}
+            setSensitivity={setSensitivity}
+            dataRetentionDays={dataRetentionDays}
+            setDataRetentionDays={setDataRetentionDays}
             onRegister={onRegister}
             sensorData={sensorData}
+            isAdmin={isAdmin}
           />
         </Col>
         <Col lg={6}>
@@ -80,6 +102,7 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
                       data.sensorId === device.name ||
                       data.sensor_id === device.name
                     );
+                    const sensitivityColor = SENSITIVITY_COLORS[device.sensitivity || 'internal'];
                     return (
                       <Col md={6} lg={3} key={device.id} className="mb-3">
                         <Card className="h-100" style={{ fontSize: '0.85rem', minHeight: '200px' }}>
@@ -105,6 +128,13 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
                                   {device.ingestion_id}
                                 </small>
                               </div>
+                              <Badge 
+                                bg={sensitivityColor} 
+                                className="ms-1 flex-shrink-0"
+                                title={`Sensitivity: ${device.sensitivity || 'internal'}`}
+                              >
+                                <FaShieldAlt size={10} />
+                              </Badge>
                             </div>
                           </Card.Header>
                           <Card.Body className="py-2 d-flex flex-column">
