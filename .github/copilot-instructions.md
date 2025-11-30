@@ -66,22 +66,37 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `backend/src/middleware.py` - Request ID middleware for request tracing
 - `backend/src/logging_config.py` - Structured logging configuration
 
+**Authentication Layer (`backend/src/auth/`):** - **NEW: JWT-based multi-role authentication**
+- `config.py` - `AuthSettings` dataclass with JWT configuration (SECRET_KEY, token expiration, default admin)
+- `security.py` - Password hashing (bcrypt), JWT token creation/decoding (python-jose)
+- `dependencies.py` - **CRITICAL**: Auth dependencies (`get_current_user`, `require_roles`, `require_admin`, `require_user_or_admin`)
+- `routes.py` - Full auth API: login, register, refresh, logout, user management (CRUD)
+- `init_admin.py` - Default admin user initialization with all roles
+
+**Auth System Features:**
+- Multi-role support: Users can have multiple roles stored as JSON list (e.g., `["admin", "user", "viewer"]`)
+- JWT access tokens (30min) + refresh tokens (7 days)
+- Role-based authorization: `require_roles()` checks if user has ANY of the specified roles
+- User model: `roles` field is JSON list, with helper methods `get_roles()`, `has_role()`, `has_any_role()`
+- Password hashing: bcrypt via passlib (bcrypt==4.0.1 pinned for compatibility)
+
 **API Layer (`backend/src/api/`):**
 - `dependencies.py` - **CRITICAL**: Central DI with `@lru_cache()` singletons and type aliases
 - `models.py` - Pydantic request/response models with generic types (`ApiResponse[T]`, `ApiListResponse[T]`)
 - `response_utils.py` - **MANDATORY**: Unified response utilities (`success_response()`, error functions)
 - Core API routers:
-  - `device_routes.py` - Device/sensor management with Neo4j integration
-  - `dashboard_tiles_routes.py` - User-defined dashboard tiles with time series support
-  - `minio_routes.py` - MinIO bucket/object management and data access
-  - `health_routes.py` - Health checks and system status
-  - `feedback_routes.py` - User feedback collection
-  - `error_routes.py` - Client error tracking and analytics
-  - `normalization_routes.py` - Data normalization rule management
-  - `normalization_preview_routes.py` - Schema normalization preview
   - `config_routes.py` - System configuration endpoints
+  - `dashboard_tiles_routes.py` - User-defined dashboard tiles with time series support
+  - `device_routes.py` - Device/sensor management with Neo4j integration
+  - `error_routes.py` - Client error tracking and analytics
+  - `feedback_routes.py` - User feedback collection
+  - `health_routes.py` - Health checks and system status
+  - `minio_routes.py` - MinIO bucket/object management and data access
+  - `normalization_preview_routes.py` - Schema normalization preview
+  - `normalization_routes.py` - Data normalization rule management
   - `settings_routes.py` - User settings management
   - `troubleshooting.py` - Advanced diagnostics and pipeline tracing
+  - `value_transformation_routes.py` - Value transformation rule management
 - `routers/schema.py` - Schema inference stream management
 
 **Business Logic Layer:**
@@ -113,9 +128,14 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
   - `spark_manager.py` - **CRITICAL**: Main Spark coordinator with stream lifecycle management
   - `session.py` - `SparkSessionManager` with optimized configuration
   - `spark_routes.py` - Spark cluster management API
+  - `spark_models.py` - Pydantic models for Spark API responses
   - `streaming.py` - `StreamingManager` for stream orchestration
   - `data_access.py` - `DataAccessManager` for bronze/silver/gold layer access
+  - `data_troubleshooter.py` - Data troubleshooting utilities
   - `diagnostics.py` - Data pipeline diagnostics and troubleshooting
+  - `diagnostics_enhanced.py` - Enhanced diagnostics with detailed tracing
+  - `master_client.py` - Spark master client for cluster communication
+  - `config.py` - Spark configuration settings
   - `enrichment/` - Data enrichment pipeline:
     - `enrichment_manager.py` - Main enrichment orchestrator
     - `batch_processor.py` - Batch processing logic for file-based ingestion
@@ -123,10 +143,10 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
     - `device_filter.py` - Device-based data filtering
     - `cleaner.py` - Data cleaning and validation
     - `usage_tracker.py` - Resource usage monitoring
+    - `value_transformer.py` - Value transformation logic
 
 **Utilities (`backend/src/utils/`):**
 - `api_utils.py` - **MANDATORY**: API decorators for error handling (`@handle_api_errors`)
-- `response_utils.py` - Response formatting utilities
 - `logging.py` - Emoji-based structured logging (`get_logger()`)
 - `database_utils.py` - Database utilities and error handling
 - `settings_manager.py` - Application settings management
@@ -174,13 +194,17 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `frontend/public/config/config.json` - Runtime configuration (backendUrl, ingestorUrl)
 
 **Context & State Management (`frontend/src/context/`):**
+- `AuthContext.tsx` - **NEW**: JWT-based authentication context with multi-role support
 - `ConfigContext.tsx` - Global configuration context with dynamic loading
+- `ErrorContext.tsx` - Error handling and display context
+- `ThemeContext.tsx` - Theme management (light/dark mode)
 
 **API Integration (`frontend/src/api/`):**
 - `backendRequests.tsx` - **COMPREHENSIVE**: All backend and ingestor API calls with TypeScript interfaces
   - Backend APIs: computations, dashboard tiles, devices, troubleshooting
   - Ingestor APIs: data sources, metadata, health monitoring
   - Copilot APIs: AI-powered SQL generation
+  - Auth APIs: login, register, refresh, user management
 
 **Component Architecture (`frontend/src/components/`):**
 **Core Dashboard Components:**
@@ -211,14 +235,25 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `DevicesTab.tsx` - Device registration and management tab
 - `SchemaConfiguration.tsx` - Schema configuration component
 
-**Data Management:**
-- `sensor-data/` - Sensor data browsing and filtering components
-- `computations/` - SQL computation management UI components
+**Computations Components (`computations/`):**
+- `ComputationsTable.tsx` - Computations list and management table
+- `CopilotAssistant.tsx` - AI-powered SQL generation assistant
+- `DefinitionValidator.ts` - SQL definition validation utilities
+- `EditorModal.tsx` - SQL computation editor modal
+- `PreviewModal.tsx` - Computation result preview modal
+
+**Sensor Data Components (`sensor-data/`):**
+- `DataViewer.tsx` - Sensor data viewer component
+- `DevicesTableCard.tsx` - Devices table card component
+- `EnrichmentDiagnosticCard.tsx` - Enrichment diagnostic card
+- `RegisterDeviceCard.tsx` - Device registration card
+- `TopControlsBar.tsx` - Top controls bar for sensor data
 
 **Navigation & Layout:**
-- `AppNavbar.tsx` - Main application navigation bar
+- `AppNavbar.tsx` - Main application navigation bar with auth integration
 - `PageHeader.tsx` - Reusable page header component
 - `Footer.tsx` - Application footer
+- `ProtectedRoute.tsx` - **NEW**: Role-based route protection for authenticated routes
 
 **Utility & Support Components:**
 - `ErrorBoundary.tsx` - Global error handling wrapper
@@ -234,6 +269,13 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `WithTooltip.tsx` - Reusable tooltip wrapper
 - `DynamicConfigForm.tsx` - Dynamic form configuration
 - `DynamicFields.tsx` - Dynamic field rendering
+- `DataTroubleshootingTool.tsx` - Data troubleshooting tool
+- `NormalizationPreviewModal.tsx` - Normalization preview modal
+- `NewBuildingModal.tsx` - New building creation modal
+- `OntologyViewer.tsx` - Ontology graph viewer
+- `SensorForm.tsx` - Sensor registration form
+- `SensorData.tsx` - Sensor data display component
+- `TemperatureThresholdModal.tsx` - Temperature threshold configuration modal
 
 **Pages (`frontend/src/pages/`):**
 - `Home.tsx` - Landing page with system overview
@@ -248,13 +290,11 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `FeedbackPage.tsx` - User feedback and bug report collection
 - `NewEventsPage.tsx` - Event monitoring and alerts
 - `MapPage.tsx` - Geospatial visualization (if enabled)
-
-**Type Definitions (`frontend/src/types/`):**
-- `dataSource.ts` - TypeScript interfaces for modular data source system
-- `imports.d.ts` - Module declarations for external libraries
+- `LoginPage.tsx` - **NEW**: Login and registration page with multi-role support
 
 **Utilities (`frontend/src/utils/`):**
 - `timeUtils.ts` - **CRITICAL**: Time formatting for refresh intervals and relative time display
+- `authUtils.ts` - **NEW**: Authentication utilities (getAuthHeaders)
 
 ### Supporting Services
 - `simulator/` - IoT device simulators (temperature, air quality, smart bins, traffic)
@@ -496,7 +536,94 @@ class DataSourceManager:
 - MinIO client handles bronze layer storage with ingestion_id partitioning
 - Metadata service extracts schemas and tracks data quality metrics
 
-### 8. Comprehensive Troubleshooting System (ADVANCED)
+### 8. JWT Authentication System (NEW)
+**Location**: `backend/src/auth/` - Complete JWT-based multi-role authentication
+
+**Architecture Overview**:
+```python
+# Auth module structure
+backend/src/auth/
+├── config.py        # AuthSettings dataclass
+├── security.py      # Password hashing & JWT operations
+├── dependencies.py  # FastAPI dependencies for route protection
+├── routes.py        # Auth API endpoints
+└── init_admin.py    # Default admin user initialization
+```
+
+**Multi-Role Authorization Pattern**:
+```python
+from src.auth.dependencies import get_current_user, require_roles, require_admin
+
+# Protect routes with specific roles
+@router.get("/admin-only")
+async def admin_endpoint(user: User = Depends(require_admin)):
+    pass
+
+# Allow multiple roles (user has ANY of the specified roles)
+@router.get("/users-or-admins")  
+async def protected(user: User = Depends(require_roles(["admin", "user"]))):
+    pass
+
+# Just require authentication, any role
+@router.get("/authenticated")
+async def any_auth(user: User = Depends(get_current_user)):
+    pass
+```
+
+**Token Management**:
+```python
+# Access token (short-lived, 30 min)
+access_token = create_access_token({"sub": user.username})
+
+# Refresh token (long-lived, 7 days)
+refresh_token = create_refresh_token({"sub": user.username})
+
+# Token validation with user lookup
+user = await get_current_user(token, db)
+```
+
+**User Model with Multi-Role Support**:
+```python
+class User(Base):
+    id: int
+    username: str  # Unique
+    email: str     # Unique
+    password_hash: str
+    roles: JSON    # List of roles: ["admin", "user", "viewer"]
+    is_active: bool
+    created_at: datetime
+    
+    def get_roles(self) -> List[str]: ...
+    def has_role(self, role: str) -> bool: ...
+    def has_any_role(self, roles: List[str]) -> bool: ...  # Returns True if user has ANY role
+```
+
+**Frontend Authentication Context**:
+```typescript
+// AuthContext.tsx - Key exports
+interface AuthContextType {
+  user: User | null;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
+  register: (data: RegisterData) => Promise<void>;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  hasRole: (...roles: UserRole[]) => boolean;      // Has ANY of roles
+  hasAllRoles: (...roles: UserRole[]) => boolean;  // Has ALL roles
+}
+
+// Usage in components
+const { user, isAdmin, hasRole, logout } = useAuth();
+if (hasRole('admin', 'user')) {
+  // User has either admin OR user role
+}
+```
+
+**Default Credentials**: 
+- Username: `admin`, Password: `admin`
+- Roles: `["admin", "user", "viewer"]`
+
+### 9. Comprehensive Troubleshooting System (ADVANCED)
 **Location**: `backend/src/api/troubleshooting.py` and `backend/src/spark/diagnostics.py`
 
 **Advanced Pipeline Diagnostics**:
@@ -520,7 +647,7 @@ async def diagnose_field(
 - Performance bottleneck identification
 - Missing data gap analysis
 
-### 9. Real-time Dashboard System with Auto-refresh (COMPREHENSIVE)
+### 10. Real-time Dashboard System with Auto-refresh (COMPREHENSIVE)
 **Location**: `frontend/src/components/TileWithData.tsx` and dashboard ecosystem
 
 **Smart Refresh Logic**:
@@ -552,7 +679,7 @@ const safeRefreshInterval = Math.max(refreshIntervalMs, 15000); // Minimum 15 se
 - Automatic data caching to prevent redundant API calls
 - User-configurable refresh intervals with minimum safety limits
 
-### 10. AI Copilot Integration (AZURE OPENAI)
+### 11. AI Copilot Integration (AZURE OPENAI)
 **Location**: `backend/src/copilot/` - Natural language to SQL conversion
 
 **Features**:
@@ -1007,6 +1134,18 @@ When implementing new features, always:
 **Core SQLAlchemy Models (`backend/src/database/models.py`):**
 
 ```python
+class UserRole(str, Enum):
+    """User role enumeration for RBAC."""
+    ADMIN = "admin"
+    USER = "user"
+    VIEWER = "viewer"
+
+class User(Base):
+    """User authentication and authorization model."""
+    # Multi-role support: roles stored as JSON list (e.g., ["admin", "user"])
+    # Helper methods: get_roles(), has_role(), has_any_role()
+    # Default admin created on startup with all roles
+    
 class NormalizationRule(Base):
     """User-defined schema normalization rules."""
     # Maps raw sensor keys to canonical field names
@@ -1079,143 +1218,3 @@ class DataSourceMetric(Base):
 - **Lifecycle Management**: `DataSourceManager` handles start/stop/health for all active sources
 - **Standardized Output**: All connectors output `DataMessage` format for consistent processing
 - **Extensibility**: New connector types register via simple class mapping in registry
-
-## Implementation Standards Checklist
-
-**Before submitting any code, verify:**
-
-### ✅ Dependency Injection
-- [ ] Uses type aliases: `SparkManagerDep`, `Neo4jManagerDep`, `ConfigDep`, `MinioClientDep`
-- [ ] Follows centralized DI pattern from `dependencies.py`
-- [ ] No direct instantiation of services in endpoints
-
-### ✅ Error Handling
-- [ ] All error functions use `raise error_function()` pattern
-- [ ] Database rollback in all exception handlers
-- [ ] Specific error types used (not generic `HTTPException`)
-
-### ✅ Logging
-- [ ] Uses `get_logger(__name__)` for logger creation
-- [ ] Emoji prefixes: ✅ ❌ ⚠️ 🔍
-- [ ] Context included in business logic logs (user, operation details)
-
-### ✅ Response Models
-- [ ] `response_model=ApiResponse[T]` or `ApiListResponse[T]` specified
-- [ ] Generic typing used for type safety
-- [ ] Meaningful success messages included
-
-### ✅ Code Organization
-- [ ] Imports organized: stdlib → FastAPI → SQLAlchemy → src modules
-- [ ] Router endpoints ordered: GET → POST → PATCH → DELETE
-- [ ] Database operations include input validation and user context
-
-## Safe Ops Rules
-
-### NEVER (without confirmation):
-- `kubectl delete` on production-like resources
-- `docker system prune -a` (use project cleanup script instead)
-- Modify StatefulSet volumes without data backup
-- Change Spark cluster configuration without understanding impact
-- Run skaffold on another terminal. I'm using another terminal for hot reloading.
-- Duplicate code that could be reused
-- Use `readStream.parquet()` without schema specification
-- Use blocking commands in CLI, like `kubectl logs -f statefulset/backend`
-- Try to restart the pods. Skaffold dev is handling this automatically.
-
-### ALWAYS:
-- Show commands before execution in destructive operations
-- Use `kubectl describe` and `kubectl logs` for investigation first
-- Test API changes with curl/PowerShell before frontend integration
-- Check resource limits when adding new containers
-- Use `pipenv shell` before running Python scripts
-- Verify port-forwarding is active before API testing
-- Scan uncommitted changes with `git status` to understand the current state.
-- Clean up unused code and dependencies.
-- Use dependency injection pattern for new endpoints
-- Test schema changes with `/api/schema/stream/status` endpoint
-- Use PowerShell for CLI commands
-- Use explicit error raising: `raise error_function()`
-- Include database rollback in exception handlers
-- Use emojis in logging for quick visual scanning
-- Specify response models with generic typing
-- Use absolute paths when running scripts. This ensures the command won't fail because of relative path issues.
-
-## AI Copilot Integration
-
-**Feature**: Natural language → SQL computation generation using Azure OpenAI
-**Config**: Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_API_VERSION`
-**Location**: `backend/src/copilot/` - includes context analysis and computation generation
-
-### Commit Messages
-```
-feat: add device management API endpoints
-fix: resolve schema inference memory leak  
-docs: update API documentation for dashboard tiles
-refactor: extract schema logic to dedicated package
-```
-
-### PowerShell API Testing Template
-```powershell
-# Test new API endpoint
-$response = Invoke-RestMethod -Uri "http://localhost:8000/api/your-endpoint" -Method GET
-$response | ConvertTo-Json -Depth 3
-
-# POST with JSON body
-$body = @{ key = "value" } | ConvertTo-Json
-$response = Invoke-RestMethod -Uri "http://localhost:8000/api/endpoint" -Method POST -Body $body -ContentType "application/json"
-```
-
-### FastAPI Router Template
-```python
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from src.api.models import ApiResponse, ApiListResponse
-from src.api.response_utils import success_response, not_found_error, bad_request_error, internal_server_error
-from src.api.dependencies import SparkManagerDep, Neo4jManagerDep, ConfigDep
-from src.database.database import get_db
-from src.utils.logging import get_logger
-
-logger = get_logger(__name__)
-router = APIRouter(prefix="/api/feature", tags=["feature"])
-
-@router.get("/items", response_model=ApiListResponse[ItemResponse])
-def list_items(db: Session = Depends(get_db)):
-    try:
-        items = db.query(Item).all()
-        return list_response([item.to_dict() for item in items], "Items retrieved successfully")
-    except Exception as e:
-        logger.error("❌ Error listing items: %s", e)
-        raise internal_server_error("Failed to retrieve items", str(e))
-
-@router.post("/items", response_model=ApiResponse[ItemResponse])
-def create_item(payload: ItemCreate, db: Session = Depends(get_db)):
-    try:
-        if not payload.created_by or not payload.created_by.strip():
-            raise bad_request_error("User information required (created_by)")
-            
-        item = Item(**payload.dict())
-        db.add(item)
-        db.commit()
-        db.refresh(item)
-        
-        logger.info("✅ Item created by '%s': %s", payload.created_by, item.name)
-        return success_response(item.to_dict(), "Item created successfully")
-    except Exception as e:
-        logger.error("❌ Error creating item: %s", e)
-        db.rollback()
-        raise internal_server_error("Failed to create item", str(e))
-```
-
-## Glossary
-
-- **SOAM** - Smart Operations and Asset Management (project name)
-- **Schema Inference** - Automated detection of data structures from bronze layer files
-- **Bronze Layer** - Raw ingested data stored in MinIO (parquet format)
-- **Enriched Layer** - Processed data with normalization and metadata
-- **Ingestion ID** - Unique identifier for data ingestion batches
-- **Union Schema** - Flexible schema supporting multiple sensor data formats
-- **Normalization Rules** - Mapping from raw sensor keys to canonical names
-- **Fast Schema Provider** - In-memory schema cache for Spark operations
-- **MinIO** - S3-compatible object storage for data lake
-- **StatefulSet** - Kubernetes workload for stateful services (backend, Neo4j)
-- **Port-Forward** - Kubernetes networking to access cluster services locally
