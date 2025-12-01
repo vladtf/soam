@@ -168,6 +168,79 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 
 ---
 
+## 6. MinIO 3-Node Cluster (Storage Redundancy)
+
+**Purpose**: Ensure data remains available even when a MinIO node fails through erasure coding.
+
+**Architecture**:
+- 3 MinIO pods in a StatefulSet
+- Headless service for pod DNS discovery
+- Erasure coding provides 1-node fault tolerance
+- Persistent volumes for data durability
+
+**Deployment Steps**:
+
+
+1. **Verify all 3 pods are running**:
+   ```powershell
+   kubectl get pods -l app=minio
+   ```
+   Expected:
+   ```
+   NAME      READY   STATUS    RESTARTS   AGE
+   minio-0   1/1     Running   0          2m
+   minio-1   1/1     Running   0          2m
+   minio-2   1/1     Running   0          2m
+   ```
+
+
+**Useful CLI Commands** (using built-in `mc` client):
+
+```powershell
+# Set up alias inside the pod
+kubectl exec -it minio-0 -- mc alias set local http://localhost:9000 minio minio123
+
+# List all buckets
+kubectl exec -it minio-0 -- mc ls local/
+
+# List all files recursively
+kubectl exec -it minio-0 -- mc ls local/ --recursive
+
+# One-liner (set alias and list)
+kubectl exec -it minio-0 -- sh -c "mc alias set local http://localhost:9000 minio minio123 && mc ls local/ --recursive"
+```
+
+**Failure Tolerance Test**:
+
+1. **Verify existing data is distributed across nodes**:
+   ```powershell
+   # Check files in the lake bucket (created by the application)
+   kubectl exec -it minio-0 -- sh -c "mc alias set local http://localhost:9000 minio minio123 && mc ls local/ --recursive"
+   kubectl exec -it minio-1 -- sh -c "mc alias set local http://localhost:9000 minio minio123 && mc ls local/ --recursive"
+
+   ```
+   Expected: List of parquet files in `bronze/`, `silver/`, `gold/` folders.
+
+2. **Simulate node failure** (delete one pod):
+   ```powershell
+   kubectl delete pod minio-1
+   ```
+
+3. **Verify data is still accessible** (while pod is restarting):
+   ```powershell
+   kubectl exec -it minio-0 -- mc ls local/lake/ --recursive
+   ```
+   Expected: Files are still listed despite `minio-1` being down.
+
+4. **Verify cluster recovery**:
+   ```powershell
+   kubectl get pods -l app=minio -w
+   ```
+   Expected: `minio-1` pod is automatically recreated by StatefulSet.
+
+
+---
+
 ## Quick Reference
 
 | Feature | Key Files | Verification Command |
@@ -177,3 +250,4 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 | Retention | `k8s/minio-retention.yaml` | `mc ilm rule list myminio/lake` |
 | Auth | `backend/src/auth/` | `curl /api/auth/login` |
 | Sensitivity | `backend/src/database/models.py` | `curl /api/devices` |
+| MinIO Cluster | `k8s/minio-cluster.yaml` | `kubectl get pods -l app=minio` |
