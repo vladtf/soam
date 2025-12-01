@@ -382,3 +382,25 @@ async def reset_user_password(
         logger.error("❌ Error resetting password: %s", e)
         db.rollback()
         raise internal_server_error("Failed to reset password", str(e))
+
+
+# =============================================================================
+# Test Users Endpoint (Development Only)
+# =============================================================================
+
+@router.get("/test-users", response_model=ApiResponse)
+async def get_test_users():
+    """
+    Get list of predefined test users for development/testing purposes.
+    
+    This endpoint provides test user credentials for easy role switching during development.
+    In production, this endpoint should be disabled or protected.
+    """
+    from src.auth.init_admin import get_test_users_info
+    
+    test_users = get_test_users_info()
+    
+    return success_response(
+        data=test_users,
+        message="Test users retrieved successfully"
+    )

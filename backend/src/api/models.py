@@ -285,6 +285,10 @@ class DashboardTileCreate(BaseModel):
     config: Dict[str, Any] = Field(default_factory=dict)
     layout: Optional[Dict[str, Any]] = None
     enabled: bool = True
+    sensitivity: Optional[str] = Field(
+        None, 
+        description="Custom sensitivity level (public, internal, confidential, restricted). If not provided, inherits from computation."
+    )
 
 
 class DashboardTileUpdate(BaseModel):
@@ -294,6 +298,10 @@ class DashboardTileUpdate(BaseModel):
     config: Optional[Dict[str, Any]] = None
     layout: Optional[Dict[str, Any]] = None
     enabled: Optional[bool] = None
+    sensitivity: Optional[str] = Field(
+        None, 
+        description="Custom sensitivity level (public, internal, confidential, restricted). If not provided, inherits from computation."
+    )
 
 
 class DashboardTileResponse(BaseModel):

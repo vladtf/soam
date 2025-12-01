@@ -78,7 +78,16 @@ def create_tile(payload: DashboardTileCreate, db: Session = Depends(get_db)):
     if not comp:
         raise HTTPException(status_code=400, detail="Computation not found")
     
-    # Inherit sensitivity from computation
+    # Use custom sensitivity if provided, otherwise inherit from computation
+    if payload.sensitivity:
+        try:
+            sensitivity = DataSensitivity(payload.sensitivity)
+        except ValueError:
+            valid_sensitivities = ", ".join([s.value for s in DataSensitivity])
+            raise bad_request_error(f"Invalid sensitivity level: {payload.sensitivity}. Must be one of: {valid_sensitivities}")
+    else:
+        sensitivity = comp.sensitivity
+    
     row = DashboardTile(
         name=payload.name,
         computation_id=payload.computation_id,
@@ -86,7 +95,7 @@ def create_tile(payload: DashboardTileCreate, db: Session = Depends(get_db)):
         config=json.dumps(payload.config or {}),
         layout=json.dumps(payload.layout) if payload.layout is not None else None,
         enabled=payload.enabled,
-        sensitivity=comp.sensitivity,  # Inherit from computation
+        sensitivity=sensitivity,
     )
     db.add(row)
     db.commit()
@@ -108,8 +117,9 @@ def update_tile(tile_id: int, payload: DashboardTileUpdate, db: Session = Depend
         if not comp:
             raise HTTPException(status_code=400, detail="Computation not found")
         row.computation_id = payload.computation_id
-        # Update sensitivity when computation changes
-        row.sensitivity = comp.sensitivity
+        # Only update sensitivity from computation if not explicitly provided
+        if payload.sensitivity is None:
+            row.sensitivity = comp.sensitivity
     if payload.viz_type is not None:
         row.viz_type = payload.viz_type
     if payload.config is not None:
@@ -118,6 +128,12 @@ def update_tile(tile_id: int, payload: DashboardTileUpdate, db: Session = Depend
         row.layout = json.dumps(payload.layout) if payload.layout is not None else None
     if payload.enabled is not None:
         row.enabled = payload.enabled
+    # Handle custom sensitivity override
+    if payload.sensitivity is not None:
+        try:
+            row.sensitivity = DataSensitivity(payload.sensitivity)
+        except ValueError:
+            raise bad_request_error(f"Invalid sensitivity level: {payload.sensitivity}. Must be one of: public, internal, confidential, restricted")
     db.add(row)
     db.commit()
     db.refresh(row)

@@ -302,6 +302,46 @@ export const TileModal: React.FC<TileModalProps> = ({
             />
           </Col>
           
+          {/* Sensitivity Override */}
+          <Col md={6}>
+            <Form.Group>
+              <Form.Label>Data Sensitivity</Form.Label>
+              <Form.Select 
+                value={editing?.sensitivity || ''} 
+                onChange={(e) => onEditingChange({ 
+                  ...(editing as DashboardTileDef), 
+                  sensitivity: e.target.value || undefined 
+                } as DashboardTileDef)}
+              >
+                <option value="">Auto (inherit from computation)</option>
+                <option value="public">Public</option>
+                <option value="internal">Internal</option>
+                <option value="confidential">Confidential</option>
+                <option value="restricted">Restricted</option>
+              </Form.Select>
+              <Form.Text className="text-muted">
+                {editing?.sensitivity 
+                  ? `Custom sensitivity: ${editing.sensitivity.toUpperCase()}`
+                  : "Leave as 'Auto' to inherit sensitivity from the linked computation"
+                }
+              </Form.Text>
+            </Form.Group>
+          </Col>
+          <Col md={6} className="d-flex align-items-end">
+            {editing?.sensitivity && (
+              <Badge 
+                bg={
+                  editing.sensitivity === 'restricted' ? 'danger' :
+                  editing.sensitivity === 'confidential' ? 'warning' :
+                  editing.sensitivity === 'internal' ? 'info' : 'secondary'
+                }
+                className="text-uppercase"
+              >
+                {editing.sensitivity}
+              </Badge>
+            )}
+          </Col>
+          
           {/* Visualization-specific configuration helpers */}
           {editing?.viz_type === 'timeseries' && (
             <>

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { getConfig } from '../config';
+import { subscribeToAuthEvents } from '../utils/authUtils';
 
 // User role type
 export type UserRole = 'admin' | 'user' | 'viewer';
@@ -62,6 +63,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Listen for auth events from authUtils (logout, token refresh)
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthEvents((event) => {
+      if (event === 'logout') {
+        // Auth was cleared externally (e.g., token refresh failed)
+        setToken(null);
+        setUser(null);
+      } else if (event === 'tokenRefreshed') {
+        // Token was refreshed, update local state
+        const newToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+        if (newToken) {
+          setToken(newToken);
+        }
+      }
+    });
+    return unsubscribe;
   }, []);
 
   // Verify token on mount and refresh if needed

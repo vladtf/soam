@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from src.api.models import DeviceCreate, DeviceUpdate, DeviceResponse, ApiResponse, ApiListResponse
-from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, forbidden_error, internal_server_error
 from src.database.database import get_db
-from src.database.models import Device, DataSensitivity, UserRole
+from src.database.models import Device, DataSensitivity, UserRole, User
+from src.auth.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,11 @@ def _get_sensitivity_enum(sensitivity_str: str) -> DataSensitivity:
         return DataSensitivity.INTERNAL
 
 
-def _can_register_sensitivity(user_role: str, sensitivity: DataSensitivity) -> bool:
-    """Check if user role can register devices with given sensitivity."""
-    # Only ADMIN can register CONFIDENTIAL or RESTRICTED devices
+def _can_register_sensitivity(user: User, sensitivity: DataSensitivity) -> bool:
+    """Check if user can register devices with given sensitivity."""
+    # Only users with ADMIN role can register CONFIDENTIAL or RESTRICTED devices
     if sensitivity in [DataSensitivity.CONFIDENTIAL, DataSensitivity.RESTRICTED]:
-        return user_role == UserRole.ADMIN.value or user_role == "admin"
+        return user.has_role(UserRole.ADMIN)
     return True
 
 
@@ -44,22 +45,18 @@ def list_devices(db: Session = Depends(get_db)) -> ApiListResponse[DeviceRespons
 
 
 @router.post("/devices", response_model=ApiResponse[DeviceResponse])
-def register_device(payload: DeviceCreate, db: Session = Depends(get_db)) -> ApiResponse[DeviceResponse]:
+async def register_device(
+    payload: DeviceCreate, 
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> ApiResponse[DeviceResponse]:
     try:
-        # Validate user is provided
-        if not payload.created_by or not payload.created_by.strip():
-            raise bad_request_error("User information required (created_by)")
-        
         # Parse and validate sensitivity level
         sensitivity = _get_sensitivity_enum(payload.sensitivity)
         
         # Check role-based restrictions for high-sensitivity devices
-        # For now, we'll check based on user role in created_by (format: "username:role" or just "username")
-        user_parts = payload.created_by.strip().split(":")
-        user_role = user_parts[1] if len(user_parts) > 1 else "user"
-        
-        if not _can_register_sensitivity(user_role, sensitivity):
-            raise bad_request_error(
+        if not _can_register_sensitivity(current_user, sensitivity):
+            raise forbidden_error(
                 f"Only administrators can register devices with '{sensitivity.value}' sensitivity level"
             )
         
@@ -72,12 +69,12 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)) -> Api
             existing.enabled = payload.enabled
             existing.sensitivity = sensitivity
             existing.data_retention_days = payload.data_retention_days
-            existing.updated_by = user_parts[0]  # Use username part
+            existing.updated_by = current_user.username
             db.add(existing)
             db.commit()
             db.refresh(existing)
             logger.info("✅ Device updated by '%s' with sensitivity '%s': %s", 
-                       payload.created_by, sensitivity.value, existing.ingestion_id)
+                       current_user.username, sensitivity.value, existing.ingestion_id)
             return success_response(existing.to_dict(), "Device updated successfully")
         
         row: Device = Device(
@@ -87,13 +84,13 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)) -> Api
             enabled=payload.enabled,
             sensitivity=sensitivity,
             data_retention_days=payload.data_retention_days,
-            created_by=user_parts[0],  # Use username part
+            created_by=current_user.username,
         )
         db.add(row)
         db.commit()
         db.refresh(row)
         logger.info("✅ Device registered by '%s' with sensitivity '%s': %s", 
-                   payload.created_by, sensitivity.value, row.ingestion_id)
+                   current_user.username, sensitivity.value, row.ingestion_id)
         return success_response(row.to_dict(), "Device registered successfully")
     except HTTPException:
         raise
@@ -104,20 +101,16 @@ def register_device(payload: DeviceCreate, db: Session = Depends(get_db)) -> Api
 
 
 @router.patch("/devices/{device_id}", response_model=ApiResponse[DeviceResponse])
-def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(get_db)) -> ApiResponse[DeviceResponse]:
+async def update_device(
+    device_id: int, 
+    payload: DeviceUpdate, 
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> ApiResponse[DeviceResponse]:
     try:
-        # Validate user is provided
-        if not payload.updated_by or not payload.updated_by.strip():
-            raise bad_request_error("User information required (updated_by)")
-        
         row: Device | None = db.query(Device).filter(Device.id == device_id).one_or_none()
         if not row:
             raise not_found_error("Device not found")
-        
-        # Parse user role from updated_by
-        user_parts = payload.updated_by.strip().split(":")
-        user_role = user_parts[1] if len(user_parts) > 1 else "user"
-        username = user_parts[0]
         
         changes: List[str] = []
         if payload.name is not None and payload.name != row.name:
@@ -134,8 +127,8 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
         if payload.sensitivity is not None:
             new_sensitivity = _get_sensitivity_enum(payload.sensitivity)
             if new_sensitivity != row.sensitivity:
-                if not _can_register_sensitivity(user_role, new_sensitivity):
-                    raise bad_request_error(
+                if not _can_register_sensitivity(current_user, new_sensitivity):
+                    raise forbidden_error(
                         f"Only administrators can set devices to '{new_sensitivity.value}' sensitivity level"
                     )
                 changes.append(f"sensitivity: {row.sensitivity.value} -> {new_sensitivity.value}")
@@ -145,7 +138,7 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
             changes.append(f"data_retention_days: {row.data_retention_days} -> {payload.data_retention_days}")
             row.data_retention_days = payload.data_retention_days
         
-        row.updated_by = username
+        row.updated_by = current_user.username
         
         db.add(row)
         db.commit()
@@ -153,10 +146,10 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
         
         if changes:
             logger.info("✅ Device %d updated by '%s': %s", 
-                       row.id, payload.updated_by, "; ".join(changes))
+                       row.id, current_user.username, "; ".join(changes))
         else:
             logger.info("ℹ️ Device %d touched by '%s' (no changes)", 
-                       row.id, payload.updated_by)
+                       row.id, current_user.username)
         
         return success_response(row.to_dict(), "Device updated successfully")
     except HTTPException:

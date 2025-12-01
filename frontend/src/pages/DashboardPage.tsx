@@ -262,6 +262,7 @@ const DashboardPage: React.FC = () => {
                 viz_type: tile.viz_type,
                 config: tile.config,
                 enabled: tile.enabled,
+                sensitivity: tile.sensitivity,
               });
               toast.success('Dashboard tile updated successfully');
             } else {

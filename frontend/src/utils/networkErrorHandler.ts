@@ -134,26 +134,29 @@ class NetworkErrorHandler {
     let message = 'Network request failed';
     let type: 'error' | 'warning' = 'error';
 
+    // Helper to extract detail message from response body
+    const getDetailMessage = () => response?.body?.detail || response?.body?.message;
+
     if (error.status) {
       switch (true) {
         case error.status >= 500:
-          message = `Server error (${error.status}). Please try again later.`;
+          message = getDetailMessage() || `Server error (${error.status}). Please try again later.`;
           break;
         case error.status === 404:
-          message = 'The requested resource was not found.';
+          message = getDetailMessage() || 'The requested resource was not found.';
           break;
         case error.status === 403:
-          message = 'You don\'t have permission to access this resource.';
+          message = getDetailMessage() || 'You don\'t have permission to access this resource.';
           break;
         case error.status === 401:
-          message = 'Your session has expired. Please log in again.';
+          message = getDetailMessage() || 'Your session has expired. Please log in again.';
           break;
         case error.status >= 400:
-          message = response?.body?.message || response?.body?.detail || `Client error (${error.status})`;
+          message = getDetailMessage() || `Client error (${error.status})`;
           type = 'warning';
           break;
         default:
-          message = `Request failed (${error.status})`;
+          message = getDetailMessage() || `Request failed (${error.status})`;
       }
     } else if (error.message.toLowerCase().includes('network')) {
       message = 'Network connection error. Please check your internet connection.';

@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useError } from '../context/ErrorContext';
 import { getConfig } from '../config';
 import { isErrorReportingEnabled, setErrorReportingEnabled } from '../errors';
+import UserSwitcher from './UserSwitcher';
 
 const AppNavbar: React.FC = () => {
   const { theme, mode, toggleMode } = useTheme();
@@ -125,6 +126,7 @@ const AppNavbar: React.FC = () => {
               {StatusDot}
               {envLabel && <Badge bg="light" text="dark" className="me-2">{envLabel}</Badge>}
             </div>
+            <UserSwitcher />
             <Button size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} onClick={openCenter} aria-label="Open Errors" title="Errors">!</Button>
             <Button
               size="sm"

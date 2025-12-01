@@ -34,7 +34,7 @@ from src.spark import spark_routes
 from src.database import create_tables, ensure_rule_metrics_columns, ensure_rule_ownership_columns, ensure_computation_ownership_columns, ensure_device_ownership_columns, ensure_computation_recommended_tile_type_column
 from src.spark.enrichment.cleaner import DataCleaner
 from src.spark.enrichment.usage_tracker import NormalizationRuleUsageTracker
-from src.auth.init_admin import init_default_admin
+from src.auth.init_admin import init_default_users
 from src.api.settings_routes import ensure_default_settings
 
 # Configure structured logging once
@@ -156,8 +156,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Also ensure settings manager has fresh data
             settings_manager.clear_cache()
             
-            # Initialize default admin user
-            init_default_admin(db)
+            # Initialize test users (includes default admin)
+            init_default_users(db)
         finally:
             db.close()
     except Exception as e:

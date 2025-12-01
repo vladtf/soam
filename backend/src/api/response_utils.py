@@ -45,6 +45,11 @@ def bad_request_error(message: str, detail: Optional[str] = None) -> HTTPExcepti
     return error_response(message, detail, status_code=400)
 
 
+def forbidden_error(message: str = "Permission denied", detail: Optional[str] = None) -> HTTPException:
+    """Return a 403 Forbidden error."""
+    return error_response(message, detail, status_code=403)
+
+
 def internal_server_error(message: str = "Internal server error", detail: Optional[str] = None) -> HTTPException:
     """Return a 500 Internal Server Error."""
     return error_response(message, detail, status_code=500)

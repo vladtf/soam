@@ -1,52 +1,97 @@
-"""
-Initialize default admin user on application startup.
+"""Initialize test users on application startup.
 """
 from sqlalchemy.orm import Session
 from src.database.models import User, UserRole
 from src.auth.security import hash_password
-from src.auth.config import auth_settings
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def init_default_admin(db: Session) -> bool:
+# Test users for development/testing purposes
+TEST_USERS = [
+    {
+        "username": "admin",
+        "email": "admin@soam.local",
+        "password": "admin",
+        "roles": [UserRole.ADMIN.value, UserRole.USER.value, UserRole.VIEWER.value],
+        "description": "Default admin with full access"
+    },
+    {
+        "username": "test_user",
+        "email": "test_user@soam.local",
+        "password": "test123",
+        "roles": [UserRole.USER.value, UserRole.VIEWER.value],
+        "description": "Regular user with standard access"
+    },
+    {
+        "username": "test_viewer",
+        "email": "test_viewer@soam.local",
+        "password": "test123",
+        "roles": [UserRole.VIEWER.value],
+        "description": "Viewer with read-only access"
+    },
+]
+
+
+def init_default_users(db: Session) -> int:
     """
-    Create the default admin user if it doesn't exist.
+    Create predefined test users for development/testing purposes.
     
     Args:
         db: Database session
         
     Returns:
-        True if admin was created, False if already exists
+        Number of test users created
     """
-    try:
-        # Check if admin user exists
-        admin = db.query(User).filter(User.username == auth_settings.DEFAULT_ADMIN_USERNAME).first()
-        
-        if admin:
-            logger.info("ℹ️ Admin user '%s' already exists", auth_settings.DEFAULT_ADMIN_USERNAME)
-            return False
-        
-        # Create default admin user with all roles
-        admin = User(
-            username=auth_settings.DEFAULT_ADMIN_USERNAME,
-            email=auth_settings.DEFAULT_ADMIN_EMAIL,
-            password_hash=hash_password(auth_settings.DEFAULT_ADMIN_PASSWORD),
-            roles=[UserRole.ADMIN.value, UserRole.USER.value, UserRole.VIEWER.value],
-            is_active=True
-        )
-        
-        db.add(admin)
-        db.commit()
-        
-        logger.info("✅ Default admin user created: %s (password: %s)", 
-                   auth_settings.DEFAULT_ADMIN_USERNAME, 
-                   auth_settings.DEFAULT_ADMIN_PASSWORD)
-        
-        return True
-        
-    except Exception as e:
-        logger.error("❌ Failed to create default admin user: %s", e)
-        db.rollback()
-        raise
+    created_count = 0
+    
+    for test_user in TEST_USERS:
+        try:
+            # Check if user exists
+            existing = db.query(User).filter(User.username == test_user["username"]).first()
+            
+            if existing:
+                logger.debug("ℹ️ Test user '%s' already exists", test_user["username"])
+                continue
+            
+            # Create test user
+            user = User(
+                username=test_user["username"],
+                email=test_user["email"],
+                password_hash=hash_password(test_user["password"]),
+                roles=test_user["roles"],
+                is_active=True
+            )
+            
+            db.add(user)
+            db.commit()
+            
+            logger.info("✅ Test user created: %s (roles: %s)", 
+                       test_user["username"], 
+                       test_user["roles"])
+            created_count += 1
+            
+        except Exception as e:
+            logger.error("❌ Failed to create test user '%s': %s", test_user["username"], e)
+            db.rollback()
+    
+    return created_count
+
+
+def get_test_users_info() -> list:
+    """
+    Get information about available test users (without passwords).
+    
+    Returns:
+        List of test user info dictionaries
+    """
+    return [
+        {
+            "username": u["username"],
+            "roles": u["roles"],
+            "description": u["description"],
+            "password": u["password"],  # Include password for easy testing
+        }
+        for u in TEST_USERS
+    ]

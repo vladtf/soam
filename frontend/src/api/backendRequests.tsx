@@ -1,7 +1,7 @@
 import { getConfig } from '../config';
 import { Building } from '../models/Building';
 import { fetchWithErrorHandling, NetworkError } from '../utils/networkErrorHandler';
-import { withAuth } from '../utils/authUtils';
+import { withAuth, tryRefreshToken, clearAuthData } from '../utils/authUtils';
 
 export interface SensorData {
   sensorId?: string;
@@ -27,9 +27,9 @@ export const extractDataSchema = (data: SensorData[]): Record<string, string[]> 
   return schema;
 };
 
-// Enhanced fetch handler with better error handling and development debugging
+// Enhanced fetch handler with better error handling, token refresh, and development debugging
 // Auth is enabled by default - all requests will include the Authorization header if token is available
-async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean = true): Promise<T> {
+async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean = true, isRetry: boolean = false): Promise<T> {
   const startTime = Date.now();
   
   // Apply auth headers if requested (default: true)
@@ -99,6 +99,25 @@ async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean =
     return resultRaw as T;
     
   } catch (error) {
+    // Handle 401 errors with automatic token refresh
+    if (error instanceof Error && useAuth && !isRetry) {
+      const networkError = error as NetworkError;
+      if (networkError.status === 401) {
+        console.log('🔄 Attempting to refresh token...');
+        const refreshed = await tryRefreshToken();
+        
+        if (refreshed) {
+          // Retry the original request with new token
+          console.log('🔄 Retrying request with new token...');
+          return doFetch<T>(url, options, useAuth, true);
+        } else {
+          // Token refresh failed, clear auth and let user know
+          console.log('❌ Token refresh failed, logging out...');
+          clearAuthData();
+        }
+      }
+    }
+
     // Add additional context to the error
     if (error instanceof Error) {
       const enhancedError = error as NetworkError;
@@ -1591,4 +1610,21 @@ export const storeIngestorQualityMetric = (ingestionId: string, metricName: stri
       metric_value: metricValue
     })
   });
+};
+
+
+// =============================================================================
+// Test Users API (Development/Testing)
+// =============================================================================
+
+export interface TestUser {
+  username: string;
+  roles: string[];
+  description: string;
+  password: string;
+}
+
+export const getTestUsers = (): Promise<TestUser[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<TestUser[]>(`${backendUrl}/api/auth/test-users`, undefined, false);
 };
