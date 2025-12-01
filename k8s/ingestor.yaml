@@ -2,8 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ingestor
+  annotations:
+    description: "Data ingestion service with auto-scaling support"
 spec:
-  replicas: 1
+  replicas: 1  # Managed by HPA (ingestor-hpa.yaml)
   selector:
     matchLabels:
       app: ingestor
@@ -23,11 +25,11 @@ spec:
               mountPath: /data
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 200m
+              cpu: 100m
               memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           env:
             - name: MQTT_BROKER
               value: mosquitto
