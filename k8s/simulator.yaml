@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: simulator-temperature
+  annotations:
+    description: "Temperature sensor simulator with in-memory edge buffering for offline tolerance"
 spec:
   replicas: 1
   selector:
@@ -12,11 +14,6 @@ spec:
       labels:
         app: simulator-temperature
     spec:
-      initContainers:
-        - name: wait-for-mosquitto
-          image: busybox:1.35
-          imagePullPolicy: IfNotPresent
-          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
       containers:
         - name: simulator
           image: simulator:latest
@@ -26,6 +23,8 @@ spec:
               value: mosquitto
             - name: SIMULATOR_TYPE
               value: temperature
+            - name: EDGE_BUFFER_SIZE
+              value: "1000"
           resources:
             requests:
               cpu: 25m
@@ -38,8 +37,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: simulator-traffic
+  annotations:
+    description: "Traffic sensor simulator with in-memory edge buffering for offline tolerance"
 spec:
-  replicas: 1 # enable when ready
+  replicas: 1
   selector:
     matchLabels:
       app: simulator-traffic
@@ -48,11 +49,6 @@ spec:
       labels:
         app: simulator-traffic
     spec:
-      initContainers:
-        - name: wait-for-mosquitto
-          image: busybox:1.35
-          imagePullPolicy: IfNotPresent
-          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
       containers:
         - name: simulator
           image: simulator:latest
@@ -62,6 +58,8 @@ spec:
               value: mosquitto
             - name: SIMULATOR_TYPE
               value: traffic
+            - name: EDGE_BUFFER_SIZE
+              value: "1000"
           resources:
             requests:
               cpu: 25m
@@ -74,8 +72,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: simulator-air-quality
+  annotations:
+    description: "Air quality sensor simulator with in-memory edge buffering for offline tolerance"
 spec:
-  replicas: 1 # enable when ready
+  replicas: 1
   selector:
     matchLabels:
       app: simulator-air-quality
@@ -84,11 +84,6 @@ spec:
       labels:
         app: simulator-air-quality
     spec:
-      initContainers:
-        - name: wait-for-mosquitto
-          image: busybox:1.35
-          imagePullPolicy: IfNotPresent
-          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
       containers:
         - name: simulator
           image: simulator:latest
@@ -98,6 +93,8 @@ spec:
               value: mosquitto
             - name: SIMULATOR_TYPE
               value: air_quality
+            - name: EDGE_BUFFER_SIZE
+              value: "1000"
           resources:
             requests:
               cpu: 25m
@@ -110,8 +107,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: simulator-smart-bin
+  annotations:
+    description: "Smart bin sensor simulator with in-memory edge buffering for offline tolerance"
 spec:
-  replicas: 1 # enable when ready
+  replicas: 1
   selector:
     matchLabels:
       app: simulator-smart-bin
@@ -120,11 +119,6 @@ spec:
       labels:
         app: simulator-smart-bin
     spec:
-      initContainers:
-        - name: wait-for-mosquitto
-          image: busybox:1.35
-          imagePullPolicy: IfNotPresent
-          command: ['sh', '-c', 'until nc -z mosquitto 1883; do echo waiting for mosquitto; sleep 2; done;']
       containers:
         - name: simulator
           image: simulator:latest
@@ -134,6 +128,8 @@ spec:
               value: mosquitto
             - name: SIMULATOR_TYPE
               value: smart_bin
+            - name: EDGE_BUFFER_SIZE
+              value: "1000"
           resources:
             requests:
               cpu: 25m
