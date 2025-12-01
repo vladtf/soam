@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+type: Opaque
+stringData:
+  root-user: minio
+  root-password: minio123
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minio-retention-scripts
+data:
+  configure-retention.sh: |
+    #!/bin/bash
+    set -e
+    
+    MINIO_ENDPOINT="${MINIO_ENDPOINT:-http://minio:9000}"
+    
+    echo "🔧 Configuring MinIO retention policies..."
+    
+    # Wait for MinIO to be ready
+    until mc alias set myminio $MINIO_ENDPOINT $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD 2>/dev/null; do
+        echo "⏳ Waiting for MinIO to be ready..."
+        sleep 5
+    done
+    
+    echo "✅ Connected to MinIO"
+    
+    # Create lake bucket if not exists
+    mc mb myminio/lake --ignore-existing || true
+    
+    # Enable versioning on lake bucket
+    echo "📦 Enabling versioning on lake bucket..."
+    mc version enable myminio/lake || true
+    
+    # Remove existing rules for idempotent setup
+    echo "🧹 Clearing existing lifecycle rules..."
+    for id in $(mc ilm rule list myminio/lake --json 2>/dev/null | grep -o '"id":"[^"]*"' | cut -d'"' -f4); do
+        mc ilm rule rm myminio/lake --id "$id" 2>/dev/null || true
+    done
+    
+    # Configure retention policies
+    echo "⏰ Setting retention policies..."
+    
+    # Bronze tier: 7 days retention (raw sensor data)
+    mc ilm rule add myminio/lake --prefix "bronze/" --expire-days 7 --noncurrent-expire-days 3
+    echo "  ✓ Bronze tier: 7 days"
+    
+    # Silver tier: 30 days retention (normalized data)
+    mc ilm rule add myminio/lake --prefix "silver/" --expire-days 30 --noncurrent-expire-days 7
+    echo "  ✓ Silver tier: 30 days"
+    
+    # Gold tier: 90 days retention (aggregated analytics)
+    mc ilm rule add myminio/lake --prefix "gold/" --expire-days 90 --noncurrent-expire-days 14
+    echo "  ✓ Gold tier: 90 days"
+    
+    # Show configured rules
+    echo ""
+    echo "📋 Configured lifecycle rules:"
+    mc ilm rule list myminio/lake
+    
+    echo ""
+    echo "✅ Retention policies configured successfully!"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-retention-setup
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 5
+  template:
+    spec:
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          command: ["/bin/bash", "/scripts/configure-retention.sh"]
+          env:
+            - name: MINIO_ENDPOINT
+              value: "http://minio:9000"
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: root-password
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: minio-retention-scripts
+            defaultMode: 0755
+      restartPolicy: OnFailure
