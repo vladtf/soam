@@ -117,6 +117,30 @@ Quick start:
 ```powershell
 az login
 cd terraform
-.\deploy.ps1 -Action deploy # this will build and push images, then deploy to AKS
-.\deploy.ps1 -Action destroy # to tear down the deployment
+
+# Full deployment (infrastructure + images + Kubernetes resources)
+.\deploy.ps1 -Action deploy
+
+# Check deployment status
+.\deploy.ps1 -Action status
+
+# Port forward all services to localhost (interactive, Ctrl+C to stop)
+.\deploy.ps1 -Action port-forward
+
+# Tear down the deployment
+.\deploy.ps1 -Action destroy
 ```
+
+Available deploy script actions:
+| Action | Description |
+|--------|-------------|
+| `deploy` | Full deployment (Azure infra + images + K8s resources) |
+| `deploy -Step 1` | Deploy only Azure infrastructure (AKS + ACR) |
+| `deploy -Step 2` | Deploy only Kubernetes resources |
+| `deploy -SkipImages` | Deploy without rebuilding Docker images |
+| `destroy` | Destroy all resources |
+| `destroy -Step 2` | Destroy only Kubernetes resources (keep Azure infra) |
+| `status` | Show deployment status and URLs |
+| `port-forward` | Forward all service ports to localhost |
+| `images-only` | Build and push Docker images only |
+
