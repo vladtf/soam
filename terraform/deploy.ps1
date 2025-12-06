@@ -9,7 +9,7 @@
     3. Deploys Kubernetes resources using Terraform
 
 .PARAMETER Action
-    The action to perform: 'deploy', 'destroy', 'status', or 'images-only'
+    The action to perform: 'deploy', 'destroy', 'status', 'images-only', or 'port-forward'
 
 .PARAMETER SkipImages
     Skip building and pushing Docker images (use existing images)
@@ -23,6 +23,7 @@
     .\deploy.ps1 -Action deploy -Step 1
     .\deploy.ps1 -Action destroy
     .\deploy.ps1 -Action status
+    .\deploy.ps1 -Action port-forward
 
 .NOTES
     Prerequisites:
@@ -33,7 +34,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('deploy', 'destroy', 'status', 'images-only')]
+    [ValidateSet('deploy', 'destroy', 'status', 'images-only', 'port-forward')]
     [string]$Action,
 
     [switch]$SkipImages,
@@ -177,7 +178,9 @@ function Build-AndPushImages {
         @{ Name = "ingestor"; Path = "ingestor" },
         @{ Name = "mosquitto"; Path = "mosquitto" },
         @{ Name = "spark"; Path = "spark" },
-        @{ Name = "simulator"; Path = "simulator" }
+        @{ Name = "simulator"; Path = "simulator" },
+        @{ Name = "prometheus"; Path = "prometheus" },
+        @{ Name = "grafana"; Path = "grafana" }
     )
     
     Push-Location $ProjectRoot
@@ -389,6 +392,112 @@ function Show-Status {
     }
 }
 
+# Port forward all SOAM services to localhost
+function Start-PortForward {
+    Write-Header "Port Forwarding SOAM Services"
+    
+    # Get namespace from Step 2 outputs
+    Push-Location $Step2Dir
+    try {
+        $namespace = terraform output -raw namespace 2>$null
+        if (-not $namespace) {
+            $namespace = "soam"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    
+    Write-Info "Namespace: $namespace"
+    Write-Step "Starting port forwards..."
+    
+    # Define services to forward
+    $portForwards = @(
+        @{ Name = "Frontend";        Service = "svc/frontend";         LocalPort = 3000;  RemotePort = 80 },
+        @{ Name = "Backend";         Service = "svc/backend-external"; LocalPort = 8000;  RemotePort = 8000 },
+        @{ Name = "Ingestor";        Service = "svc/ingestor";         LocalPort = 8001;  RemotePort = 8001 },
+        @{ Name = "MinIO API";       Service = "svc/minio";            LocalPort = 9000;  RemotePort = 9000 },
+        @{ Name = "MinIO Console";   Service = "svc/minio";            LocalPort = 9090;  RemotePort = 9090 },
+        @{ Name = "Neo4j Browser";   Service = "svc/neo4j";            LocalPort = 7474;  RemotePort = 7474 },
+        @{ Name = "Neo4j Bolt";      Service = "svc/neo4j";            LocalPort = 7687;  RemotePort = 7687 },
+        @{ Name = "Spark Master UI"; Service = "svc/soam-spark-master-svc"; LocalPort = 8080;  RemotePort = 80 },
+        @{ Name = "Prometheus";      Service = "svc/prometheus";       LocalPort = 9091;  RemotePort = 9090 },
+        @{ Name = "Grafana";         Service = "svc/grafana";          LocalPort = 3001;  RemotePort = 3000 }
+    )
+    
+    $jobs = @()
+    $successfulForwards = @()
+    
+    foreach ($pf in $portForwards) {
+        Write-Host "  Starting $($pf.Name) (localhost:$($pf.LocalPort) -> $($pf.RemotePort))..." -NoNewline
+        
+        # Start kubectl port-forward as a background job
+        $job = Start-Job -ScriptBlock {
+            param($namespace, $service, $localPort, $remotePort)
+            kubectl port-forward -n $namespace $service "${localPort}:${remotePort}" 2>&1
+        } -ArgumentList $namespace, $pf.Service, $pf.LocalPort, $pf.RemotePort
+        
+        # Wait a moment to check if it started successfully
+        Start-Sleep -Milliseconds 500
+        
+        if ($job.State -eq "Running") {
+            Write-Host " ✅" -ForegroundColor Green
+            $jobs += $job
+            $successfulForwards += $pf
+        }
+        else {
+            Write-Host " ⚠️  (service may not exist)" -ForegroundColor Yellow
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+    }
+    
+    if ($jobs.Count -eq 0) {
+        Write-Error "No port forwards could be started. Is the cluster deployed?"
+        return
+    }
+    
+    Write-Host ""
+    Write-Success "Port forwarding active for $($jobs.Count) services"
+    Write-Host ""
+    Write-Host "Available endpoints:" -ForegroundColor Cyan
+    foreach ($pf in $successfulForwards) {
+        $url = if ($pf.LocalPort -eq 7687) { "bolt://localhost:$($pf.LocalPort)" } else { "http://localhost:$($pf.LocalPort)" }
+        Write-Host "  • $($pf.Name.PadRight(16)) -> $url" -ForegroundColor White
+    }
+    Write-Host ""
+    Write-Host "Press Ctrl+C to stop all port forwards..." -ForegroundColor Yellow
+    Write-Host ""
+    
+    # Register cleanup handler for Ctrl+C
+    $null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+        Get-Job | Where-Object { $_.State -eq "Running" } | Stop-Job -PassThru | Remove-Job -Force
+    }
+    
+    try {
+        # Keep script running and monitor jobs
+        while ($true) {
+            $runningJobs = $jobs | Where-Object { $_.State -eq "Running" }
+            if ($runningJobs.Count -eq 0) {
+                Write-Warning "All port forwards have stopped"
+                break
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+    finally {
+        Write-Host "`n"
+        Write-Step "Stopping port forwards..."
+        foreach ($job in $jobs) {
+            Stop-Job -Job $job -ErrorAction SilentlyContinue
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+        Write-Success "All port forwards stopped"
+        
+        # Unregister the event handler
+        Unregister-Event -SourceIdentifier PowerShell.Exiting -ErrorAction SilentlyContinue
+    }
+}
+
 # Main execution
 try {
     Write-Header "SOAM Azure Deployment"
@@ -441,6 +550,16 @@ try {
                 exit 1
             }
             Build-AndPushImages -AcrServer $step1Outputs.acr_login_server -AcrName $step1Outputs.acr_name
+        }
+        
+        'port-forward' {
+            # Ensure kubectl is connected to the right cluster
+            Write-Step "Connecting to AKS cluster..."
+            $step1Outputs = Get-Step1Outputs
+            if ($step1Outputs.aks_cluster_name -and $step1Outputs.resource_group_name) {
+                az aks get-credentials --resource-group $step1Outputs.resource_group_name --name $step1Outputs.aks_cluster_name --overwrite-existing 2>$null
+            }
+            Start-PortForward
         }
     }
 }

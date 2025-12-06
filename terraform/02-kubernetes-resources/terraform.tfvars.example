@@ -32,7 +32,7 @@ ingestor_replicas = 1
 # Optional Components
 deploy_simulator          = true
 deploy_rest_api_simulator = false
-deploy_monitoring         = false
+deploy_monitoring         = true
 
 # Monitoring (if enabled)
 grafana_admin_password = "admin"

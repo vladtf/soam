@@ -245,7 +245,7 @@ resource "kubernetes_persistent_volume_claim" "backend_db" {
     storage_class_name = "managed-premium"
   }
 
-  wait_until_bound = false  # Don't wait - storage class uses WaitForFirstConsumer
+  wait_until_bound = false # Don't wait - storage class uses WaitForFirstConsumer
 }
 
 resource "kubernetes_persistent_volume_claim" "ingestor_db" {
@@ -264,7 +264,7 @@ resource "kubernetes_persistent_volume_claim" "ingestor_db" {
     storage_class_name = "managed-premium"
   }
 
-  wait_until_bound = false  # Don't wait - storage class uses WaitForFirstConsumer
+  wait_until_bound = false # Don't wait - storage class uses WaitForFirstConsumer
 }
 
 # =============================================================================
@@ -466,8 +466,9 @@ resource "kubernetes_stateful_set" "minio" {
   }
 
   spec {
-    service_name = "minio-headless"
-    replicas     = 1
+    service_name          = "minio-headless"
+    replicas              = 3
+    pod_management_policy = "Parallel"
 
     selector {
       match_labels = {
@@ -487,7 +488,7 @@ resource "kubernetes_stateful_set" "minio" {
           name  = "minio"
           image = "minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1"
 
-          args = ["server", "/data", "--console-address", ":9090"]
+          args = ["server", "http://minio-{0...2}.minio-headless.${var.kubernetes_namespace}.svc.cluster.local/data", "--console-address", ":9090"]
 
           env {
             name = "MINIO_ROOT_USER"
@@ -531,13 +532,31 @@ resource "kubernetes_stateful_set" "minio" {
 
           resources {
             requests = {
-              cpu    = "250m"
-              memory = "512Mi"
+              cpu    = "100m"
+              memory = "256Mi"
             }
             limits = {
-              cpu    = "1000m"
-              memory = "2Gi"
+              cpu    = "500m"
+              memory = "512Mi"
             }
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/minio/health/ready"
+              port = 9000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/minio/health/live"
+              port = 9000
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 20
           }
         }
       }
@@ -1392,6 +1411,320 @@ resource "kubernetes_service" "rest_api_simulator" {
     port {
       port        = 5000
       target_port = 5000
+    }
+
+    type = "ClusterIP"
+  }
+}
+
+# =============================================================================
+# MinIO Retention Policy Job
+# =============================================================================
+
+resource "kubernetes_config_map" "minio_retention_scripts" {
+  metadata {
+    name      = "minio-retention-scripts"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+  }
+
+  data = {
+    "configure-retention.sh" = <<-EOF
+      #!/bin/bash
+      set -e
+      
+      MINIO_ENDPOINT="$${MINIO_ENDPOINT:-http://minio:9000}"
+      
+      echo "🔧 Configuring MinIO retention policies..."
+      
+      # Wait for MinIO to be ready
+      until mc alias set myminio $MINIO_ENDPOINT $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD 2>/dev/null; do
+          echo "⏳ Waiting for MinIO to be ready..."
+          sleep 5
+      done
+      
+      echo "✅ Connected to MinIO"
+      
+      # Create lake bucket if not exists
+      mc mb myminio/lake --ignore-existing || true
+      
+      # Enable versioning on lake bucket
+      echo "📦 Enabling versioning on lake bucket..."
+      mc version enable myminio/lake || true
+      
+      # Remove existing rules for idempotent setup
+      echo "🧹 Clearing existing lifecycle rules..."
+      for id in $(mc ilm rule list myminio/lake --json 2>/dev/null | grep -o '"id":"[^"]*"' | cut -d'"' -f4); do
+          mc ilm rule rm myminio/lake --id "$id" 2>/dev/null || true
+      done
+      
+      # Configure retention policies
+      echo "⏰ Setting retention policies..."
+      
+      # Bronze tier: 7 days retention (raw sensor data)
+      mc ilm rule add myminio/lake --prefix "bronze/" --expire-days 7 --noncurrent-expire-days 3
+      echo "  ✓ Bronze tier: 7 days"
+      
+      # Silver tier: 30 days retention (normalized data)
+      mc ilm rule add myminio/lake --prefix "silver/" --expire-days 30 --noncurrent-expire-days 7
+      echo "  ✓ Silver tier: 30 days"
+      
+      # Gold tier: 90 days retention (aggregated analytics)
+      mc ilm rule add myminio/lake --prefix "gold/" --expire-days 90 --noncurrent-expire-days 14
+      echo "  ✓ Gold tier: 90 days"
+      
+      # Show configured rules
+      echo ""
+      echo "📋 Configured lifecycle rules:"
+      mc ilm rule list myminio/lake
+      
+      echo ""
+      echo "✅ Retention policies configured successfully!"
+    EOF
+  }
+}
+
+resource "kubernetes_job" "minio_retention_setup" {
+  metadata {
+    name      = "minio-retention-setup"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+  }
+
+  spec {
+    ttl_seconds_after_finished = 300
+    backoff_limit              = 5
+
+    template {
+      metadata {}
+
+      spec {
+        container {
+          name    = "mc"
+          image   = "minio/mc:latest"
+          command = ["/bin/bash", "/scripts/configure-retention.sh"]
+
+          env {
+            name  = "MINIO_ENDPOINT"
+            value = "http://minio:9000"
+          }
+
+          env {
+            name = "MINIO_ROOT_USER"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.minio_secret.metadata[0].name
+                key  = "root-user"
+              }
+            }
+          }
+
+          env {
+            name = "MINIO_ROOT_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.minio_secret.metadata[0].name
+                key  = "root-password"
+              }
+            }
+          }
+
+          volume_mount {
+            name       = "scripts"
+            mount_path = "/scripts"
+          }
+        }
+
+        volume {
+          name = "scripts"
+          config_map {
+            name         = kubernetes_config_map.minio_retention_scripts.metadata[0].name
+            default_mode = "0755"
+          }
+        }
+
+        restart_policy = "OnFailure"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_stateful_set.minio]
+}
+
+# =============================================================================
+# Ingestor Horizontal Pod Autoscaler
+# =============================================================================
+
+resource "kubernetes_horizontal_pod_autoscaler_v2" "ingestor_hpa" {
+  metadata {
+    name      = "ingestor-hpa"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+    labels = {
+      app = "ingestor"
+    }
+  }
+
+  spec {
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "ingestor"
+    }
+
+    min_replicas = 1
+    max_replicas = 5
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 70
+        }
+      }
+    }
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "memory"
+        target {
+          type                = "Utilization"
+          average_utilization = 80
+        }
+      }
+    }
+
+    behavior {
+      scale_down {
+        stabilization_window_seconds = 300
+        select_policy                = "Max"
+        policy {
+          type           = "Percent"
+          value          = 50
+          period_seconds = 60
+        }
+      }
+
+      scale_up {
+        stabilization_window_seconds = 0
+        select_policy                = "Max"
+        policy {
+          type           = "Percent"
+          value          = 100
+          period_seconds = 15
+        }
+        policy {
+          type           = "Pods"
+          value          = 2
+          period_seconds = 15
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.ingestor]
+}
+
+# =============================================================================
+# cAdvisor (Container Advisor) for container metrics
+# =============================================================================
+
+resource "kubernetes_deployment" "cadvisor" {
+  count = var.deploy_monitoring ? 1 : 0
+
+  metadata {
+    name      = "cadvisor"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+    labels = {
+      app = "cadvisor"
+    }
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "cadvisor"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "cadvisor"
+        }
+      }
+
+      spec {
+        container {
+          name  = "cadvisor"
+          image = "gcr.io/cadvisor/cadvisor:v0.49.1"
+
+          args = ["--docker_only"]
+
+          port {
+            container_port = 8080
+          }
+
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "512Mi"
+            }
+          }
+
+          volume_mount {
+            name       = "sys"
+            mount_path = "/sys"
+            read_only  = true
+          }
+
+          volume_mount {
+            name       = "docker"
+            mount_path = "/var/lib/docker"
+            read_only  = true
+          }
+        }
+
+        volume {
+          name = "sys"
+          host_path {
+            path = "/sys"
+          }
+        }
+
+        volume {
+          name = "docker"
+          host_path {
+            path = "/var/lib/docker"
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "cadvisor" {
+  count = var.deploy_monitoring ? 1 : 0
+
+  metadata {
+    name      = "cadvisor"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+  }
+
+  spec {
+    selector = {
+      app = "cadvisor"
+    }
+
+    port {
+      port        = 8080
+      target_port = 8080
     }
 
     type = "ClusterIP"

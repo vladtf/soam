@@ -128,7 +128,7 @@ terraform output backend_url
 
 # Connect kubectl to cluster
 cd ../01-azure-infrastructure
-az aks get-credentials --resource-group soam-rg --name soam-aks-cluster
+az aks get-credentials --resource-group soam-rg --name soam-aks-cluster --overwrite-existing
 
 # Verify deployment
 kubectl get pods -n soam
@@ -186,7 +186,7 @@ kubectl get pods -n soam
 
 ```powershell
 # Get credentials
-az aks get-credentials --resource-group soam-rg --name soam-aks-cluster
+az aks get-credentials --resource-group soam-rg --name soam-aks-cluster --overwrite-existing
 
 # Verify connection
 kubectl cluster-info
