@@ -4,6 +4,7 @@ import AppFooter from './components/Footer';
 import Home from './pages/Home';
 import OntologyPage from './pages/OntologyPage';
 import DashboardPage from './pages/DashboardPage';
+import MonitoringPage from './pages/MonitoringPage';
 import MapPage from './pages/MapPage';
 import NewEventsPage from './pages/NewEventsPage'; // new import
 import SettingsPage from './pages/SettingsPage';
@@ -40,6 +41,7 @@ function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/pipeline" element={<DataPipelinePage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/monitoring" element={<MonitoringPage />} />
                 <Route path="/ontology" element={<OntologyPage />} />
                 <Route path="/map" element={<MapPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

@@ -15,6 +15,7 @@ from .cleaner import DataCleaner
 from ..config import SparkConfig, SparkSchemas
 from .batch_processor import BatchProcessor
 from ...utils.logging import log_execution_time
+from ...services.ingestor_schema_client import IngestorSchemaClient
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ class EnrichmentManager:
         
         # Thread lock to prevent concurrent stream starts
         self._enrich_query_lock = threading.Lock()
+        
+        # Ingestor schema client for fast schema retrieval
+        self.ingestor_client: IngestorSchemaClient = IngestorSchemaClient()
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
         """Return active StreamingQuery by name if present.
@@ -77,8 +81,9 @@ class EnrichmentManager:
     def _get_streaming_schema(self) -> StructType:
         """Get the schema for streaming reads with optimized inference.
         
-        Uses only the latest file for each ingestion_id to optimize schema inference
-        and relies on the pattern: ingestion_id=*/date=*/hour=*
+        Uses a two-tier approach:
+        1. First, try to get pre-computed schema from ingestor (fast)
+        2. Fall back to Spark schema inference from parquet files (slow)
         
         Returns:
             Spark schema for reading streaming data
@@ -86,19 +91,49 @@ class EnrichmentManager:
         Raises:
             Exception: If no data is available for schema inference
         """
-        logger.info(f"🔍 Starting optimized schema inference from path: {self.bronze_path}")
+        logger.info(f"🔍 Starting schema inference from path: {self.bronze_path}")
+        
+        # Try 1: Get pre-computed schema from ingestor (fast path)
+        logger.info("🚀 Attempting fast schema retrieval from ingestor...")
+        ingestor_schema = self._try_ingestor_schema()
+        if ingestor_schema:
+            logger.info(f"✅ Using ingestor schema with {len(ingestor_schema.fields)} fields")
+            return ingestor_schema
+        
+        logger.info("⚠️ Ingestor schema not available, falling back to Spark inference...")
         
         # Check if any data exists first
         if not self._has_bronze_data():
             raise Exception("No data available in bronze layer for schema inference. Please ensure data ingestion is working.")
         
-        # Try optimized schema inference
+        # Try 2: Spark schema inference from parquet files (slow path)
         schema = self._try_schema_inference()
         if schema:
             return schema
             
         # If inference fails, this is a real issue that needs to be addressed
         raise Exception("Unable to infer schema from any available data. Check data format and structure in bronze layer.")
+
+    def _try_ingestor_schema(self) -> Optional[StructType]:
+        """Try to get schema from ingestor's pre-computed metadata.
+        
+        Returns:
+            Spark StructType from ingestor, or None if unavailable
+        """
+        try:
+            schema = self.ingestor_client.get_merged_spark_schema_sync()
+            if schema and self._validate_schema(schema):
+                logger.info(f"✅ Ingestor schema validation passed: {len(schema.fields)} fields")
+                return schema
+            elif schema:
+                logger.warning("⚠️ Ingestor schema validation failed")
+                return None
+            else:
+                logger.info("ℹ️ No schema available from ingestor")
+                return None
+        except Exception as e:
+            logger.warning(f"⚠️ Could not fetch schema from ingestor: {e}")
+            return None
 
     @log_execution_time(operation_name="Bronze Data Check")
     def _has_bronze_data(self) -> bool:

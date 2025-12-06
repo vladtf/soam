@@ -1,17 +1,13 @@
 # Architecture for Big Data - Vladislav Tiftilov
 
 ```plantuml
+
 @startuml
 !theme plain
 skinparam defaultTextAlignment center
 skinparam linetype polyline
 skinparam nodesep 80
 skinparam ranksep 60
-skinparam rectangle {
-    BackgroundColor #E3F2FD
-    BorderColor Black
-    FontSize 11
-}
 skinparam package {
     BackgroundColor White
     BorderColor Black
@@ -27,30 +23,29 @@ skinparam cloud {
 ' First Row - Application Layers
 together {
     package "Edge Layer" {
-        rectangle "Sensors" as S #E3F2FD
-        rectangle "Local Buffer" as LB #E3F2FD
+        rectangle "Sensors" as S
+        rectangle "(A1) Local Buffer" as LB #E3F2FD
         S -[hidden]right-> LB
     }
 
     cloud "Azure Cloud" {
      
-        rectangle "Azure Service Bus" as ASB #E8F5E9
    
         package "Kubernetes Cluster" {
             package "Ingestion Layer" {
-                rectangle "MQTT Server" as MQTT #E8F5E9
-                rectangle "Ingestor\n1..N" as ING #E8F5E9
+                rectangle "MQTT Server" as MQTT
+                rectangle "(A2) Ingestor\n1..N" as ING #E3F2FD
                 MQTT -[hidden]right-> ING
 
             }
 
             package "Storage Layer" {
-                rectangle "MinIO Cluster\n1..3" as MINIO #FFE0B2
+                rectangle "(A3,R2) MinIO Cluster\n1..3" as MINIO #E3F2FD\E8F5E9
             }
 
             package "Processing Layer" {
-                rectangle "Spark Master" as SM #FFF9C4
-                rectangle "Spark Workers\n1..N" as SW #FFF9C4
+                rectangle "Spark Master" as SM
+                rectangle "Spark Workers\n1..N" as SW
             }
 
 
@@ -58,15 +53,15 @@ together {
             ' Second Row - Application and Monitoring
             together {
                 package "Application Layer" {
-                    rectangle "Frontend" as FE #E1BEE7
-                    rectangle "Backend" as BE #E1BEE7
+                    rectangle "(R1,R3) Frontend" as FE #E8F5E9
+                    rectangle "(R1,R3) Backend" as BE #E8F5E9
                     BE -[hidden]right-> FE
                 }
                 
                 package "Monitoring Stack" {
-                    rectangle "Prometheus" as PROM #F3E5F5
-                    rectangle "Grafana" as GRAF #F3E5F5
-                    rectangle "cAdvisor" as CADV #F3E5F5
+                    rectangle "Prometheus" as PROM
+                    rectangle "Grafana" as GRAF
+                    rectangle "cAdvisor" as CADV
                     PROM -[hidden]right-> GRAF
                 }
             }
@@ -76,10 +71,9 @@ together {
 
 ' Data Flow
 S -right-> LB : offline\nbuffer
-S -down-> ASB
+S -down-> ING
 LB --> MQTT
 MQTT -right-> ING
-ASB --> ING
 ING -right-> MINIO
 SM <-> SW
 SW <-> MINIO

@@ -107,6 +107,7 @@ const AppNavbar: React.FC = () => {
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
             <Nav.Link href="/dashboard">Dashboard</Nav.Link>
+            <Nav.Link href="/monitoring">Monitoring</Nav.Link>
             <Nav.Link href="/pipeline">Data Pipeline</Nav.Link>
             <Nav.Link href="/data-sources">Data Sources</Nav.Link>
             <Nav.Link href="/minio">Data Browser</Nav.Link>

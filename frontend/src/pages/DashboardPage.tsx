@@ -7,10 +7,8 @@ import { toast } from 'react-toastify';
 import { useDashboardData } from '../hooks/useDashboardData';
 import StatisticsCards from '../components/StatisticsCards';
 import TemperatureChart from '../components/TemperatureChart';
-import SparkApplicationsCard from '../components/SparkApplicationsCard';
 import TemperatureAlertsCard from '../components/TemperatureAlertsCard';
 import PageHeader from '../components/PageHeader';
-import EnrichmentStatusCard from '../components/EnrichmentStatusCard';
 import { DashboardTileDef, fetchDashboardTileExamples, listDashboardTiles, createDashboardTile, listComputations, deleteDashboardTile, updateDashboardTile } from '../api/backendRequests';
 import WithTooltip from '../components/WithTooltip';
 import { extractDashboardTileErrorMessage } from '../utils/errorHandling';
@@ -27,10 +25,6 @@ const DashboardPage: React.FC = () => {
     refreshingTemperature,
     timeRange,
     setTimeRange,
-    sparkMasterStatus,
-    loadingSparkStatus,
-    refreshingSparkStatus,
-    sparkStreamsStatus,
     temperatureAlerts,
     loadingAlerts,
     refreshingAlerts,
@@ -124,9 +118,9 @@ const DashboardPage: React.FC = () => {
     <Container className="pt-3 pb-4">
       <PageHeader
         title="Dashboard"
-        subtitle="Overview of key metrics and cluster status"
+        subtitle="Temperature metrics, alerts, and custom analytics tiles"
         onRefresh={refreshAll}
-        refreshing={loading || loadingSparkStatus || loadingAlerts || refreshingTemperature || refreshingSparkStatus || refreshingAlerts}
+        refreshing={loading || loadingAlerts || refreshingTemperature || refreshingAlerts}
         autoRefresh={autoRefresh}
         onToggleAutoRefresh={setAutoRefresh}
         lastUpdated={lastUpdated}
@@ -159,30 +153,6 @@ const DashboardPage: React.FC = () => {
 
       {/* Statistics Cards (static charts) */}
       {enableStaticCards && <StatisticsCards />}
-
-      {/* Spark Applications */}
-      <Row className="g-3 mt-1">
-        <Col md={12}>
-          <SparkApplicationsCard
-            sparkMasterStatus={sparkMasterStatus}
-            sparkStreamsStatus={sparkStreamsStatus}
-            loading={loadingSparkStatus}
-            refreshing={refreshingSparkStatus}
-            lastUpdated={lastUpdated}
-          />
-        </Col>
-      </Row>
-
-      {/* Enrichment Status */}
-      <Row className="g-3 mt-1">
-        <Col md={12}>
-          <EnrichmentStatusCard 
-            minutes={10} 
-            autoRefresh={autoRefresh}
-            refreshInterval={30000}
-          />
-        </Col>
-      </Row>
 
       {/* Temperature Chart and Alerts */}
       <Row className="g-3 mt-1" style={{ height: '500px' }}>

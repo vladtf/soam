@@ -3,10 +3,33 @@ Client service for fetching schema information from the ingestor API.
 """
 import asyncio
 import httpx
+import time
 from typing import Dict, List, Any, Optional
+from pyspark.sql.types import (
+    StructType, StructField, StringType, IntegerType, LongType,
+    DoubleType, FloatType, BooleanType, TimestampType, DateType
+)
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Type mapping from ingestor schema types to Spark types
+INGESTOR_TO_SPARK_TYPE = {
+    "string": StringType(),
+    "str": StringType(),
+    "int": IntegerType(),
+    "integer": IntegerType(),
+    "long": LongType(),
+    "bigint": LongType(),
+    "float": FloatType(),
+    "double": DoubleType(),
+    "number": DoubleType(),
+    "bool": BooleanType(),
+    "boolean": BooleanType(),
+    "timestamp": TimestampType(),
+    "datetime": TimestampType(),
+    "date": DateType(),
+}
 
 
 class IngestorSchemaClient:
@@ -221,3 +244,177 @@ class IngestorSchemaClient:
         except Exception as e:
             logger.error("❌ Error in sync available sources fetch: %s", e)
             return []
+
+    def get_merged_spark_schema_sync(self, cache_ttl_seconds: int = 300) -> Optional[StructType]:
+        """Get merged Spark schema from all datasets with caching.
+        
+        This method fetches schema information from the ingestor for all datasets
+        and merges them into a single Spark StructType. It uses caching to avoid
+        repeated HTTP calls.
+        
+        Args:
+            cache_ttl_seconds: Cache time-to-live in seconds (default 5 minutes)
+            
+        Returns:
+            Merged Spark StructType, or None if no schemas available
+        """
+        # Check cache first
+        if hasattr(self, '_schema_cache') and self._schema_cache:
+            cache_time, cached_schema = self._schema_cache
+            if time.time() - cache_time < cache_ttl_seconds:
+                logger.info("✅ Using cached Spark schema (age: %.1fs)", time.time() - cache_time)
+                return cached_schema
+        
+        try:
+            logger.info("🔍 Fetching merged Spark schema from ingestor...")
+            
+            # Use synchronous HTTP client to avoid event loop conflicts
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/metadata/datasets")
+                if response.status_code != 200:
+                    logger.error("❌ Failed to fetch datasets: HTTP %d", response.status_code)
+                    return None
+                data = response.json()
+                # API returns {"data": {"datasets": [...], "total": N}, ...}
+                datasets = data.get("data", {}).get("datasets", [])
+            
+            if not datasets:
+                logger.warning("⚠️ No datasets found in ingestor")
+                return None
+            
+            logger.info("✅ Retrieved %d datasets from ingestor", len(datasets))
+            
+            # Merge all schema fields from all datasets
+            merged_schema = self._merge_dataset_schemas(datasets)
+            
+            if merged_schema:
+                # Cache the result
+                self._schema_cache = (time.time(), merged_schema)
+                logger.info("✅ Cached merged Spark schema with %d fields", len(merged_schema.fields))
+            
+            return merged_schema
+            
+        except Exception as e:
+            logger.error("❌ Error fetching merged Spark schema: %s", e)
+            return None
+    
+    def _merge_dataset_schemas(self, datasets: List[Dict[str, Any]]) -> Optional[StructType]:
+        """Merge schema fields from multiple datasets into a single Spark StructType.
+        
+        Args:
+            datasets: List of dataset metadata dictionaries
+            
+        Returns:
+            Merged Spark StructType
+        """
+        import json
+        
+        all_fields: Dict[str, StructField] = {}
+        
+        for dataset in datasets:
+            ingestion_id = dataset.get("ingestion_id", "unknown")
+            schema_fields = dataset.get("schema_fields", [])
+            
+            # Handle case where schema_fields is a JSON string
+            if isinstance(schema_fields, str):
+                try:
+                    schema_fields = json.loads(schema_fields)
+                except json.JSONDecodeError:
+                    logger.warning("⚠️ Could not parse schema_fields for %s", ingestion_id)
+                    schema_fields = []
+            
+            if not schema_fields:
+                logger.debug("ℹ️ No schema fields for dataset %s", ingestion_id)
+                continue
+            
+            for field in schema_fields:
+                field_name = field.get("name")
+                field_type = field.get("type", "string").lower()
+                nullable = field.get("nullable", True)
+                
+                if not field_name:
+                    continue
+                
+                # Convert ingestor type to Spark type
+                spark_type = INGESTOR_TO_SPARK_TYPE.get(field_type, StringType())
+                
+                if field_name not in all_fields:
+                    # New field - add it
+                    all_fields[field_name] = StructField(field_name, spark_type, nullable)
+                else:
+                    # Field already exists - resolve type conflicts
+                    existing_field = all_fields[field_name]
+                    resolved_type = self._resolve_type_conflict(
+                        field_name, existing_field.dataType, spark_type
+                    )
+                    all_fields[field_name] = StructField(
+                        field_name, 
+                        resolved_type, 
+                        existing_field.nullable or nullable
+                    )
+        
+        if not all_fields:
+            logger.warning("⚠️ No schema fields found in datasets")
+            return None
+        
+        # Ensure ingestion_id is present (required for partitioning)
+        if "ingestion_id" not in all_fields:
+            all_fields["ingestion_id"] = StructField("ingestion_id", StringType(), True)
+        
+        # Create StructType with sorted fields for consistency
+        sorted_fields = [all_fields[name] for name in sorted(all_fields.keys())]
+        merged_schema = StructType(sorted_fields)
+        
+        logger.info("✅ Merged %d datasets into schema with %d fields", 
+                   len(datasets), len(merged_schema.fields))
+        
+        return merged_schema
+    
+    def _resolve_type_conflict(self, field_name: str, type1, type2) -> Any:
+        """Resolve type conflicts between two Spark data types.
+        
+        Uses type promotion hierarchy: bool -> int -> long -> float -> double -> string
+        
+        Args:
+            field_name: Field name (for logging)
+            type1: First Spark data type
+            type2: Second Spark data type
+            
+        Returns:
+            Resolved Spark data type
+        """
+        if type(type1) == type(type2):
+            return type1
+        
+        # Define type promotion hierarchy (index order = promotion order)
+        numeric_hierarchy = [
+            BooleanType,
+            IntegerType,
+            LongType,
+            FloatType,
+            DoubleType,
+        ]
+        
+        type1_class = type(type1)
+        type2_class = type(type2)
+        
+        # Check if both are numeric types
+        pos1 = next((i for i, t in enumerate(numeric_hierarchy) if t == type1_class), -1)
+        pos2 = next((i for i, t in enumerate(numeric_hierarchy) if t == type2_class), -1)
+        
+        if pos1 >= 0 and pos2 >= 0:
+            # Both are numeric - promote to the more general type
+            promoted_type = numeric_hierarchy[max(pos1, pos2)]()
+            logger.debug("🔢 Type promotion for '%s': %s + %s -> %s", 
+                        field_name, type1, type2, promoted_type)
+            return promoted_type
+        
+        # If one is numeric and one is string, or both are different non-numeric, use string
+        logger.debug("🔤 Fallback to string for '%s': %s + %s -> StringType", 
+                    field_name, type1, type2)
+        return StringType()
+    
+    def invalidate_cache(self):
+        """Invalidate the schema cache."""
+        self._schema_cache = None
+        logger.info("🔄 Schema cache invalidated")
