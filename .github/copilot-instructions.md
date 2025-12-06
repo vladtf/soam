@@ -52,11 +52,19 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 ## Tech Map / Key Files
 
 ### Infrastructure & Deployment
+
+**Local Development (Skaffold):**
 - `skaffold.yaml` - Main dev orchestration, builds 8 services, handles port-forwarding
 - `k8s/` - Kubernetes manifests for all services (StatefulSets/Services)
 - `spark-values.yaml` - Helm values for Spark cluster deployment
-- `docker-compose.yml` - Alternative Docker Compose setup
 - `utils/cleanup-images.ps1` - PowerShell script for Docker image management
+
+**Azure Cloud Deployment (Terraform):**
+- `terraform/` - 2-step Terraform deployment to Azure AKS
+  - `terraform/01-azure-infrastructure/` - Azure resources (AKS cluster + ACR container registry)
+  - `terraform/02-kubernetes-resources/` - All Kubernetes resources (deployments, services, PVCs, Helm charts)
+  - `terraform/deploy.ps1` - **CRITICAL**: Orchestration script for full deployment lifecycle
+- `docs/azure-deployment.md` - Comprehensive Azure deployment guide with troubleshooting
 
 ### Backend (Python/FastAPI) - Port 8000
 **Main Application Structure:**
@@ -302,6 +310,12 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `neo4j/` - Graph database with ontology initialization
 - `grafana/` - Monitoring dashboards with Prometheus integration
 - `prometheus/` - Metrics collection and monitoring
+
+### Documentation
+- `docs/azure-deployment.md` - **CRITICAL**: Azure AKS deployment guide with troubleshooting
+- `docs/copilot-setup.md` - AI Copilot configuration guide
+- `docs/dependability-criteria.md` - System dependability requirements
+- `docs/testing-dependability-features.md` - Testing guide for dependability features
 
 ## Critical Development Patterns
 
@@ -690,7 +704,8 @@ const safeRefreshInterval = Math.max(refreshIntervalMs, 15000); // Minimum 15 se
 
 ## Dev Workflow (Windows PowerShell)
 
-### Start Development Environment
+### Local Development with Skaffold
+
 ```powershell
 # Full development environment with port-forwarding
 skaffold dev --trigger=polling --watch-poll-interval=5000 --default-repo=localhost:5000/soam
@@ -698,6 +713,63 @@ skaffold dev --trigger=polling --watch-poll-interval=5000 --default-repo=localho
 # If using profiles (check skaffold.yaml for available profiles)
 skaffold dev -p push --default-repo=localhost:5000/soam
 ```
+
+### Azure Deployment with Terraform
+
+**Full Deployment Workflow:**
+```powershell
+# 1. Login to Azure
+az login
+az account set --subscription "your-subscription-id"
+
+# 2. Configure Step 1 variables
+cd terraform/01-azure-infrastructure
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars - set subscription_id and acr_name
+
+# 3. Run full deployment (infrastructure + images + k8s resources)
+cd ..
+.\deploy.ps1 -Action deploy
+
+# 4. Check deployment status
+.\deploy.ps1 -Action status
+
+# 5. Connect kubectl to AKS
+az aks get-credentials --resource-group soam-rg --name soam-aks-cluster
+kubectl get pods -n soam
+```
+
+**Deploy Script Options:**
+```powershell
+# Full deployment
+.\deploy.ps1 -Action deploy
+
+# Deploy only Azure infrastructure (Step 1)
+.\deploy.ps1 -Action deploy -Step 1
+
+# Deploy only Kubernetes resources (Step 2)  
+.\deploy.ps1 -Action deploy -Step 2
+
+# Skip image rebuild
+.\deploy.ps1 -Action deploy -SkipImages
+
+# Rebuild images only
+.\deploy.ps1 -Action images-only
+
+# Destroy everything
+.\deploy.ps1 -Action destroy
+```
+
+**Terraform Structure:**
+- **Step 1** (`terraform/01-azure-infrastructure/`): Creates Azure Resource Group, AKS cluster (3 nodes Standard_DS2_v2), ACR registry, role assignments
+- **Step 2** (`terraform/02-kubernetes-resources/`): Deploys all K8s resources - namespace, secrets, PVCs, deployments, services, Helm charts for Spark
+- Step 2 auto-receives AKS credentials from Step 1 outputs via `deploy.ps1`
+
+**Critical Azure/Terraform Notes:**
+- PVCs use `managed-premium` storage class with `WaitForFirstConsumer` binding mode - PVCs only bind when pods are scheduled
+- Frontend nginx listens on port 80 (not 3000)
+- Backend and ingestor PVCs have `wait_until_bound = false` to prevent Terraform timeout
+- LoadBalancer services can take 2-5 minutes to get external IP
 
 ### Clean Development Environment
 ```powershell
@@ -746,15 +818,26 @@ kubectl describe pod <pod-name>
 
 ## Port-Forward + API Probing
 
-### Port Forwarding (Auto-configured in skaffold.yaml)
+### Port Forwarding (Auto-configured in skaffold.yaml for local, manual for AKS)
 ```powershell
-# Manual port-forwards if needed
+# Local k8s port-forwards (Skaffold handles this automatically)
 kubectl port-forward svc/backend-external 8000:8000
 kubectl port-forward svc/frontend 3000:3000  
 kubectl port-forward svc/ingestor 8001:8001
 kubectl port-forward svc/neo4j 7474:7474
 kubectl port-forward svc/minio 9000:9000 9090:9090
 kubectl port-forward svc/soam-spark-master-svc 8080:80
+
+# Azure AKS port-forwards (with namespace)
+kubectl port-forward svc/frontend 3000:80 -n soam           # NOTE: nginx on port 80
+kubectl port-forward svc/backend-external 8000:8000 -n soam
+kubectl port-forward svc/ingestor-external 8001:8001 -n soam
+kubectl port-forward svc/minio 9000:9000 9090:9090 -n soam
+kubectl port-forward svc/neo4j 7474:7474 7687:7687 -n soam
+kubectl port-forward svc/soam-spark-master-svc 8080:80 -n soam
+
+# Stop all port-forward processes
+Get-Process kubectl -ErrorAction SilentlyContinue | Stop-Process
 ```
 
 ### API Health Checks
@@ -796,7 +879,7 @@ Start-Process http://localhost:8080
 
 ### Pod Logs
 ```powershell
-# Service logs
+# Service logs (add -n soam for AKS)
 kubectl logs -f statefulset/backend
 kubectl logs -f deployment/ingestor  
 kubectl logs -f deployment/frontend
@@ -807,6 +890,10 @@ kubectl logs backend-0 --previous
 
 # Multi-container logs
 kubectl logs backend-0 -c backend
+
+# AKS-specific (with namespace)
+kubectl logs -f backend-0 -n soam
+kubectl logs -f deployment/ingestor -n soam
 ```
 
 ### Resource Status
@@ -823,6 +910,10 @@ kubectl top nodes
 # PVC status (for stateful services)
 kubectl get pvc
 kubectl describe pvc backend-db-pvc
+
+# AKS-specific - check all resources in namespace
+kubectl get all -n soam
+kubectl get pods -n soam -w  # Watch in real-time
 ```
 
 ### Common Issues & Fixes
@@ -842,6 +933,31 @@ kubectl describe service backend-external
 # Debug networking
 kubectl exec -it backend-0 -- /bin/bash
 # Inside pod: curl neo4j:7474, curl minio:9000, etc.
+```
+
+### Azure AKS Troubleshooting
+```powershell
+# Connect kubectl to AKS cluster
+az aks get-credentials --resource-group soam-rg --name soam-aks-cluster
+
+# Verify connection
+kubectl cluster-info
+kubectl get nodes
+
+# Check images in ACR
+az acr repository list --name <acr-name> -o table
+az acr repository show-tags --name <acr-name> --repository backend -o table
+
+# Check AKS has ACR pull permissions
+az aks check-acr --name soam-aks-cluster --resource-group soam-rg --acr <acr-name>.azurecr.io
+
+# Common AKS issues:
+# - Pod stuck in Pending: Usually PVC not bound or insufficient resources
+# - ImagePullBackOff: Check ACR permissions and image existence
+# - PVC Pending: `managed-premium` uses WaitForFirstConsumer - binds when pod schedules
+# - No external IP on LoadBalancer: Wait 2-5 minutes, check Azure portal if stuck
+
+# See docs/azure-deployment.md for comprehensive troubleshooting
 ```
 
 ## Code Conventions
@@ -1070,6 +1186,8 @@ When implementing new features, always:
 - Use `readStream.parquet()` without schema specification
 - Use blocking commands in CLI, like `kubectl logs -f statefulset/backend`
 - Try to restart the pods. Skaffold dev is handling this automatically.
+- Run `terraform destroy` without confirming with user (destroys all Azure resources)
+- Delete Kubernetes namespace in AKS (causes data loss)
 
 ### ALWAYS:
 - Show commands before execution in destructive operations
@@ -1088,6 +1206,8 @@ When implementing new features, always:
 - Use emojis in logging for quick visual scanning
 - Specify response models with generic typing
 - Use absolute paths when running scripts. This ensures the command won't fail because of relative path issues.
+- For AKS deployments, always use `-n soam` namespace flag
+- Check `docs/azure-deployment.md` for Azure/Terraform troubleshooting
 
 ## AI Copilot Integration
 
