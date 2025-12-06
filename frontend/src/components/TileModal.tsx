@@ -156,20 +156,39 @@ export const TileModal: React.FC<TileModalProps> = ({
         updateConfig('valueField', colName);
         toast.success(`Set "${colName}" as value field`);
       } else {
-        navigator.clipboard.writeText(colName);
-        toast.success(`Copied "${colName}" to clipboard`);
+        // For other columns in timeseries, add to columns array
+        addColumnToConfig(colName);
       }
     } else if (editing.viz_type === 'stat') {
       if (suggestion === '📊 Stat') {
         updateConfig('valueField', colName);
         toast.success(`Set "${colName}" as stat value field`);
       } else {
-        navigator.clipboard.writeText(colName);
-        toast.success(`Copied "${colName}" to clipboard`);
+        // For other columns in stat, add to columns array
+        addColumnToConfig(colName);
       }
     } else {
-      navigator.clipboard.writeText(colName);
-      toast.success(`Copied "${colName}" to clipboard`);
+      // For table viz type, add column to the columns array
+      addColumnToConfig(colName);
+    }
+  };
+
+  const addColumnToConfig = (colName: string) => {
+    if (!editing) return;
+    
+    const currentColumns = ((editing.config as any)?.columns as string[]) || [];
+    
+    // Check if column already exists
+    if (currentColumns.includes(colName)) {
+      // Remove column if it already exists (toggle behavior)
+      const newColumns = currentColumns.filter(c => c !== colName);
+      updateConfig('columns', newColumns.length > 0 ? newColumns : undefined);
+      toast.info(`Removed "${colName}" from columns`);
+    } else {
+      // Add column to the list
+      const newColumns = [...currentColumns, colName];
+      updateConfig('columns', newColumns);
+      toast.success(`Added "${colName}" to columns`);
     }
   };
 
@@ -234,7 +253,7 @@ export const TileModal: React.FC<TileModalProps> = ({
                   disabled={!editing?.computation_id || previewLoading}
                   style={{ minWidth: '80px' }}
                 >
-                  {previewLoading ? <Spinner size="sm" /> : '👁️ Preview'}
+                  {previewLoading ? <Spinner size="sm" /> : '👁️ Preview Data'}
                 </Button>
                 <Button 
                   variant="outline-success" 
@@ -443,16 +462,26 @@ export const TileModal: React.FC<TileModalProps> = ({
                               }
                             }
                             
+                            // Check if column is selected in the columns array
+                            const selectedColumns = ((editing?.config as any)?.columns as string[]) || [];
+                            const isSelected = selectedColumns.includes(colName);
+                            
+                            // Override variant if column is selected (for non-suggested columns)
+                            const displayVariant = isSelected && !suggestion ? 'secondary' : variant;
+                            
                             return (
                               <Button
                                 key={colName}
-                                variant={variant}
+                                variant={displayVariant}
                                 size="sm"
                                 onClick={() => handleSmartColumnClick(colName, suggestion)}
-                                className="text-start"
+                                className={`text-start ${isSelected ? 'selected-column' : ''}`}
+                                style={isSelected ? { boxShadow: '0 0 0 2px var(--bs-primary)' } : {}}
                               >
                                 <div>
-                                  <strong>{colName}</strong> {suggestion && <small className="text-muted">({suggestion})</small>}
+                                  <strong>{colName}</strong> 
+                                  {suggestion && <small className="text-muted"> ({suggestion})</small>}
+                                  {isSelected && !suggestion && <small className="text-primary"> ✓</small>}
                                   <br />
                                   <small className="text-muted">{valueType}</small>
                                 </div>
@@ -461,12 +490,30 @@ export const TileModal: React.FC<TileModalProps> = ({
                           })}
                         </div>
                         
+                        {/* Show selected columns summary */}
+                        {((editing?.config as any)?.columns as string[])?.length > 0 && (
+                          <div className="alert alert-secondary py-2 mb-2">
+                            <small>
+                              <strong>Selected columns ({((editing?.config as any)?.columns as string[]).length}):</strong>{' '}
+                              {((editing?.config as any)?.columns as string[]).join(', ')}
+                              <Button 
+                                variant="link" 
+                                size="sm" 
+                                className="p-0 ms-2"
+                                onClick={() => updateConfig('columns', undefined)}
+                              >
+                                Clear all
+                              </Button>
+                            </small>
+                          </div>
+                        )}
+                        
                         {/* Visualization-specific guidance */}
                         {editing?.viz_type === 'timeseries' && (
                           <div className="alert alert-primary py-2 mb-2">
                             <small>
                               🎯 <strong>Timeseries Chart:</strong> Click blue buttons (⏰ Time) to set time field, 
-                              green buttons (📊 Value) to set value field. Other columns can be copied to clipboard.
+                              green buttons (📊 Value) to set value field. Click other columns to add/remove them from the display list.
                             </small>
                           </div>
                         )}
@@ -475,7 +522,7 @@ export const TileModal: React.FC<TileModalProps> = ({
                           <div className="alert alert-success py-2 mb-2">
                             <small>
                               🎯 <strong>Stat Display:</strong> Click green buttons (📊 Stat) to set the main statistic value. 
-                              Other columns can be copied to clipboard.
+                              Click other columns to add/remove them from the display list.
                             </small>
                           </div>
                         )}
@@ -483,8 +530,8 @@ export const TileModal: React.FC<TileModalProps> = ({
                         {editing?.viz_type === 'table' && (
                           <div className="alert alert-info py-2 mb-2">
                             <small>
-                              🎯 <strong>Table Display:</strong> Click column names to copy them for use in configuration. 
-                              You can specify which columns to show in the 'columns' config array.
+                              🎯 <strong>Table Display:</strong> Click columns to add/remove them from the table. 
+                              Selected columns will be displayed in the order clicked. Click again to remove.
                             </small>
                           </div>
                         )}
