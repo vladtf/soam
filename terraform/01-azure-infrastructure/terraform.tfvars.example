@@ -1,0 +1,25 @@
+# =============================================================================
+# Step 1 - Example Variables
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+
+# REQUIRED: Your Azure subscription ID
+subscription_id = "your-subscription-id-here"
+
+# REQUIRED: Unique ACR name (alphanumeric only, globally unique)
+acr_name = "soamregistry"
+
+# Optional: Resource group and location
+resource_group_name = "soam-rg"
+location            = "West Europe"
+
+# Optional: AKS configuration
+aks_cluster_name = "soam-aks-cluster"
+aks_dns_prefix   = "soamaks"
+aks_vm_size      = "Standard_DS2_v2"
+aks_node_count   = 3
+
+# Optional: Auto-scaling (disabled by default)
+aks_enable_auto_scaling = false
+aks_min_node_count      = 2
+aks_max_node_count      = 5

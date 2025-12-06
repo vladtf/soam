@@ -1,0 +1,43 @@
+# =============================================================================
+# Step 2 - Example Variables
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+# Most values come from Step 1 outputs - the deploy script handles this
+
+# REQUIRED: AKS credentials (from Step 1 - auto-populated by deploy script)
+# aks_host                   = ""
+# aks_client_certificate     = ""
+# aks_client_key             = ""
+# aks_cluster_ca_certificate = ""
+# acr_login_server           = ""
+
+# Kubernetes namespace
+kubernetes_namespace = "soam"
+
+# MinIO Configuration
+minio_root_user     = "minio"
+minio_root_password = "minio123"
+minio_storage_size  = "10Gi"
+
+# Neo4j Configuration
+neo4j_password = "verystrongpassword"
+
+# Spark Configuration
+spark_worker_count = 2
+
+# Application Replicas
+frontend_replicas = 1
+ingestor_replicas = 1
+
+# Optional Components
+deploy_simulator          = true
+deploy_rest_api_simulator = false
+deploy_monitoring         = false
+
+# Monitoring (if enabled)
+grafana_admin_password = "admin"
+
+# Azure OpenAI (optional - for AI Copilot)
+# azure_openai_endpoint    = "https://your-openai.openai.azure.com/"
+# azure_openai_key         = "your-api-key"
+# azure_openai_api_version = "2024-02-15-preview"
