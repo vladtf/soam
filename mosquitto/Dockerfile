@@ -1,5 +1,4 @@
 FROM eclipse-mosquitto:2.0.22-openssl
-# Copy configuration, data, and log files (if needed)
+# Copy configuration
 COPY ./config /mosquitto/config
-COPY ./data /mosquitto/data
-COPY ./log /mosquitto/log
+# Data and log directories are created at runtime by the container
