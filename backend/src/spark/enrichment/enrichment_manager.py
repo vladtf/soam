@@ -141,6 +141,48 @@ class EnrichmentManager:
         logger.info(f"✅ Schema validation passed: {len(schema_field_names)} fields, essential fields present")
         return True
 
+    def _log_discovered_files(self) -> None:
+        """Log the files that Spark can discover in the bronze layer."""
+
+        # skip logging if not in debug mode
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
+        try:
+            pattern = f"{self.bronze_path}ingestion_id=*/date=*/hour=*"
+            logger.debug(f"🔍 Checking discoverable files with pattern: {pattern}")
+            
+            # Use Hadoop FileSystem to list files
+            hadoop_conf = self.spark._jsc.hadoopConfiguration()
+            
+            # Parse the bronze_path to get the correct URI
+            # bronze_path is like "s3a://lake/bronze/" 
+            bronze_uri = self.bronze_path.rstrip('/')
+            
+            # Get the base URI (e.g., "s3a://lake")
+            if bronze_uri.startswith("s3a://"):
+                parts = bronze_uri.split("/", 3)  # ['s3a:', '', 'bucket', 'path']
+                base_uri = f"{parts[0]}//{parts[2]}"  # "s3a://bucket"
+            else:
+                base_uri = f"s3a://{self.minio_bucket}"
+            
+            fs = self.spark._jvm.org.apache.hadoop.fs.FileSystem.get(
+                self.spark._jvm.java.net.URI(base_uri),
+                hadoop_conf
+            )
+            
+            # List bronze directory using the full path
+            bronze_hadoop_path = self.spark._jvm.org.apache.hadoop.fs.Path(bronze_uri)
+            if fs.exists(bronze_hadoop_path):
+                file_statuses = fs.listStatus(bronze_hadoop_path)
+                ingestion_dirs = [str(f.getPath().getName()) for f in file_statuses]
+                logger.info(f"🔍 Bronze layer ingestion_id partitions ({len(ingestion_dirs)}): {ingestion_dirs[:10]}{'...' if len(ingestion_dirs) > 10 else ''}")
+            else:
+                logger.warning(f"⚠️ Bronze path does not exist: {bronze_uri}")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Could not list bronze files: {e}")
+
     @log_execution_time(operation_name="Bronze Layer Statistics")
     def get_bronze_layer_stats(self) -> dict:
         """Get statistics about bronze layer for monitoring and debugging.
@@ -206,6 +248,9 @@ class EnrichmentManager:
         logger.debug(f"🔍 Creating raw stream from path: {stream_path}")
         logger.debug(f"🔍 Bronze base path: {self.bronze_path}")
         logger.debug(f"🔍 Using schema with {len(schema.fields)} fields")
+        
+        # Log discovered files for debugging
+        self._log_discovered_files()
         
         # Spark Structured Streaming requires a schema to be specified.
         # We use the schema inferred from existing files.
