@@ -10,9 +10,7 @@ from .streaming import StreamingManager
 from .data_access import DataAccessManager
 from .diagnostics import SparkDiagnostics
 from .master_client import SparkMasterClient
-from src.spark import enrichment
 from ..services.ingestor_schema_client import IngestorSchemaClient
-from src.utils.logging import get_logger
 
 logger = logging.getLogger(__name__)
 

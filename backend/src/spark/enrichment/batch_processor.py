@@ -4,6 +4,7 @@ Batch processing logic for enrichment streams.
 import logging
 from typing import Optional, Tuple, Set
 from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 from .device_filter import DeviceFilter
 from .value_transformer import ValueTransformationProcessor
 
@@ -182,8 +183,15 @@ class BatchProcessor:
         Args:
             filtered_df: Filtered DataFrame to write
         """
+        # Add enrichment_timestamp to track when data was processed by Spark
+        # This enables latency calculations: enrichment_timestamp - ingestion_timestamp
+        enriched_df = filtered_df.withColumn(
+            "enrichment_timestamp",
+            F.current_timestamp()
+        )
+        
         (
-            filtered_df.write
+            enriched_df.write
             .format("delta")
             .mode("append")
             .option("path", self.enriched_path)
