@@ -113,7 +113,6 @@ const AppNavbar: React.FC = () => {
             <Nav.Link href="/minio">Data Browser</Nav.Link>
             <NavDropdown title="More" id="nav-more">
               <NavDropdown.Item href="/metadata">Metadata</NavDropdown.Item>
-              <NavDropdown.Item href="/troubleshooting">Troubleshooting</NavDropdown.Item>
               <NavDropdown.Item href="/map">Map</NavDropdown.Item>
               <NavDropdown.Item href="/ontology">Ontology</NavDropdown.Item>
               <NavDropdown.Item href="/new-events">New Events</NavDropdown.Item>

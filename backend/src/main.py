@@ -20,7 +20,6 @@ from src.api import dashboard_tiles_routes
 from src.api import minio_routes
 from src.api import config_routes
 from src.api import settings_routes
-from src.api import troubleshooting
 from src.neo4j import building_routes
 from src.computations import computation_routes
 from src.auth import routes as auth_routes
@@ -260,7 +259,6 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_tiles_routes.router)
     app.include_router(config_routes.router)
     app.include_router(settings_routes.router)
-    app.include_router(troubleshooting.router)
     app.include_router(schema_routes.router)
 
     return app

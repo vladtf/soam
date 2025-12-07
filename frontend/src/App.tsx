@@ -16,7 +16,6 @@ import FeedbackPage from './pages/FeedbackPage';
 import MinioBrowserPage from './pages/MinioBrowserPage.tsx';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
-import TroubleshootingPage from './pages/TroubleshootingPage';
 import DataPipelinePage from './pages/DataPipelinePage';
 import MetadataPage from './pages/MetadataPage';
 import DataSourcesPage from './pages/DataSourcesPage';
@@ -47,7 +46,6 @@ function App() {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/minio" element={<MinioBrowserPage />} />
-                <Route path="/troubleshooting" element={<TroubleshootingPage />} />
                 <Route path="/metadata" element={<MetadataPage />} />
                 <Route path="/data-sources" element={<DataSourcesPage />} />
                 <Route path="/new-events" element={<NewEventsPage />} /> {/* new route */}

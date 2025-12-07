@@ -103,7 +103,6 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
   - `normalization_preview_routes.py` - Schema normalization preview
   - `normalization_routes.py` - Data normalization rule management
   - `settings_routes.py` - User settings management
-  - `troubleshooting.py` - Advanced diagnostics and pipeline tracing
   - `value_transformation_routes.py` - Value transformation rule management
 - `routers/schema.py` - Schema inference stream management
 
@@ -139,8 +138,7 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
   - `spark_models.py` - Pydantic models for Spark API responses
   - `streaming.py` - `StreamingManager` for stream orchestration
   - `data_access.py` - `DataAccessManager` for bronze/silver/gold layer access
-  - `data_troubleshooter.py` - Data troubleshooting utilities
-  - `diagnostics.py` - Data pipeline diagnostics and troubleshooting
+  - `diagnostics.py` - Data pipeline diagnostics
   - `diagnostics_enhanced.py` - Enhanced diagnostics with detailed tracing
   - `master_client.py` - Spark master client for cluster communication
   - `config.py` - Spark configuration settings
@@ -209,7 +207,7 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 
 **API Integration (`frontend/src/api/`):**
 - `backendRequests.tsx` - **COMPREHENSIVE**: All backend and ingestor API calls with TypeScript interfaces
-  - Backend APIs: computations, dashboard tiles, devices, troubleshooting
+  - Backend APIs: computations, dashboard tiles, devices
   - Ingestor APIs: data sources, metadata, health monitoring
   - Copilot APIs: AI-powered SQL generation
   - Auth APIs: login, register, refresh, user management
@@ -276,7 +274,6 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `WithTooltip.tsx` - Reusable tooltip wrapper
 - `DynamicConfigForm.tsx` - Dynamic form configuration
 - `DynamicFields.tsx` - Dynamic field rendering
-- `DataTroubleshootingTool.tsx` - Data troubleshooting tool
 - `NormalizationPreviewModal.tsx` - Normalization preview modal
 - `NewBuildingModal.tsx` - New building creation modal
 - `OntologyViewer.tsx` - Ontology graph viewer
@@ -291,7 +288,6 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 - `DataSourcesPage.tsx` - Ingestor data source management (MQTT, REST API)
 - `MinioBrowserPage.tsx` - Object storage browser and file explorer
 - `MetadataPage.tsx` - Schema metadata explorer with field statistics
-- `TroubleshootingPage.tsx` - Advanced diagnostics and pipeline tracing
 - `SettingsPage.tsx` - Application settings and configuration
 - `OntologyPage.tsx` - Neo4j graph visualization and building management
 - `FeedbackPage.tsx` - User feedback and bug report collection
@@ -354,15 +350,6 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 | GET | `/api/spark/test/computation` | Test basic Spark computation |
 | GET | `/api/spark/test/sensor-data` | Test Spark access to sensor data |
 | GET | `/api/spark/diagnose/enrichment-filtering` | Diagnose enrichment filtering issues |
-
-#### Troubleshooting (`/api/troubleshooting`)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/troubleshooting/diagnose-field` | Diagnose why a field becomes null in pipeline |
-| POST | `/api/troubleshooting/trace-pipeline` | Trace data through transformation stages |
-| GET | `/api/troubleshooting/quick-diagnosis` | Quick field diagnosis (GET version) |
-| GET | `/api/troubleshooting/health` | Troubleshooting endpoint health |
-| GET | `/api/troubleshooting/sensor-ids` | Get available sensor IDs from all layers |
 
 #### Dashboard Tiles (`/api/dashboard`)
 | Method | Endpoint | Description |
@@ -856,31 +843,7 @@ if (hasRole('admin', 'user')) {
 - Username: `admin`, Password: `admin`
 - Roles: `["admin", "user", "viewer"]`
 
-### 9. Comprehensive Troubleshooting System (ADVANCED)
-**Location**: `backend/src/api/troubleshooting.py` and `backend/src/spark/diagnostics.py`
-
-**Advanced Pipeline Diagnostics**:
-```python
-# Field-level diagnostic tracing
-@router.post("/diagnose-field", response_model=ApiResponse[FieldDiagnosticResult])
-async def diagnose_field(
-    sensor_id: str,
-    field_name: str, 
-    minutes_back: int,
-    ingestion_id: Optional[str] = None
-):
-    """Trace a specific field through the entire pipeline: Bronze → Silver → Gold"""
-    # Returns detailed pipeline trace with schema evolution and transformation history
-```
-
-**Pipeline Tracing Features**:
-- End-to-end data lineage tracking from ingestion to dashboard
-- Schema evolution detection with compatibility analysis
-- Data quality metrics at each pipeline stage
-- Performance bottleneck identification
-- Missing data gap analysis
-
-### 10. Real-time Dashboard System with Auto-refresh (COMPREHENSIVE)
+### 9. Real-time Dashboard System with Auto-refresh (COMPREHENSIVE)
 **Location**: `frontend/src/components/TileWithData.tsx` and dashboard ecosystem
 
 **Smart Refresh Logic**:
@@ -912,7 +875,7 @@ const safeRefreshInterval = Math.max(refreshIntervalMs, 15000); // Minimum 15 se
 - Automatic data caching to prevent redundant API calls
 - User-configurable refresh intervals with minimum safety limits
 
-### 11. AI Copilot Integration (AZURE OPENAI)
+### 10. AI Copilot Integration (AZURE OPENAI)
 **Location**: `backend/src/copilot/` - Natural language to SQL conversion
 
 **Features**:
@@ -1063,7 +1026,7 @@ Get-Process kubectl -ErrorAction SilentlyContinue | Stop-Process
 ### API Health Checks
 ```powershell
 # Backend health
-curl -s http://localhost:8000/api/troubleshooting/health | ConvertFrom-Json
+curl -s http://localhost:8000/api/health | ConvertFrom-Json
 curl -s http://localhost:8000/api/ready | ConvertFrom-Json
 
 # API documentation

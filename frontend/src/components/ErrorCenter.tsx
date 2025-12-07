@@ -31,10 +31,7 @@ const ErrorCenter: React.FC<ErrorCenterProps> = ({ show, errors, onClose, onClea
       <Modal.Body>
         <div className="d-flex justify-content-between align-items-center mb-2">
           <div className="text-body-secondary small">Most recent first</div>
-          <div className="d-flex gap-2">
-            <Button variant="outline-secondary" size="sm" onClick={() => { try { window.location.href = '/troubleshooting'; } catch {} }}>Open Troubleshooting</Button>
-            <Button variant="outline-danger" size="sm" onClick={onClear} disabled={errors.length === 0}>Clear</Button>
-          </div>
+          <Button variant="outline-danger" size="sm" onClick={onClear} disabled={errors.length === 0}>Clear</Button>
         </div>
         <div className="table-responsive">
           <Table hover size="sm" className="mb-0">

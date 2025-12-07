@@ -43,7 +43,7 @@ async def create_error(payload: ClientErrorCreate, db: Session = Depends(get_db)
 @router.get("/errors", response_model=ApiResponse)
 @handle_api_errors("list client errors")
 async def list_errors(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """List recent client errors for troubleshooting UI."""
+    """List recent client errors."""
     q = db.query(ClientErrorModel).order_by(ClientErrorModel.id.desc()).offset(skip).limit(limit)
     rows = q.all()
     
