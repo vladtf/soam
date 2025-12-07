@@ -21,6 +21,7 @@ For detailed feature-specific documentation, see the `docs/` folder:
 
 - **🤖 [AI Copilot Setup Guide](docs/copilot-setup.md)** - Azure OpenAI-powered computation generation
 - **☁️ [Azure Deployment Guide](docs/azure-deployment.md)** - Deploy to AKS with Terraform
+- **🧪 [Experimental Results Validation](docs/experimental-results-validation.md)** - Test procedures and evidence for dependability mechanisms
 
 
 ### Overview
