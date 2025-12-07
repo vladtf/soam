@@ -1,0 +1,481 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "title": "SOAM Pipeline Metrics",
+  "uid": "soam-pipeline-metrics",
+  "tags": ["soam", "pipeline", "metrics"],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Ingestor Throughput (Auto-scaling Aware)",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Total Messages Received (All Pods)",
+      "description": "Aggregate throughput across all ingestor pods - shows combined rate accounting for auto-scaling",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(ingestor_messages_received_total[$__rate_interval]))",
+          "legendFormat": "Total Received",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 1, "w": 8, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "msg/s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages Received per Pod",
+      "description": "Per-pod throughput breakdown - useful for identifying pod imbalance in auto-scaling",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(ingestor_messages_received_total[$__rate_interval])",
+          "legendFormat": "{{pod}} - {{source_type}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 8, "y": 1, "w": 8, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "msg/s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages Processed Successfully (All Pods)",
+      "description": "Successfully processed messages aggregate",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(ingestor_messages_processed_total[$__rate_interval]))",
+          "legendFormat": "Total Processed",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 16, "y": 1, "w": 8, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "msg/s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "gauge",
+      "title": "Processing Success Rate",
+      "description": "Percentage of messages successfully processed",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "100 * sum(rate(ingestor_messages_processed_total[$__rate_interval])) / sum(rate(ingestor_messages_received_total[$__rate_interval]))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 9, "w": 6, "h": 6},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 90},
+              {"color": "green", "value": 99}
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Active Ingestor Pods",
+      "description": "Number of ingestor pods currently reporting metrics",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count(count by (pod) (ingestor_messages_received_total))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 6, "y": 9, "w": 6, "h": 6},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Data Bytes Received",
+      "description": "Total data volume ingested",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(ingestor_bytes_received_total[$__rate_interval]))",
+          "legendFormat": "Bytes/sec",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 12, "y": 9, "w": 6, "h": 6},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "color": {"mode": "palette-classic"}
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Files Written to MinIO",
+      "description": "Parquet files written to bronze layer",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(ingestor_files_written_total[$__rate_interval]))",
+          "legendFormat": "Files/sec",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 18, "y": 9, "w": 6, "h": 6},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {"mode": "palette-classic"}
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Pipeline Latency",
+      "gridPos": {"x": 0, "y": 15, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Spark Batch Processing Latency (p50, p95, p99)",
+      "description": "Time to process enrichment batches",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(spark_batch_processing_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(spark_batch_processing_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(spark_batch_processing_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sensor → Enrichment Latency (p50, p95, p99)",
+      "description": "Full latency from sensor timestamp to Spark enrichment processing",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sensor → Gold Layer Latency (p50, p95, p99)",
+      "description": "Latency from sensor timestamp to gold layer (average temperature) availability",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sensor → Ingestor Timestamp Delay",
+      "description": "Delay between when sensor generated data and when ingestor received it",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ingestor_timestamp_delay_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ingestor_timestamp_delay_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "row",
+      "title": "Backend Spark Processing",
+      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Enrichment Records Processed",
+      "description": "Records processed through enrichment pipeline",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(enrichment_records_processed_total[$__rate_interval]))",
+          "legendFormat": "Records/sec",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 33, "w": 8, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {"mode": "palette-classic"}
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Spark Batches Processed",
+      "description": "Spark batch processing rate",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(spark_batches_processed_total{status=\"success\"}[$__rate_interval]))",
+          "legendFormat": "Success",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(spark_batches_processed_total{status=\"failed\"}[$__rate_interval]))",
+          "legendFormat": "Failed",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {"x": 8, "y": 33, "w": 8, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Active Spark Streams",
+      "description": "Number of active Spark streaming queries",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "spark_active_streams",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 16, "y": 33, "w": 8, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "green", "value": 2}
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      }
+    },
+    {
+      "type": "row",
+      "title": "Error Tracking",
+      "gridPos": {"x": 0, "y": 41, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Message Processing Errors",
+      "description": "Failed message processing rate by error type",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (error_type) (rate(ingestor_messages_failed_total[$__rate_interval]))",
+          "legendFormat": "{{error_type}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 42, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Computation Execution Rate",
+      "description": "Dashboard computation execution rate",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(computation_executions_total[$__rate_interval]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 12, "y": 42, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "version": 1
+}

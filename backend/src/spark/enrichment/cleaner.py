@@ -114,9 +114,9 @@ class DataCleaner:
         from .union_schema import UnionSchemaTransformer
         
         # Log schema information if provided (for debugging/optimization tracking)
-        if schema:
+        if schema and logger.isEnabledFor(logging.DEBUG):
             schema_field_names = [field.name for field in schema.fields]
-            logger.info(f"Union transformation using inferred schema with {len(schema_field_names)} fields: {schema_field_names}")
+            logger.debug(f"Union transformation using inferred schema with {len(schema_field_names)} fields: {schema_field_names}")
         
         # First apply legacy normalization to get clean column names
         normalized_legacy = self.normalize_sensor_columns(df, ingestion_id)

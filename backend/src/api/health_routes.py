@@ -2,12 +2,15 @@
 Health and monitoring API endpoints.
 """
 from fastapi import APIRouter
+from fastapi.responses import Response
+from prometheus_client import generate_latest
 
 from src.api.models import HealthStatus, ApiResponse
 from src.api.dependencies import SparkManagerDep, Neo4jManagerDep
 from src.api.response_utils import success_response, internal_server_error
 from src.utils.logging import get_logger
 from src.utils.api_utils import handle_api_errors
+from src import metrics as backend_metrics
 
 logger = get_logger(__name__)
 
@@ -137,3 +140,21 @@ async def get_health_status(
         health_status["components"]["streams"]["alerts"] = f"error: {str(e)}"
     
     return health_status
+
+
+@router.get("/metrics")
+async def get_metrics(spark_manager: SparkManagerDep):
+    """Prometheus metrics endpoint."""
+    try:
+        # Update active streams metric before generating metrics
+        try:
+            spark = spark_manager.session_manager.spark
+            active_stream_count = len(spark.streams.active)
+            backend_metrics.update_active_streams(active_stream_count)
+        except Exception as e:
+            logger.debug(f"Could not update active streams metric: {e}")
+        
+        return Response(generate_latest(), media_type="text/plain")
+    except Exception as e:
+        logger.error(f"Error generating metrics: {e}")
+        return Response("# Error generating metrics\n", media_type="text/plain")

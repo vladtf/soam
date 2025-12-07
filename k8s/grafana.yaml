@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: grafana
 spec:
-  replicas: 0 # Set to 0 to disable Grafana by default
+  replicas: 1
   selector:
     matchLabels:
       app: grafana

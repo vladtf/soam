@@ -15,6 +15,7 @@ from src.database.database import init_database
 from src.services.data_source_service import DataSourceRegistry, DataSourceManager
 from src.connectors.base import DataMessage
 from src.utils.timestamp_utils import ensure_datetime
+from src import metrics as ingestor_metrics
 
 # Configure structured logging once
 setup_logging(service_name="ingestor", log_file="ingestor.log")
@@ -92,18 +93,36 @@ async def lifespan(app: FastAPI):
             logger.error(f"⚠️ Failed to auto-register Local Simulators MQTT: {e}")
             # Continue startup even if auto-registration fails
         
+        # Initialize metrics
+        ingestor_metrics.init_metrics()
+        
         # Create data handler function for connectors
         def data_handler(message: DataMessage):
             """Handle data from any connector type."""
+            import time
+            import json
+            start_time = time.time()
+            source_type = message.metadata.get('source_type', 'unknown')
+            
             try:
                 # Process the standardized message
                 logger.debug(f"📊 Processing message from source: {message.source_id}")
+                
+                # Record message received
+                message_size = len(json.dumps(message.data).encode('utf-8'))
+                ingestor_metrics.record_message_received(source_type, message.source_id, message_size)
                 
                 # Ensure proper timestamp format
                 from datetime import datetime, timezone
                 
                 # Use the shared utility to ensure we have a datetime object
                 timestamp = ensure_datetime(message.timestamp if message.timestamp and message.timestamp != 'timestamp' else None)
+                
+                # Calculate delay between sensor timestamp and ingestion
+                ingestion_time = datetime.now(timezone.utc)
+                if timestamp.tzinfo is not None:
+                    delay = (ingestion_time - timestamp).total_seconds()
+                    ingestor_metrics.record_timestamp_delay(source_type, delay)
                 
                 # Convert DataMessage to the format expected by MinIO client
                 # The MinIO client expects 'ingestion_id' and 'timestamp' as top-level fields
@@ -112,7 +131,7 @@ async def lifespan(app: FastAPI):
                     'ingestion_id': message.source_id,  # Required by MinIO client
                     'timestamp': timestamp.isoformat(),  # Required by MinIO client in ISO format
                     'source_type': message.metadata.get('source_type'),
-                    'ingestion_timestamp': message.metadata.get('fetch_timestamp', timestamp.isoformat()),
+                    'ingestion_timestamp': ingestion_time.isoformat(),  # When ingestor received it
                     # Add other useful metadata as top-level fields
                     **{k: v for k, v in message.metadata.items() if k not in ['source_type']}
                 }
@@ -131,8 +150,12 @@ async def lifespan(app: FastAPI):
                     metadata_service.process_data(payload)
                     logger.debug("🔍 Metadata extracted")
                 
+                # Record successful processing
+                ingestor_metrics.record_message_processed(source_type, message.source_id)
+                
             except Exception as e:
                 logger.error(f"❌ Error processing data message from {message.source_id}: {e}")
+                ingestor_metrics.record_message_failed(source_type, message.source_id, type(e).__name__)
         
         manager = DataSourceManager(registry, data_handler)
         

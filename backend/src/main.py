@@ -35,6 +35,7 @@ from src.spark.enrichment.cleaner import DataCleaner
 from src.spark.enrichment.usage_tracker import NormalizationRuleUsageTracker
 from src.auth.init_admin import init_default_users
 from src.api.settings_routes import ensure_default_settings
+from src import metrics as backend_metrics
 
 # Configure structured logging once
 setup_logging(service_name="backend", log_file="backend.log")
@@ -97,6 +98,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup
     logger.info("Starting SOAM Smart City Backend...")
+
+    # Initialize Prometheus metrics
+    backend_metrics.init_metrics()
+    logger.info("📊 Prometheus metrics initialized")
 
     # Load environment variables from .env file
     load_dotenv()

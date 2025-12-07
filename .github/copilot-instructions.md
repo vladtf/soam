@@ -338,6 +338,7 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
 |--------|----------|-------------|
 | GET | `/api/ready` | Readiness probe (checks Neo4j, Spark, DB) |
 | GET | `/api/health` | Health check with component status |
+| GET | `/api/metrics` | Prometheus metrics endpoint |
 
 #### Spark Operations (`/api/spark`)
 | Method | Endpoint | Description |
@@ -884,6 +885,47 @@ const safeRefreshInterval = Math.max(refreshIntervalMs, 15000); // Minimum 15 se
 - Query validation and security filtering
 - Integration with computation engine for execution
 - Configuration via Azure OpenAI API (endpoint, key, version)
+
+### 11. Pipeline Metrics & Monitoring
+**Location**: `backend/src/metrics.py`, `ingestor/src/metrics.py`, `grafana/provisioning/ingestor-dashboards/`
+
+**Prometheus Metrics Architecture**:
+The system exposes comprehensive metrics for monitoring throughput and latency across the entire data pipeline.
+
+**Ingestor Metrics** (`ingestor/src/metrics.py`):
+- `ingestor_messages_received_total` - Total messages received (labeled by pod, source_type, ingestion_id)
+- `ingestor_messages_processed_total` - Successfully processed messages
+- `ingestor_messages_failed_total` - Failed messages (labeled by error_type)
+- `ingestor_bytes_received_total` - Data volume ingested
+- `ingestor_processing_latency_seconds` - Message receive to MinIO store latency
+- `ingestor_minio_flush_latency_seconds` - MinIO flush operation latency
+- `ingestor_timestamp_delay_seconds` - Delay between sensor timestamp and ingestion
+
+**Backend Metrics** (`backend/src/metrics.py`):
+- `pipeline_end_to_end_latency_seconds` - Full latency from sensor to gold layer
+- `pipeline_stage_latency_seconds` - Per-stage latency (bronze_write, enrichment, gold_write)
+- `spark_batch_processing_latency_seconds` - Spark batch processing time
+- `enrichment_records_processed_total` - Records through enrichment pipeline
+- `spark_batches_processed_total` - Batch processing count (success/failed)
+- `spark_active_streams` - Number of active Spark streaming queries
+
+**Auto-Scaling Awareness**:
+All metrics include `pod` label for proper aggregation across scaled instances:
+```promql
+# Total throughput across all ingestor pods
+sum(rate(ingestor_messages_received_total[$__rate_interval]))
+
+# Per-pod breakdown for debugging imbalance
+rate(ingestor_messages_received_total[$__rate_interval])
+```
+
+**Grafana Dashboard**: `grafana/provisioning/ingestor-dashboards/pipeline-metrics.json`
+- Ingestor throughput (total and per-pod)
+- Processing success rate gauge
+- Latency percentiles (p50, p95, p99)
+- End-to-end pipeline latency
+- Spark batch processing metrics
+- Error tracking
 
 ## Dev Workflow (Windows PowerShell)
 

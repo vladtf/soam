@@ -104,14 +104,14 @@ portForward:
     port: 9000
     localPort: 9000
 
-# Uncomment the following lines to enable port forwarding for Grafana and Prometheus
-  # - resourceType: service
-  #   resourceName: grafana
-  #   namespace: default
-  #   port: 3000
-  #   localPort: 3001
-  # - resourceType: service
-  #   resourceName: prometheus
-  #   namespace: default
-  #   port: 9090
-  #   localPort: 9091
+# Monitoring stack port forwarding
+  - resourceType: service
+    resourceName: grafana
+    namespace: default
+    port: 3000
+    localPort: 3001
+  - resourceType: service
+    resourceName: prometheus
+    namespace: default
+    port: 9090
+    localPort: 9091

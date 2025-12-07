@@ -5,6 +5,7 @@ import logging
 import time
 from typing import Dict, Any, List
 
+from src import metrics as backend_metrics
 from .session import SparkSessionManager
 from .streaming import StreamingManager
 from .data_access import DataAccessManager
@@ -139,6 +140,9 @@ class SparkManager:
                     stream_info["progressError"] = str(e)
                 
                 active_streams.append(stream_info)
+            
+            # Update Prometheus metric for active streams
+            backend_metrics.update_active_streams(len(active_streams))
             
             # Get information about specific streams we manage
             managed_streams = {}

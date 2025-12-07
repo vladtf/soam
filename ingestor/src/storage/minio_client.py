@@ -12,6 +12,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from minio import Minio
 from minio.error import S3Error
+from src import metrics as ingestor_metrics
+
 
 logger = logging.getLogger(__name__)
 
@@ -211,16 +213,24 @@ class MinioClient:
         table: pa.Table = pa.Table.from_pandas(df)
         pq.write_table(table, buf, compression="snappy")
         buf.seek(0)
+        
+        bytes_to_write = buf.getbuffer().nbytes
+        flush_start_time = time.time()
 
         try:
             self.client.put_object(
                 self.bucket,
                 object_key,
                 data=buf,
-                length=buf.getbuffer().nbytes,
+                length=bytes_to_write,
                 content_type="application/octet-stream",
             )
-            logger.info("MinIO ▶ wrote %d rows • %s → %s", len(rows), self._get_buf_size_message(buf.getbuffer().nbytes), object_key)
+            
+            # Record metrics
+            flush_time = time.time() - flush_start_time
+            ingestor_metrics.record_minio_flush(bytes_to_write, 1)
+            
+            logger.info("MinIO ▶ wrote %d rows • %s → %s (%.2fs)", len(rows), self._get_buf_size_message(bytes_to_write), object_key, flush_time)
         except S3Error as e:
             logger.error("MinIO upload error for ingestion_id %s: %s", ingestion_id, e)
 

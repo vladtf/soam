@@ -2,11 +2,14 @@
 Batch processing logic for enrichment streams.
 """
 import logging
+import time
 from typing import Optional, Tuple, Set
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from .device_filter import DeviceFilter
 from .value_transformer import ValueTransformationProcessor
+from src import metrics as backend_metrics
+
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +81,135 @@ class BatchProcessor:
         except Exception as e:
             logger.warning(f"Could not log {stage} batch sample: {e}")
 
+    def _calculate_end_to_end_latency(self, df: DataFrame) -> None:
+        """Calculate and record latency metrics from sensor timestamp to enrichment.
+        
+        Measures latency from sensor timestamp (when sensor generated data) to 
+        when it was processed by the enrichment pipeline.
+        
+        Args:
+            df: DataFrame containing timestamp field
+        """
+        try:
+            if "timestamp" not in df.columns:
+                logger.debug("No timestamp column found for latency calculation")
+                return
+            
+            # Get current time for latency calculation
+            now = time.time()
+            
+            # Sample a few rows to calculate latency (avoid full scan)
+            sample_rows = df.select("timestamp").take(10)
+            
+            if not sample_rows:
+                return
+            
+            latencies = []
+            
+            for row in sample_rows:
+                row_dict = row.asDict()
+                ts = row_dict.get("timestamp")
+                latency = self._parse_timestamp_to_latency(ts, now)
+                if latency is not None:
+                    latencies.append(latency)
+            
+            # Record sensor-to-enrichment latency metrics
+            for latency in latencies:
+                backend_metrics.record_sensor_to_enrichment_latency(latency)
+                
+            # Log summary
+            if latencies:
+                avg_latency = sum(latencies) / len(latencies)
+                logger.info(f"📊 Sensor-to-enrichment latency: avg={avg_latency:.2f}s (sampled {len(latencies)} records)")
+                
+        except Exception as e:
+            logger.debug(f"Could not calculate latency metrics: {e}")
+
+    def _parse_timestamp_to_latency(self, ts, now: float) -> Optional[float]:
+        """Parse a timestamp and calculate latency from it to now.
+        
+        Args:
+            ts: Timestamp value (string, datetime, or numeric)
+            now: Current time as epoch seconds
+            
+        Returns:
+            Latency in seconds, or None if parsing fails or latency is unreasonable
+        """
+        if ts is None:
+            return None
+            
+        try:
+            if isinstance(ts, str):
+                # Parse ISO format timestamp
+                from datetime import datetime
+                if "T" in ts:
+                    # ISO format: 2024-12-07T10:30:00Z or 2024-12-07T10:30:00.000Z
+                    ts_clean = ts.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(ts_clean)
+                else:
+                    dt = datetime.fromisoformat(ts)
+                ts_epoch = dt.timestamp()
+            elif hasattr(ts, 'timestamp'):
+                # datetime object
+                ts_epoch = ts.timestamp()
+            elif isinstance(ts, (int, float)):
+                # Already epoch timestamp
+                ts_epoch = float(ts)
+                # Check if it's milliseconds
+                if ts_epoch > 1e12:
+                    ts_epoch = ts_epoch / 1000
+            else:
+                return None
+            
+            latency = now - ts_epoch
+            
+            # Only return reasonable latencies (0 to 1 hour)
+            if 0 <= latency <= 3600:
+                return latency
+            return None
+                
+        except Exception:
+            return None
+
+    def _estimate_record_count(self, df: DataFrame) -> int:
+        """Estimate the number of records in a DataFrame without blocking.
+        
+        Uses sampling to avoid expensive full scans on large datasets.
+        
+        Args:
+            df: DataFrame to estimate count for
+            
+        Returns:
+            Estimated record count (0 if empty, actual count for small datasets,
+            estimated count for large datasets)
+        """
+        if df.rdd.isEmpty():
+            logger.info("Union enrichment: wrote 0 rows to enriched")
+            return 0
+            
+        try:
+            # Use a timeout-like approach by checking a small sample first
+            sample_df = df.sample(fraction=0.01, seed=42)
+            if sample_df.rdd.isEmpty():
+                # Very small dataset, safe to count
+                count = df.count()
+                logger.info("Union enrichment: wrote %d rows to enriched", count)
+                return count
+            else:
+                # Larger dataset, estimate or skip exact count to avoid blocking
+                sample_count = sample_df.count()
+                if sample_count > 0:
+                    estimated_count = sample_count * 100
+                    logger.info("Union enrichment: wrote ~%d rows to enriched", estimated_count)
+                    return estimated_count
+                else:
+                    logger.info("Union enrichment: wrote data to enriched (large batch)")
+                    return 100  # Minimum estimate for large batch
+        except Exception as count_error:
+            logger.debug("Could not estimate row count: %s", count_error)
+            logger.info("Union enrichment: wrote data to enriched (count unavailable)")
+            return 100  # Estimate for metrics
+
     def process_batch(self, batch_df: DataFrame, batch_id: int) -> None:
         """Process a batch of enrichment data.
         
@@ -85,6 +217,9 @@ class BatchProcessor:
             batch_df: Input DataFrame
             batch_id: Batch identifier
         """
+        batch_start_time = time.time()
+        records_processed = 0
+        
         try:
             logger.info("Union enrichment batch started: batch_id=%s", batch_id)
 
@@ -144,38 +279,27 @@ class BatchProcessor:
             # Write to Delta with partitioning by ingestion_id
             self._write_to_delta(filtered_df)
 
-            # Log final count (this is after write, so it's necessary)
+            # Calculate and record end-to-end latency (ingestion timestamp -> enrichment)
+            self._calculate_end_to_end_latency(filtered_df)
+
+            # Log final count and record metrics
             try:
-                # PERFORMANCE FIX: Use isEmpty() check instead of expensive count() for large datasets
-                # Only use count() if we can get it quickly
-                if filtered_df.rdd.isEmpty():
-                    logger.info("Union enrichment: wrote 0 rows to enriched")
-                else:
-                    # Try to get count quickly, if it takes too long, just log that data was written
-                    try:
-                        # Use a timeout-like approach by checking a small sample first
-                        sample_df = filtered_df.sample(fraction=0.01, seed=42)
-                        if sample_df.rdd.isEmpty():
-                            # Very small dataset, safe to count
-                            kept: int = filtered_df.count()
-                            logger.info("Union enrichment: wrote %d rows to enriched", kept)
-                        else:
-                            # Larger dataset, estimate or skip exact count to avoid blocking
-                            sample_count = sample_df.count()
-                            if sample_count > 0:
-                                estimated_count = sample_count * 100
-                                logger.info("Union enrichment: wrote ~%d rows to enriched", estimated_count)
-                            else:
-                                logger.info("Union enrichment: wrote data to enriched (large batch)")
-                    except Exception as count_error:
-                        logger.debug("Could not estimate row count: %s", count_error)
-                        logger.info("Union enrichment: wrote data to enriched (count unavailable)")
+                records_processed = self._estimate_record_count(filtered_df)
             except Exception as e:
                 logger.warning(f"Could not determine write status: {e}")
                 logger.info("Union enrichment: write completed")
+            
+            # Record metrics for successful batch processing
+            batch_time = time.time() - batch_start_time
+            backend_metrics.record_spark_batch("enrichment", batch_time, success=True)
+            if records_processed > 0:
+                backend_metrics.record_enrichment_records("all", records_processed)
 
         except Exception as e:
             logger.error(f"Error in union enrichment foreachBatch: {e}")
+            # Record failed batch
+            batch_time = time.time() - batch_start_time
+            backend_metrics.record_spark_batch("enrichment", batch_time, success=False)
 
     def _write_to_delta(self, filtered_df: DataFrame) -> None:
         """Write filtered dataframe to Delta storage.

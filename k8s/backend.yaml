@@ -49,6 +49,14 @@ spec:
               cpu: 2000m
               memory: 2Gi
           env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: NEO4J_URI
               value: bolt://neo4j:7687
             - name: NEO4J_USER

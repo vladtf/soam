@@ -28,6 +28,21 @@ scrape_configs:
 
   # Ingestor metrics
   - job_name: ingestor
-    metrics_path: /metrics
+    metrics_path: /api/metrics
     static_configs:
-      - targets: ['ingestor:8001']  # Replace 'ingestor:8000' with the actual hostname and port of the ingestor service
+      - targets: ['ingestor:8001']
+    # For Kubernetes, use service discovery to auto-discover scaled pods
+    # kubernetes_sd_configs:
+    #   - role: pod
+    #     namespaces:
+    #       names: ['default']
+    # relabel_configs:
+    #   - source_labels: [__meta_kubernetes_pod_label_app]
+    #     regex: ingestor
+    #     action: keep
+
+  # Backend metrics
+  - job_name: backend
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ['backend:8000']

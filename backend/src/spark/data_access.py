@@ -2,11 +2,13 @@
 Data access operations for Spark data.
 """
 import logging
+import time
 from typing import Dict, Any, List
 from pyspark.sql import functions as F
 
 from .config import SparkConfig
 from .session import SparkSessionManager
+from src import metrics as backend_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +76,12 @@ class DataAccessManager:
                 .orderBy(F.col("time_start").asc())  # Order by time ascending (oldest to newest)
             )
             rows = df.collect()
-            return [row.asDict() for row in rows]
+            result = [row.asDict() for row in rows]
+            
+            # Calculate sensor-to-gold latency for the most recent records
+            self._record_sensor_to_gold_latency(result)
+            
+            return result
             
         except Exception as e:
             logger.error(f"Failed to get streaming average temperature: {e}")
@@ -84,6 +91,55 @@ class DataAccessManager:
                 return []  # Return empty list instead of wrapped response
             else:
                 raise e
+
+    def _record_sensor_to_gold_latency(self, rows: List[Dict[str, Any]]) -> None:
+        """Record latency from sensor timestamp (window start) to gold layer availability.
+        
+        The gold layer contains aggregated data with time_start representing the 
+        window start time. The latency is calculated as current_time - time_start,
+        which shows how long it takes for data to become available in gold layer.
+        
+        Args:
+            rows: List of gold layer records containing time_start
+        """
+        if not rows:
+            return
+            
+        try:
+            now = time.time()
+            latencies = []
+            
+            # Sample recent records (last 5 windows)
+            recent_rows = rows[-5:] if len(rows) > 5 else rows
+            
+            for row in recent_rows:
+                time_start = row.get("time_start")
+                if time_start is None:
+                    continue
+                    
+                # Convert time_start to epoch seconds
+                if hasattr(time_start, 'timestamp'):
+                    # datetime object
+                    ts_epoch = time_start.timestamp()
+                else:
+                    continue
+                    
+                latency = now - ts_epoch
+                
+                # Only record reasonable latencies (0 to 1 hour)
+                if 0 <= latency <= 3600:
+                    latencies.append(latency)
+            
+            # Record metrics
+            for latency in latencies:
+                backend_metrics.record_sensor_to_gold_latency(latency)
+                
+            if latencies:
+                avg_latency = sum(latencies) / len(latencies)
+                logger.debug(f"📊 Sensor-to-gold latency: avg={avg_latency:.2f}s (sampled {len(latencies)} windows)")
+                
+        except Exception as e:
+            logger.debug(f"Could not calculate sensor-to-gold latency: {e}")
 
     def get_temperature_alerts(self, since_minutes: int = 60) -> List[Dict[str, Any]]:
         """

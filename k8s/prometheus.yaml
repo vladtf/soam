@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: prometheus
 spec:
-  replicas: 0 # Set to 0 to disable
+  replicas: 1
   selector:
     matchLabels:
       app: prometheus

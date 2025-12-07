@@ -265,15 +265,15 @@ class EnrichmentManager:
         
         logger.info("✅ Raw stream created with inferred schema")
         
-        # Add debug logging
-        try:
-            logger.debug(f"Raw stream columns ({len(raw_stream.columns)}): {raw_stream.columns}")
-            schema_details: List[str] = []
-            for field in raw_stream.schema.fields:
-                schema_details.append(f"{field.name}({field.dataType.simpleString()})")
-            logger.info(f"Raw stream schema details: {schema_details}")
-        except Exception as e:
-            logger.warning(f"Could not log raw stream details: {e}")
+        if logger.isEnabledFor(logging.DEBUG):        
+            try:
+                logger.debug(f"Raw stream columns ({len(raw_stream.columns)}): {raw_stream.columns}")
+                schema_details: List[str] = []
+                for field in raw_stream.schema.fields:
+                    schema_details.append(f"{field.name}({field.dataType.simpleString()})")
+                logger.debug(f"Raw stream schema details: {schema_details}")
+            except Exception as e:
+                logger.warning(f"Could not log raw stream details: {e}")
 
         return raw_stream
 
