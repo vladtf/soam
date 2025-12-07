@@ -28,7 +28,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: prometheus
-    namespace: default
+    namespace: default  # Local development uses default namespace
 roleRef:
   kind: ClusterRole
   name: prometheus

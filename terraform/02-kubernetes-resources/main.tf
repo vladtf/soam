@@ -1735,6 +1735,58 @@ resource "kubernetes_service" "cadvisor" {
 # Monitoring Stack (Optional)
 # =============================================================================
 
+# ServiceAccount for Prometheus (required for Kubernetes service discovery)
+resource "kubernetes_service_account" "prometheus" {
+  count = var.deploy_monitoring ? 1 : 0
+
+  metadata {
+    name      = "prometheus"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+  }
+}
+
+# ClusterRole for Prometheus to scrape metrics from pods
+resource "kubernetes_cluster_role" "prometheus" {
+  count = var.deploy_monitoring ? 1 : 0
+
+  metadata {
+    name = "prometheus"
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["nodes", "nodes/proxy", "services", "endpoints", "pods"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["configmaps"]
+    verbs      = ["get"]
+  }
+}
+
+# ClusterRoleBinding to grant Prometheus access
+resource "kubernetes_cluster_role_binding" "prometheus" {
+  count = var.deploy_monitoring ? 1 : 0
+
+  metadata {
+    name = "prometheus"
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.prometheus[0].metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account.prometheus[0].metadata[0].name
+    namespace = kubernetes_namespace.soam.metadata[0].name
+  }
+}
+
 resource "kubernetes_deployment" "prometheus" {
   count = var.deploy_monitoring ? 1 : 0
 
@@ -1763,6 +1815,8 @@ resource "kubernetes_deployment" "prometheus" {
       }
 
       spec {
+        service_account_name = kubernetes_service_account.prometheus[0].metadata[0].name
+
         container {
           name  = "prometheus"
           image = "${var.acr_login_server}/prometheus:latest"
