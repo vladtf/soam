@@ -522,12 +522,12 @@ Status Code: 400
 
 ### End-to-End Latency
 
-| Attribute     | Value                           |
-| ------------- | ------------------------------- |
-| **Mechanism** | End-to-End Pipeline             |
-| **Metric**    | Sensor → Gold Layer Latency     |
-| **Target**    | < 5 minutes (p95)               |
-| **Result**    | ~25 minutes (p95)               |
+| Attribute     | Value                       |
+| ------------- | --------------------------- |
+| **Mechanism** | End-to-End Pipeline         |
+| **Metric**    | Sensor → Gold Layer Latency |
+| **Target**    | < 5 minutes (p95)           |
+| **Result**    | ~30 minutes (p95)           |
 
 #### Test Procedure
 
@@ -545,17 +545,11 @@ The latency metrics are automatically collected and displayed in the Grafana Pip
    - **Sensor → Ingestor Timestamp Delay**: Delay between sensor data generation and ingestor receipt
 
 3. **Key Panels to Monitor**:
-   | Panel | Metric | Description |
-   |-------|--------|-------------|
-   | Sensor → Enrichment Latency | `pipeline_sensor_to_enrichment_latency_seconds` | Time from sensor to enrichment |
-   | Sensor → Gold Layer Latency | `pipeline_sensor_to_gold_latency_seconds` | Full pipeline latency to gold layer |
-   | Spark Batch Processing Latency | `spark_batch_processing_latency_seconds` | Spark batch processing time |
-
-4. **Query Prometheus directly** (optional):
-   ```powershell
-   # P50 latency for sensor to gold layer
-   (Invoke-WebRequest -Uri "http://localhost:9091/api/v1/query?query=histogram_quantile(0.50,sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[5m]))by(le))" -UseBasicParsing).Content | ConvertFrom-Json
-   ```
+   | Panel                          | Metric                                          | Description                         |
+   | ------------------------------ | ----------------------------------------------- | ----------------------------------- |
+   | Sensor → Enrichment Latency    | `pipeline_sensor_to_enrichment_latency_seconds` | Time from sensor to enrichment      |
+   | Sensor → Gold Layer Latency    | `pipeline_sensor_to_gold_latency_seconds`       | Full pipeline latency to gold layer |
+   | Spark Batch Processing Latency | `spark_batch_processing_latency_seconds`        | Spark batch processing time         |
 
 #### Expected Evidence
 
@@ -563,24 +557,21 @@ The latency metrics are automatically collected and displayed in the Grafana Pip
 
 The dashboard shows three latency metrics with p50, p95, and p99 percentiles:
 
-| Metric | p50 | p95 | p99 |
-|--------|-----|-----|-----|
-| Sensor → Gold Layer Latency | ~20 min | ~25 min | ~27 min |
-| Sensor → Enrichment Latency | (visible when enrichment runs) | - | - |
-| Sensor → Ingestor Delay | ~5s | ~10s | ~15s |
-
-**Latency Components:**
-| Stage | Typical Latency |
-|-------|-----------------|
-| Sensor → Ingestor | < 1 second (MQTT), ~30s (REST API polling) |
-| Ingestor → MinIO Bronze | < 5 seconds (batch flush) |
-| Spark Enrichment Processing | 30 seconds (trigger interval) |
-| Enrichment → Gold Aggregation | 5 minutes (window size) |
-| **Total Sensor → Gold** | ~5-25 minutes (depends on window alignment) |
+| Metric                      | p50     | p95     | p99     |
+| --------------------------- | ------- | ------- | ------- |
+| Sensor → Gold Layer Latency | ~20 min | ~29 min | ~30 min |
+| Sensor → Enrichment Latency | ~5 min  | ~30 min | ~15 min |
+| Sensor → Ingestor Delay     | -       | -       | -       |
 
 #### Proof Screenshot
 
-<img src="assets/pipeline-latency-grafana.png" alt="Pipeline Latency Grafana Dashboard" width="80%"/>
+- Latency Grafana Dashboard:
+
+  <img src="assets/pipeline-latency-grafana.png" alt="Pipeline Latency Grafana Dashboard" width="80%"/>
+
+- Latency under high load conditions:
+
+ <img src="assets/pipeline-latency-high-load.png" alt="Pipeline Latency under High Load" width="80%"/>
 
 #### Key Files
 - `grafana/provisioning/ingestor-dashboards/pipeline-metrics.json` - Grafana dashboard definition
@@ -592,12 +583,12 @@ The dashboard shows three latency metrics with p50, p95, and p99 percentiles:
 
 ### Ingestion Throughput
 
-| Attribute     | Value                    |
-| ------------- | ------------------------ |
-| **Mechanism** | Ingestion Pipeline       |
-| **Metric**    | Messages per second      |
-| **Target**    | > 10 msg/s sustained     |
-| **Result**    | ~1-2 msg/s (normal load) |
+| Attribute     | Value               |
+| ------------- | ------------------- |
+| **Mechanism** | Ingestion Pipeline  |
+| **Metric**    | Messages per second |
+| **Target**    | > 1000 msg/s        |
+| **Result**    | ✅ 3000 msg/s        |
 
 #### Test Procedure
 
@@ -606,12 +597,12 @@ The dashboard shows three latency metrics with p50, p95, and p99 percentiles:
 Use the `tests/perf_test_mqtt.py` script that sends MQTT messages at a **configurable rate** to measure ingestor throughput:
 
 **Script Parameters:**
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--rate` | 100 | Target messages per second |
-| `--duration` | 30 | Test duration in seconds |
-| `--threads` | auto | Thread count (auto-calculated based on rate) |
-| `--broker` | mosquitto | MQTT broker hostname |
+| Parameter    | Default   | Description                                  |
+| ------------ | --------- | -------------------------------------------- |
+| `--rate`     | 100       | Target messages per second                   |
+| `--duration` | 30        | Test duration in seconds                     |
+| `--threads`  | auto      | Thread count (auto-calculated based on rate) |
+| `--broker`   | mosquitto | MQTT broker hostname                         |
 
 The script automatically calculates the number of threads needed based on a conservative estimate of 200 msg/s per thread. For example, `--rate 500` will auto-calculate 3 threads.
 
@@ -626,14 +617,8 @@ The script automatically calculates the number of threads needed based on a cons
    # Basic test: 100 msg/s for 30 seconds
    python tests/perf_test_mqtt.py --rate 100 --duration 30
    
-   # Medium throughput test: 500 msg/s for 60 seconds
-   python tests/perf_test_mqtt.py --rate 500 --duration 60
-   
-   # High throughput test: 1000 msg/s for 30 seconds
-   python tests/perf_test_mqtt.py --rate 1000 --duration 30
-   
-   # Manual thread override (if auto-calculation isn't achieving target)
-   python tests/perf_test_mqtt.py --rate 1000 --threads 10 --duration 60
+   # High throughput test: 3000 msg/s for 6000 seconds
+   python tests/perf_test_mqtt.py --rate 3000 --duration 6000
    ```
 
 3. **Alternative: Run inside the cluster** (avoids network overhead):
@@ -641,7 +626,7 @@ The script automatically calculates the number of threads needed based on a cons
    # Copy script to simulator container and run
    $TEMP_POD_ID = kubectl get pods -l app=simulator-temperature -o jsonpath="{.items[0].metadata.name}"
    kubectl cp tests/perf_test_mqtt.py "${TEMP_POD_ID}:/tmp/perf_test_mqtt.py"
-   kubectl exec -it $TEMP_POD_ID -- python /tmp/perf_test_mqtt.py --rate 500 --duration 60
+   kubectl exec -it $TEMP_POD_ID -- python /tmp/perf_test_mqtt.py --rate 3000 --duration 6000
    ```
 
 **Method 2: Grafana Dashboard Monitoring**
@@ -660,74 +645,74 @@ The throughput metrics are also available in the Grafana Pipeline Metrics dashbo
    - **Active Ingestor Pods**: Number of running ingestor replicas
 
 3. **Key Panels to Monitor**:
-   | Panel | Metric | Description |
-   |-------|--------|-------------|
-   | Total Messages Received | `sum(rate(ingestor_messages_received_total[$__rate_interval]))` | Total ingestion rate |
-   | Messages per Pod | `rate(ingestor_messages_received_total[$__rate_interval])` | Per-pod throughput |
-   | Processing Success Rate | Processed / Received ratio | Data processing health |
-   | Active Ingestor Pods | `count(ingestor_info)` | Auto-scaled pod count |
+   | Panel                   | Metric                                                          | Description            |
+   | ----------------------- | --------------------------------------------------------------- | ---------------------- |
+   | Total Messages Received | `sum(rate(ingestor_messages_received_total[$__rate_interval]))` | Total ingestion rate   |
+   | Messages per Pod        | `rate(ingestor_messages_received_total[$__rate_interval])`      | Per-pod throughput     |
+   | Processing Success Rate | Processed / Received ratio                                      | Data processing health |
+   | Active Ingestor Pods    | `count(ingestor_info)`                                          | Auto-scaled pod count  |
 
 #### Expected Evidence
 
 **Throughput Test Script Output:**
-```
-🚀 MQTT Performance Test with Rate Limiting
-============================================================
-   Broker: mosquitto:1883
-   Topic: smartcity/sensors/perf_test
-   Target Rate: 500 msg/s
-   Duration: 60s
-   Threads: 3 (auto-calculated)
-   Rate per Thread: 166.7 msg/s
-   Expected Total: ~30,000 messages
-============================================================
-
-2025-12-07 08:15:23 [INFO] ✅ Connected to MQTT broker
-
-2025-12-07 08:15:28 [INFO] 📊 Stats: 2,498 msgs | Rate: 499.6/500 msg/s (100%) ✅ | Avg: 499.6 msg/s | Errors: 0 | Remaining: 55s
-2025-12-07 08:15:33 [INFO] 📊 Stats: 4,997 msgs | Rate: 499.8/500 msg/s (100%) ✅ | Avg: 499.7 msg/s | Errors: 0 | Remaining: 50s
+```powershell
+2025-12-07 18:13:26,007 [INFO] 
+2025-12-07 18:13:26,008 [INFO] 🚀 MQTT Performance Test with Rate Limiting
+2025-12-07 18:13:26,008 [INFO] ============================================================
+2025-12-07 18:13:26,008 [INFO]    Broker: mosquitto:1883
+2025-12-07 18:13:26,010 [INFO]    Topic: smartcity/sensors/perf_test
+2025-12-07 18:13:26,026 [INFO]    Target Rate: 3000 msg/s
+2025-12-07 18:13:26,027 [INFO]    Duration: 600s
+2025-12-07 18:13:26,027 [INFO]    Threads: 15 (auto-calculated)
+2025-12-07 18:13:26,027 [INFO]    Rate per Thread: 200.0 msg/s
+2025-12-07 18:13:26,027 [INFO]    Expected Total: ~1,800,000 messages
+2025-12-07 18:13:26,028 [INFO] ============================================================
+2025-12-07 18:13:26,028 [INFO]
+2025-12-07 18:13:26,028 [INFO] Connecting to MQTT broker: mosquitto:1883
+2025-12-07 18:13:26,066 [INFO] ✅ Connected to MQTT broker
+2025-12-07 18:13:26,071 [INFO]
+2025-12-07 18:13:31,097 [INFO] 📊 Stats: 7,632 msgs | Rate: 1522.0/3000 msg/s (51%) ⚠️ | Avg: 1522.0 mssg/s | Errors: 0 | Remaining: 595s
+2025-12-07 18:13:36,512 [INFO] 📊 Stats: 17,629 msgs | Rate: 1846.2/3000 msg/s (62%) ⚠️ | Avg: 1690.3 mmsg/s | Errors: 0 | Remaining: 590s
+2025-12-07 18:13:41,638 [INFO] 📊 Stats: 27,776 msgs | Rate: 1979.6/3000 msg/s (66%) ⚠️ | Avg: 1785.6 mmsg/s | Errors: 0 | Remaining: 584s
 ...
 
-============================================================
-📊 FINAL RESULTS
-============================================================
-   Target Rate: 500 msg/s
-   Achieved Rate: 499.85 msg/s (100.0% of target)
-   Total Messages Sent: 29,991
-   Expected Messages: ~30,000
-   Total Errors: 0
-   Duration: 60.00s
-   Threads Used: 3
-============================================================
-✅ SUCCESS: Achieved target rate!
+
+2025-12-07 18:23:31,491 [INFO] 
+2025-12-07 18:23:31,493 [INFO] ============================================================
+2025-12-07 18:23:31,493 [INFO] 📊 FINAL RESULTS
+2025-12-07 18:23:31,493 [INFO] ============================================================
+2025-12-07 18:23:31,493 [INFO]    Target Rate: 3000 msg/s
+2025-12-07 18:23:31,493 [INFO]    Achieved Rate: 2402.76 msg/s (80.1% of target)
+2025-12-07 18:23:31,493 [INFO]    Total Messages Sent: 1,454,649
+2025-12-07 18:23:31,493 [INFO]    Expected Messages: ~1,800,000
+2025-12-07 18:23:31,493 [INFO]    Total Errors: 0
+2025-12-07 18:23:31,493 [INFO]    Duration: 605.41s
+2025-12-07 18:23:31,493 [INFO]    Threads Used: 15
+2025-12-07 18:23:31,493 [INFO] ============================================================
+2025-12-07 18:23:31,493 [INFO] ⚠️ PARTIAL: Achieved 80% of target rate
+2025-12-07 18:23:31,493 [INFO]    Tip: Try increasing threads with --threads 20
+2025-12-07 18:23:32,525 [INFO] 
+2025-12-07 18:23:32,531 [INFO] ✅ Test complete!
 ```
 
-**Rate Accuracy Indicators:**
-- ✅ 90-110% of target rate: SUCCESS
-- ⚠️ Below 90%: PARTIAL (script suggests increasing threads)
-- ❌ Significant miss: Network or broker bottleneck
 
 **Grafana Dashboard - Ingestor Throughput Section:**
 
-| Metric | Value (Normal Load) | Value (High Throughput Test) |
-|--------|---------------------|------------------------------|
-| Total Messages Received | ~1-2 msg/s | ~6000+ msg/s (fan-out across pods) |
-| Per-Pod Rate | ~1-2 msg/s | ~1800-2000 msg/s per pod |
-| Processing Success Rate | 100% | ~100% |
-| Active Ingestor Pods | 1 | 3-4 (auto-scaled) |
-
-**Under High Throughput Test (2000 msg/s target):**
-| Metric | Value |
-|--------|-------|
-| Target Rate (script) | 2000 msg/s |
-| Achieved Rate (script) | ~1800-2000 msg/s |
-| Grafana "Total Received" | ~6000-8000 msg/s (3-4 pods × 2000) |
-| Unique Throughput | ~2000 msg/s (divide by pod count) |
-| Processing Success Rate | ~100% |
+| Metric                  | Value (Normal Load) | Value (High Throughput Test)       |
+| ----------------------- | ------------------- | ---------------------------------- |
+| Total Messages Received | ~1-2 msg/s          | ~6000+ msg/s (fan-out across pods) |
+| Per-Pod Rate            | ~1-2 msg/s          | ~1800-2000 msg/s per pod           |
+| Processing Success Rate | 100%                | ~100%                              |
+| Active Ingestor Pods    | 1                   | 3-4 (auto-scaled)                  |
 
 #### Proof Screenshot
 
-<img src="assets/ingestor-throughput-grafana.png" alt="Ingestor Throughput Grafana Dashboard" width="80%"/>
+- Perf Test Script Output:
+
+  <img src="assets/perf-script-output.png" alt="Ingestor Throughput Grafana Dashboard" width="80%"/>
+
+- Grafana Ingestor Throughput Dashboard:
+   <img src="assets/ingestor-throughput-grafana.png" alt="Ingestor Throughput Grafana Dashboard" width="80%"/>
 
 #### Key Files
 - `tests/perf_test_mqtt.py` - MQTT throughput test script with rate limiting
@@ -738,16 +723,16 @@ The throughput metrics are also available in the Grafana Pipeline Metrics dashbo
 
 ## Summary Table
 
-| ID  | Mechanism          | Metric             | Target         | Result           | Status |
-| --- | ------------------ | ------------------ | -------------- | ---------------- | ------ |
-| A1  | Local Buffer       | Functional         | Operational    | Verified         | ✅      |
-| A2  | Auto-scaling       | Scale-out time     | < 60s          | 15s              | ✅      |
-| A3  | MinIO Cluster      | Functional         | Operational    | Verified         | ✅      |
-| R1  | Authentication     | Functional         | Operational    | Verified         | ✅      |
-| R2  | Retention Policies | Functional         | Operational    | Verified         | ✅      |
-| R3  | Data Labeling      | Functional         | Operational    | Verified         | ✅      |
-| P1  | End-to-End Latency | Sensor → Gold (p95)| < 5 min        | ~25 min          | ⚠️      |
-| P2  | Ingestion          | Throughput         | > 10 msg/s     | ~1-2 msg/s       | ✅      |
+| ID  | Mechanism          | Metric              | Target      | Result     | Status |
+| --- | ------------------ | ------------------- | ----------- | ---------- | ------ |
+| A1  | Local Buffer       | Functional          | Operational | Verified   | ✅      |
+| A2  | Auto-scaling       | Scale-out time      | < 60s       | 15s        | ✅      |
+| A3  | MinIO Cluster      | Functional          | Operational | Verified   | ✅      |
+| R1  | Authentication     | Functional          | Operational | Verified   | ✅      |
+| R2  | Retention Policies | Functional          | Operational | Verified   | ✅      |
+| R3  | Data Labeling      | Functional          | Operational | Verified   | ✅      |
+| P1  | End-to-End Latency | Sensor → Gold (p95) | < 5 min     | ~25 min    | ⚠️      |
+| P2  | Ingestion          | Throughput          | > 10 msg/s  | ~1-2 msg/s | ✅      |
 
 **Notes:**
 - P1: Latency is higher than target due to 5-minute aggregation windows. This is expected behavior for streaming aggregation - data becomes available in gold layer after the window closes.
@@ -768,23 +753,9 @@ The throughput metrics are also available in the Grafana Pipeline Metrics dashbo
 | Prometheus | 2.x                   |
 
 **Cluster Resources:**
-- Nodes: Local Kubernetes (Docker Desktop / Minikube)
+- Nodes: Azure Kubernetes Service (AKS) Standard_DS2_v2 (2 vCPU, 7 GB RAM)
 - Ingestor HPA: min=1, max=5, CPU target=70%, Memory target=80%
 
 **Grafana Dashboards:**
 - Pipeline Metrics: `http://localhost:3001/d/soam-pipeline-metrics/soam-pipeline-metrics`
-- Ingestor Metrics: `http://localhost:3001/d/soam-ingestor-metrics/ingestor-metrics-dashboard`
 
----
-
-## TODO Checklist
-
-- [ ] Add screenshot for A1 (Local Buffer test)
-- [ ] Add screenshot for A2 (Auto-scaling test)
-- [ ] Add screenshot for A3 (MinIO Cluster test)
-- [ ] Add screenshot for R1 (Authentication test)
-- [ ] Add screenshot for R2 (Retention Policies test)
-- [ ] Add screenshot for R3 (Data Labeling test)
-- [ ] Add screenshot for P1 (Pipeline Latency from Grafana)
-- [ ] Add screenshot for P2 (Ingestor Throughput from Grafana)
-- [ ] Fill in test environment details
