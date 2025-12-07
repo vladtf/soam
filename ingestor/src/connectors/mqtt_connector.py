@@ -1,28 +1,55 @@
 """
 MQTT data source connector.
 Refactored version of the existing MQTT client using the new connector architecture.
+
+Supports MQTT v5 Shared Subscriptions for horizontal scaling:
+- When multiple ingestor pods subscribe to the same shared subscription group,
+  the broker distributes messages among them (load balancing).
+- This prevents message duplication when scaling out.
+- Shared subscriptions use the format: $share/<group-name>/<topic>
 """
 import asyncio
 import json
+import os
 from typing import Dict, Any
 import paho.mqtt.client as mqtt
 from datetime import datetime, timezone
 from .base import BaseDataConnector, DataMessage, ConnectorStatus, ConnectorHealthResponse
 from ..utils.timestamp_utils import extract_timestamp
 
+# Default shared subscription group name for load balancing across ingestor pods
+# All ingestor pods with the same group name will share messages (round-robin)
+DEFAULT_SHARED_GROUP = os.environ.get("MQTT_SHARED_GROUP", "ingestor-group")
+
 
 class MQTTConnector(BaseDataConnector):
-    """MQTT data source connector."""
+    """
+    MQTT data source connector with shared subscription support.
+    
+    Shared Subscriptions (MQTT v5):
+    - Multiple subscribers in the same group share messages (load balancing)
+    - Topic format: $share/<group-name>/<original-topic>
+    - Enable via config: "use_shared_subscription": true
+    - Group name via config: "shared_group": "my-group" or env MQTT_SHARED_GROUP
+    """
     
     def __init__(self, source_id: str, config: Dict[str, Any], data_handler):
         super().__init__(source_id, config, data_handler)
         self.client = None
         self.connected = asyncio.Event()
+        
+        # Shared subscription configuration
+        self.use_shared_subscription = config.get("use_shared_subscription", True)  # Default to True for scaling
+        self.shared_group = config.get("shared_group", DEFAULT_SHARED_GROUP)
     
     async def connect(self) -> bool:
-        """Connect to MQTT broker."""
+        """Connect to MQTT broker using MQTT v5 protocol for shared subscriptions."""
         try:
-            self.client = mqtt.Client()
+            # Use MQTT v5 protocol for shared subscription support
+            self.client = mqtt.Client(
+                protocol=mqtt.MQTTv5,
+                callback_api_version=mqtt.CallbackAPIVersion.VERSION2
+            )
             self.client.on_connect = self._on_connect
             self.client.on_message = self._on_message
             self.client.on_disconnect = self._on_disconnect
@@ -35,7 +62,11 @@ class MQTTConnector(BaseDataConnector):
             if username and password:
                 self.client.username_pw_set(username, password)
             
-            self.logger.info(f"🔌 Connecting to MQTT broker {broker}:{port}")
+            pod_name = os.environ.get("POD_NAME", "unknown")
+            self.logger.info(f"🔌 Connecting to MQTT broker {broker}:{port} (pod: {pod_name})")
+            if self.use_shared_subscription:
+                self.logger.info(f"📊 Shared subscription enabled, group: {self.shared_group}")
+            
             self.client.connect(broker, port, 60)
             self.client.loop_start()
             
@@ -80,7 +111,10 @@ class MQTTConnector(BaseDataConnector):
         connection_details = {
             "broker": self.config.get("broker"),
             "port": self.config.get("port", 1883),
-            "topics": self.config.get("topics", [])
+            "topics": self.config.get("topics", []),
+            "use_shared_subscription": self.use_shared_subscription,
+            "shared_group": self.shared_group if self.use_shared_subscription else None,
+            "pod_name": os.environ.get("POD_NAME", "unknown")
         }
         
         return ConnectorHealthResponse(
@@ -91,22 +125,49 @@ class MQTTConnector(BaseDataConnector):
             error=self.last_error
         )
     
-    def _on_connect(self, client, userdata, flags, rc):
-        """MQTT connection callback."""
-        if rc == 0:
-            self.logger.info("✅ MQTT connected successfully")
+    def _convert_to_shared_topic(self, topic: str) -> str:
+        """
+        Convert a regular topic to shared subscription format.
+        
+        MQTT v5 shared subscription format: $share/<group-name>/<topic>
+        Example: smartcity/sensors/+ -> $share/ingestor-group/smartcity/sensors/+
+        
+        This allows multiple subscribers in the same group to share messages,
+        enabling horizontal scaling without message duplication.
+        """
+        if not self.use_shared_subscription:
+            return topic
+            
+        # Don't convert if already a shared subscription
+        if topic.startswith("$share/"):
+            return topic
+            
+        shared_topic = f"$share/{self.shared_group}/{topic}"
+        return shared_topic
+    
+    def _on_connect(self, client, userdata, flags, reason_code, properties=None):
+        """MQTT v5 connection callback."""
+        if reason_code == 0 or reason_code.is_failure == False:
+            pod_name = os.environ.get("POD_NAME", "unknown")
+            self.logger.info(f"✅ MQTT connected successfully (pod: {pod_name})")
             topics = self.config.get("topics", [])
             
             if isinstance(topics, str):
                 topics = [topics]  # Handle single topic as string
                 
             for topic in topics:
-                client.subscribe(topic)
-                self.logger.info(f"📩 Subscribed to topic: {topic}")
+                # Convert to shared subscription if enabled
+                subscribe_topic = self._convert_to_shared_topic(topic)
+                client.subscribe(subscribe_topic)
+                
+                if self.use_shared_subscription:
+                    self.logger.info(f"📩 Subscribed to shared topic: {subscribe_topic} (original: {topic})")
+                else:
+                    self.logger.info(f"📩 Subscribed to topic: {subscribe_topic}")
             
             self.connected.set()
         else:
-            self.logger.error(f"❌ MQTT connection failed with code {rc}")
+            self.logger.error(f"❌ MQTT connection failed with reason code {reason_code}")
     
     def _on_message(self, client, userdata, msg):
         """MQTT message callback."""
@@ -149,12 +210,13 @@ class MQTTConnector(BaseDataConnector):
         except Exception as e:
             self.logger.error(f"❌ Error processing MQTT message: {e}")
     
-    def _on_disconnect(self, client, userdata, rc):
-        """MQTT disconnect callback."""
-        if rc != 0:
-            self.logger.warning(f"⚠️ MQTT disconnected unexpectedly with code {rc}")
+    def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties=None):
+        """MQTT v5 disconnect callback."""
+        pod_name = os.environ.get("POD_NAME", "unknown")
+        if reason_code != 0:
+            self.logger.warning(f"⚠️ MQTT disconnected unexpectedly with code {reason_code} (pod: {pod_name})")
         else:
-            self.logger.info("📡 MQTT disconnected cleanly")
+            self.logger.info(f"📡 MQTT disconnected cleanly (pod: {pod_name})")
         self.connected.clear()
     
     @classmethod
@@ -192,6 +254,16 @@ class MQTTConnector(BaseDataConnector):
                 "password": {
                     "type": "string",
                     "description": "MQTT password (optional)"
+                },
+                "use_shared_subscription": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Enable MQTT v5 shared subscriptions for horizontal scaling. When enabled, multiple ingestor pods share messages (load balancing) instead of each receiving all messages."
+                },
+                "shared_group": {
+                    "type": "string",
+                    "default": "ingestor-group",
+                    "description": "Shared subscription group name. All pods with the same group share messages. Default: 'ingestor-group' or MQTT_SHARED_GROUP env var."
                 }
             },
             "required": ["broker", "topics"]
