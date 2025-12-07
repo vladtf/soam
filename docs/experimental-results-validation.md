@@ -124,13 +124,13 @@ This document provides detailed test procedures and evidence for each dependabil
 #### Expected Evidence
 
 **HPA Configuration:**
-```
+```powershell
 NAME           REFERENCE             TARGETS                        MINPODS   MAXPODS   REPLICAS   AGE
 ingestor-hpa   Deployment/ingestor   cpu: 4%/70%, memory: 48%/80%   1         5         1          6m44s
 ```
 
 **Scale-out Event Log:**
-```
+```powershell
 NAME                        READY   STATUS    RESTARTS   AGE
 ingestor-59bdb4fddc-f8jrx   1/1     Running   0          28s
 ingestor-59bdb4fddc-v4d5v   1/1     Running   0          9m29s
@@ -194,7 +194,7 @@ ingestor-59bdb4fddc-js2d9   1/1     Running             0          1s
 #### Expected Evidence
 
 **Healthy Cluster State:**
-```
+```powershell
 NAME      READY   STATUS    RESTARTS   AGE
 minio-0   1/1     Running   0          16m
 minio-1   1/1     Running   0          16m
@@ -202,7 +202,7 @@ minio-2   1/1     Running   0          16m
 ```
 
 **Data Accessible During Failure:**
-```
+```powershell
 ➜  kubectl exec -it minio-0 -- sh -c "mc alias set local http://localhost:9000 minio minio123 && mc ls local/lake/ --recursive | head -20"
 mc: Configuration written to `/tmp/.mc/config.json`. Please update your access credentials.
 mc: Successfully created `/tmp/.mc/share`.
@@ -216,12 +216,12 @@ Added `local` successfully.
 ```
 
 **Pod Auto-Recovery:**
-```
+```powershell
 NAME      READY   STATUS    RESTARTS   AGE                                                                                                                                                                                                           
-minio-0   1/1     Running   0          20m                                                                                                                                                                                                           
-minio-1   0/1     Running   0          2s                                                                                                                                                                                                            
-minio-2   1/1     Running   0          20m                                                                                                                                                                                                           
-minio-1   1/1     Running   0          11s  
+minio-0   1/1     Running   0   20m                                                                          
+minio-1   0/1     Running   0   2s  
+minio-2   1/1     Running   0   20m
+minio-1   1/1     Running   0   11s  
 ```
 
 #### Proof Screenshot
@@ -284,7 +284,7 @@ minio-1   1/1     Running   0          11s
 #### Expected Evidence
 
 **Successful Login Response:**
-```json
+```powershell
 ➜  $response = Invoke-RestMethod -Uri "http://localhost:8000/api/auth/login" `                                                                                                                                                                       
 >        -Method POST -ContentType "application/json" `
 >        -Body '{"username": "admin", "password": "admin"}'
@@ -302,7 +302,7 @@ success @{id=1; username=admin; email=admin@soam.local; roles=System.Object[]; i
 
 
 **Unauthorized Access Response:**
-```
+```powershell
 ➜     try {
 >        Invoke-RestMethod -Uri "http://localhost:8000/api/auth/me"
 >    } catch {
@@ -312,7 +312,7 @@ Status Code: 401
 ```
 
 **Invalid Credentials Response:**
-```
+```powershell
 ➜     try {
 >        Invoke-RestMethod -Uri "http://localhost:8000/api/auth/login" `
 >            -Method POST -ContentType "application/json" `
@@ -360,7 +360,7 @@ Status Code: 400
 #### Expected Evidence
 
 **Lifecycle Rules Summary:**
-```
+```powershell
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │ Expiration for latest version (Expiration)                                             │
 ├──────────────────────┬─────────┬─────────┬──────┬────────────────┬─────────────────────┤
