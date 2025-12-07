@@ -27,7 +27,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "count(count by (pod) (ingestor_messages_received_total))",
+          "expr": "count(ingestor_info)",
           "refId": "A"
         }
       ],
