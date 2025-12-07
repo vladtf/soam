@@ -322,7 +322,7 @@ class DataSourceRegistry:
         # Add type prefix and hash for uniqueness
         timestamp = int(datetime.utcnow().timestamp())
         unique_part = hashlib.md5(f"{name}_{type_name}_{timestamp}".encode()).hexdigest()[:8]
-        return f"{type_name}_{sanitized}_{unique_part}"
+        return f"{unique_part}_{sanitized}_{type_name}"
 
 
 class DataSourceManager:
