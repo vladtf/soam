@@ -26,20 +26,28 @@ scrape_configs:
   #   static_configs:
   #     - targets: ['mosquitto-exporter:9234']
 
-  # Ingestor metrics
+  # Ingestor metrics - uses Kubernetes pod discovery to scrape all scaled pods
   - job_name: ingestor
     metrics_path: /api/metrics
-    static_configs:
-      - targets: ['ingestor:8001']
-    # For Kubernetes, use service discovery to auto-discover scaled pods
-    # kubernetes_sd_configs:
-    #   - role: pod
-    #     namespaces:
-    #       names: ['default']
-    # relabel_configs:
-    #   - source_labels: [__meta_kubernetes_pod_label_app]
-    #     regex: ingestor
-    #     action: keep
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['default']
+    relabel_configs:
+      # Only keep pods with label app=ingestor
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: ingestor
+        action: keep
+      # Use pod IP and port 8001 as target
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: ${1}:8001
+      # Add pod name as label for identification
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      # Add node name for debugging
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
 
   # Backend metrics
   - job_name: backend
