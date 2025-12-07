@@ -709,19 +709,20 @@ The throughput metrics are also available in the Grafana Pipeline Metrics dashbo
 
 **Grafana Dashboard - Ingestor Throughput Section:**
 
-| Metric | Value |
-|--------|-------|
-| Total Messages Received | ~1-2 msg/s (4 sensors × 0.1-0.5 msg/s each) |
-| Processing Success Rate | 100% |
-| Active Ingestor Pods | 1-5 (auto-scales based on load) |
-| Data Bytes Received | ~100-200 B/s |
-| Files Written to MinIO | ~0.2-0.5 ops/s |
+| Metric | Value (Normal Load) | Value (High Throughput Test) |
+|--------|---------------------|------------------------------|
+| Total Messages Received | ~1-2 msg/s | ~6000+ msg/s (fan-out across pods) |
+| Per-Pod Rate | ~1-2 msg/s | ~1800-2000 msg/s per pod |
+| Processing Success Rate | 100% | ~100% |
+| Active Ingestor Pods | 1 | 3-4 (auto-scaled) |
 
-**Under High Throughput Test (500 msg/s):**
+**Under High Throughput Test (2000 msg/s target):**
 | Metric | Value |
 |--------|-------|
-| Target Rate | 500 msg/s |
-| Achieved Rate | ~495-500 msg/s (99%+) |
+| Target Rate (script) | 2000 msg/s |
+| Achieved Rate (script) | ~1800-2000 msg/s |
+| Grafana "Total Received" | ~6000-8000 msg/s (3-4 pods × 2000) |
+| Unique Throughput | ~2000 msg/s (divide by pod count) |
 | Processing Success Rate | ~100% |
 
 #### Proof Screenshot
