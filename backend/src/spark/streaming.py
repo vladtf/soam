@@ -141,22 +141,27 @@ class StreamingManager:
         self._stop_all_existing_queries()
         
         try:
+            logger.debug("🔧 Starting enrichment stream...")
             self.enrichment_manager.start_enrichment_stream()
-            logger.info("Union enrichment stream started successfully")
+            logger.debug("✅ Union enrichment stream started successfully")
         except Exception as e:
-            logger.error(f"Failed to start enrichment stream: {e}")
+            logger.error(f"❌ Failed to start enrichment stream: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
         try:
+            logger.debug("🔧 Starting temperature stream...")
             self.start_temperature_stream()
             logger.info("Union temperature streaming started successfully")
         except Exception as e:
-            logger.error(f"Failed to start temperature stream: {e}")
+            logger.error(f"❌ Failed to start temperature stream: {e}")
 
         try:
+            logger.debug("🔧 Starting alert stream...")
             self.start_alert_stream()
-            logger.info("Union alert streaming started successfully")
+            logger.info("✅ Union alert streaming started successfully")
         except Exception as e:
-            logger.error(f"Failed to start alert stream: {e}")
+            logger.error(f"❌ Failed to start alert stream: {e}")
 
     def ensure_streams_running(self) -> None:
         """Ensure streaming jobs are running, start them if not.

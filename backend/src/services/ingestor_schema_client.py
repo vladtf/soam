@@ -14,21 +14,25 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # Type mapping from ingestor schema types to Spark types
+# Note: All numeric types map to DoubleType because the ingestor writes
+# all numerics as float64 in Parquet for schema consistency.
+# Timestamps are mapped to StringType because they're stored as ISO strings.
 INGESTOR_TO_SPARK_TYPE = {
     "string": StringType(),
     "str": StringType(),
-    "int": IntegerType(),
-    "integer": IntegerType(),
-    "long": LongType(),
-    "bigint": LongType(),
-    "float": FloatType(),
+    "int": DoubleType(),        # Stored as double in Parquet
+    "integer": DoubleType(),    # Stored as double in Parquet
+    "long": DoubleType(),       # Stored as double in Parquet
+    "bigint": DoubleType(),     # Stored as double in Parquet
+    "float": DoubleType(),      # Widened to double for consistency
     "double": DoubleType(),
     "number": DoubleType(),
     "bool": BooleanType(),
     "boolean": BooleanType(),
-    "timestamp": TimestampType(),
-    "datetime": TimestampType(),
-    "date": DateType(),
+    "timestamp": StringType(),  # Stored as ISO string in Parquet
+    "datetime": StringType(),   # Stored as ISO string in Parquet
+    "date": StringType(),       # Stored as ISO string in Parquet
+    "uuid": StringType(),       # UUIDs are strings
 }
 
 

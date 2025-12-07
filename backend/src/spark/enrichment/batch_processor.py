@@ -107,9 +107,6 @@ class BatchProcessor:
                 logger.info("Union enrichment: no rows after filtering - skipping write to avoid empty parquet files")
                 return
 
-            # Log filtering statistics
-            self.device_filter.log_filtering_stats(batch_df, filtered_df, allowed_ids, has_wildcard)
-
             # Apply value transformations
             try:
                 transformed_df: DataFrame = self.value_transformer.apply_transformations(filtered_df)

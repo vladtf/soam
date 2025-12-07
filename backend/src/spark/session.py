@@ -56,6 +56,7 @@ class SparkSessionManager:
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
             .config("spark.sql.mapKeyDedupPolicy", "LAST_WIN")  # Handle duplicate map keys
+            .config("spark.sql.session.timeZone", "UTC")  # Use UTC for all timestamp operations
             .getOrCreate()
         )
         

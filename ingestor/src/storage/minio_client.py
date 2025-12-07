@@ -198,6 +198,14 @@ class MinioClient:
         key_prefix = f"{self.BRONZE_PATH}/ingestion_id={ingestion_id}/date={date}/hour={hour}/"
         object_key = key_prefix + f"part-{uuid.uuid4().hex}.parquet"
 
+        # Normalize numeric types: convert all int columns to float64 (double)
+        # This ensures consistent schema across files from different sources
+        # Spark can then read all files without type conflicts (INT64 vs DOUBLE)
+        for col in df.columns:
+            if pd.api.types.is_integer_dtype(df[col]):
+                df[col] = df[col].astype('float64')
+                logger.debug("MinIO ▶ Converted column '%s' from int to float64", col)
+
         # write to an in-memory Parquet buffer
         buf = io.BytesIO()
         table: pa.Table = pa.Table.from_pandas(df)

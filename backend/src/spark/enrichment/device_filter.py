@@ -30,7 +30,7 @@ class DeviceFilter:
             # Get allowed ingestion IDs
             rows: List = session.query(Device.ingestion_id).filter(Device.enabled == True).all()
             raw_allowed: List[str] = [r[0] for r in rows]
-            logger.info("Device filter: registered ingestion_ids: %s", raw_allowed)
+            logger.debug("Device filter: registered ingestion_ids: %s", raw_allowed)
             
             # Check for wildcard registration (None ingestion_id means accept all)
             has_wildcard: bool = any(iid is None for iid in raw_allowed)
@@ -42,8 +42,8 @@ class DeviceFilter:
                 if iid is not None and str(iid).strip().lower() not in ("", "unknown")
             }
             
-            logger.info("Device filter: normalized allowed IDs: %s", normalized_allowed)
-            logger.info("Device filter: has wildcard registration: %s", has_wildcard)
+            logger.debug("Device filter: normalized allowed IDs: %s", normalized_allowed)
+            logger.debug("Device filter: has wildcard registration: %s", has_wildcard)
             
             return normalized_allowed, has_wildcard
             
@@ -83,6 +83,17 @@ class DeviceFilter:
             logger.info("Device filter: wildcard registration - accepting all data")
             return batch_df
         
+        # Discovered ingestion IDs in the batch for logging
+        ingestion_ids_in_batch = batch_df.select(F.lower(F.trim(F.col("ingestion_id")))).distinct().take(20)
+        logger.debug("Device filter: ingestion_ids in batch: %s", [row[0] for row in ingestion_ids_in_batch])
+        
+        # Log devices that will be kept/filtered
+        ids_in_batch_set = {row[0] for row in ingestion_ids_in_batch}
+        ids_to_keep = ids_in_batch_set.intersection(allowed_ids)
+        ids_to_filter = ids_in_batch_set.difference(allowed_ids)
+        logger.debug("Device filter: keeping ingestion_ids: %s", ids_to_keep)
+        logger.debug("Device filter: filtering out ingestion_ids: %s", ids_to_filter)
+        
         # Apply filter for specific ingestion IDs
         filtered = batch_df.filter(
             F.lower(F.trim(F.col("ingestion_id"))).isin(list(allowed_ids))
@@ -90,60 +101,4 @@ class DeviceFilter:
         
         return filtered
 
-    def log_filtering_stats(self, batch_df, filtered_df, allowed_ids: Set[str], has_wildcard: bool) -> None:
-        """Log filtering statistics for debugging.
-        
-        Args:
-            batch_df: Original DataFrame
-            filtered_df: Filtered DataFrame
-            allowed_ids: Set of allowed ingestion IDs
-            has_wildcard: Whether wildcard registration exists
-        """
-        try:
-            # Debug: Log sample of ingestion_ids in the batch (non-blocking)
-            if "ingestion_id" in batch_df.columns:
-                sample_ids: List[str] = [r[0] for r in batch_df.select("ingestion_id").distinct().limit(5).collect()]
-                logger.info("Device filter: sample ingestion_ids in batch: %s", sample_ids)
-
-            # PERFORMANCE FIX: Use RDD isEmpty() check instead of expensive count() operations
-            # This prevents blocking the FastAPI event loop with long-running Spark jobs
-            is_batch_empty = batch_df.rdd.isEmpty()
-            is_filtered_empty = filtered_df.rdd.isEmpty()
-            
-            if is_batch_empty:
-                logger.info("Device filter: batch is empty")
-                return
-                
-            if is_filtered_empty:
-                logger.info("Device filter: all rows filtered out - possible ingestion_id mismatch")
-                return
-            
-            # Only use count() operations if we really need precise numbers AND batch is small
-            # For large batches, use sampling to estimate instead of blocking operations
-            try:
-                # Quick check: if we can get count fast (small batch), use it
-                # Otherwise, use estimation to avoid blocking
-                sample_batch = batch_df.sample(fraction=0.01, seed=42)
-                if not sample_batch.rdd.isEmpty():
-                    sample_before = sample_batch.count()
-                    estimated_before = min(sample_before * 100, 10000)  # Rough estimate, cap at 10k
-                    
-                    sample_filtered = filtered_df.sample(fraction=0.01, seed=42)
-                    sample_after = sample_filtered.count() if not sample_filtered.rdd.isEmpty() else 0
-                    estimated_after = min(sample_after * 100, 10000)  # Rough estimate, cap at 10k
-                    
-                    logger.info("Device filter: ~%d rows before filter, ~%d rows after filter", 
-                              estimated_before, estimated_after)
-                else:
-                    logger.info("Device filter: processing small batch")
-                    
-            except Exception as count_error:
-                logger.debug("Device filter: could not estimate counts: %s", count_error)
-                logger.info("Device filter: batch processed (counts unavailable)")
-
-            # Log warnings based on emptiness checks rather than precise counts
-            if not has_wildcard and allowed_ids and not is_batch_empty and is_filtered_empty:
-                logger.warning("Device filter: All rows filtered out - ingestion_id mismatch between registered devices and incoming data")
-                
-        except Exception as e:
-            logger.warning("Device filter: could not log filtering stats: %s", e)
+    

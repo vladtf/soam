@@ -231,20 +231,25 @@ class MetadataExtractor:
                 existing_fields[key] = new_field
     
     def _infer_type(self, value: Any) -> str:
-        """Infer the type of a value."""
+        """Infer the type of a value.
+        
+        Note: All numeric types (int/float) are reported as 'double' because
+        the MinIO client converts all integers to float64 before writing to Parquet.
+        This ensures schema consistency when Spark reads the data.
+        """
         if value is None:
             return "null"
         elif isinstance(value, bool):
             return "boolean"
-        elif isinstance(value, int):
-            return "integer"
-        elif isinstance(value, float):
+        elif isinstance(value, (int, float)):
+            # All numerics are stored as double in Parquet for schema consistency
             return "double"
         elif isinstance(value, str):
-            # Try to infer more specific string types
-            if self._is_timestamp(value):
-                return "timestamp"
-            elif self._is_uuid(value):
+            # All string values are stored as strings in Parquet, even if they look like timestamps.
+            # We don't infer 'timestamp' type because ISO timestamp strings are stored as BINARY (string)
+            # in Parquet, and Spark can't convert BINARY to timestamp.
+            # UUID detection is kept for informational purposes only.
+            if self._is_uuid(value):
                 return "uuid"
             else:
                 return "string"

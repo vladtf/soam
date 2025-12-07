@@ -111,9 +111,9 @@ const AppNavbar: React.FC = () => {
             <Nav.Link href="/pipeline">Data Pipeline</Nav.Link>
             <Nav.Link href="/data-sources">Data Sources</Nav.Link>
             <Nav.Link href="/minio">Data Browser</Nav.Link>
-            <Nav.Link href="/metadata">Metadata</Nav.Link>
-            <Nav.Link href="/troubleshooting">Troubleshooting</Nav.Link>
             <NavDropdown title="More" id="nav-more">
+              <NavDropdown.Item href="/metadata">Metadata</NavDropdown.Item>
+              <NavDropdown.Item href="/troubleshooting">Troubleshooting</NavDropdown.Item>
               <NavDropdown.Item href="/map">Map</NavDropdown.Item>
               <NavDropdown.Item href="/ontology">Ontology</NavDropdown.Item>
               <NavDropdown.Item href="/new-events">New Events</NavDropdown.Item>
