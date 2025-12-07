@@ -78,10 +78,22 @@ const DevicesTableCard: React.FC<DevicesTableCardProps> = ({ devices, onToggle, 
                                 
                                 return (
                                     <tr key={d.id}>
-                                        <td>
-                                            <div className="fw-bold">{d.name || 'Unnamed Device'}</div>
+                                        <td style={{ maxWidth: '200px' }}>
+                                            <div 
+                                                className="fw-bold text-truncate" 
+                                                title={d.name || 'Unnamed Device'}
+                                                style={{ maxWidth: '180px' }}
+                                            >
+                                                {d.name || 'Unnamed Device'}
+                                            </div>
                                             {d.ingestion_id && (
-                                                <small className="text-muted">ID: {d.ingestion_id}</small>
+                                                <small 
+                                                    className="text-muted text-truncate d-block" 
+                                                    title={d.ingestion_id}
+                                                    style={{ maxWidth: '180px' }}
+                                                >
+                                                    ID: {d.ingestion_id}
+                                                </small>
                                             )}
                                         </td>
                                         <td>
