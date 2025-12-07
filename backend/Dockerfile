@@ -9,11 +9,11 @@ ENV DELTA_VERSION=3.1.0 \
     SCALA_VERSION=2.12
 
 # ---------- system packages ----------
-# • openjdk-21-jre-headless  → JRE for Spark 3.5 (JDK 17 no longer available in Debian trixie)
-# • procps                  → supplies the `ps` command Spark's bootstrap script calls
+# • openjdk-17-jre-headless  → JRE for Spark 3.5 (available in Debian Bookworm)
+# • procps                   → supplies the `ps` command Spark's bootstrap script calls
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        openjdk-21-jre-headless \
+        openjdk-17-jre-headless \
         procps \
         iputils-ping \
         curl \
@@ -46,7 +46,7 @@ RUN mkdir -p $SPARK_LIBS && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------- Java environment ----------
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # ---------- Python environment ----------
