@@ -41,6 +41,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: MQTT_BROKER
               value: mosquitto
+            - name: MQTT_SHARED_GROUP
+              value: "ingestor-group"  # All ingestor pods share this group for load balancing
             - name: MINIO_ENDPOINT
               value: minio:9000
             - name: MINIO_ACCESS_KEY
