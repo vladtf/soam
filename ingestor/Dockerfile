@@ -2,11 +2,12 @@
 FROM python:3.12-slim
 
 # ---------- system packages ----------
-# • openjdk-17-jre-headless  → JRE for Spark 3.5 (available in Debian Bookworm)
-# • procps                   → supplies the `ps` command Spark's bootstrap script calls
+# • openjdk: Try JDK 17 first (Bookworm), fallback to JDK 21 (Trixie)
+# • procps: supplies the `ps` command Spark's bootstrap script calls
 RUN apt-get update && \
+    (apt-get install -y --no-install-recommends openjdk-17-jre-headless || \
+     apt-get install -y --no-install-recommends openjdk-21-jre-headless) && \
     apt-get install -y --no-install-recommends \
-        openjdk-17-jre-headless \
         procps \
         iputils-ping \
         curl \
@@ -14,7 +15,13 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------- Java env ----------
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+# Create symlink to installed Java version for consistent JAVA_HOME
+RUN if [ -d /usr/lib/jvm/java-21-openjdk-amd64 ]; then \
+      ln -sf /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/java-openjdk; \
+    else \
+      ln -sf /usr/lib/jvm/java-17-openjdk-amd64 /usr/lib/jvm/java-openjdk; \
+    fi
+ENV JAVA_HOME=/usr/lib/jvm/java-openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # ---------- Python deps ----------

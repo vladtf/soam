@@ -9,11 +9,12 @@ ENV DELTA_VERSION=3.1.0 \
     SCALA_VERSION=2.12
 
 # ---------- system packages ----------
-# • openjdk-17-jre-headless  → JRE for Spark 3.5 (available in Debian Bookworm)
-# • procps                   → supplies the `ps` command Spark's bootstrap script calls
+# • openjdk: Try JDK 17 first (Bookworm), fallback to JDK 21 (Trixie)
+# • procps: supplies the `ps` command Spark's bootstrap script calls
 RUN apt-get update && \
+    (apt-get install -y --no-install-recommends openjdk-17-jre-headless || \
+     apt-get install -y --no-install-recommends openjdk-21-jre-headless) && \
     apt-get install -y --no-install-recommends \
-        openjdk-17-jre-headless \
         procps \
         iputils-ping \
         curl \
@@ -46,7 +47,19 @@ RUN mkdir -p $SPARK_LIBS && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------- Java environment ----------
+# Detect installed Java version dynamically
+RUN JAVA_DIR=$(ls -d /usr/lib/jvm/java-*-openjdk-amd64 2>/dev/null | head -1) && \
+    echo "JAVA_HOME=${JAVA_DIR}" >> /etc/environment
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+# Fallback: update JAVA_HOME if 21 was installed instead
+RUN if [ -d /usr/lib/jvm/java-21-openjdk-amd64 ]; then \
+      echo "Using Java 21"; \
+      ln -sf /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/java-openjdk; \
+    else \
+      echo "Using Java 17"; \
+      ln -sf /usr/lib/jvm/java-17-openjdk-amd64 /usr/lib/jvm/java-openjdk; \
+    fi
+ENV JAVA_HOME=/usr/lib/jvm/java-openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # ---------- Python environment ----------
