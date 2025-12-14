@@ -13,8 +13,11 @@ from .enrichment.cleaner import DataCleaner
 from .session import SparkSessionManager
 from .enrichment import EnrichmentManager
 from src.utils.settings_manager import settings_manager
+from src.utils.step_profiler import profile_step
 
 logger = logging.getLogger(__name__)
+
+MODULE = "streaming_manager"
 
 
 def get_temperature_threshold() -> float:
@@ -100,6 +103,7 @@ class StreamingManager:
             except Exception as e:
                 logger.warning(f"Error stopping existing query {query_name}: {e}")
 
+    @profile_step(MODULE, "stop_all_existing_queries")
     def _stop_all_existing_queries(self) -> None:
         """Stop all existing streaming queries to ensure clean restart."""
         logger.info("Stopping all existing streaming queries...")
@@ -142,7 +146,7 @@ class StreamingManager:
         
         try:
             logger.debug("🔧 Starting enrichment stream...")
-            self.enrichment_manager.start_enrichment_stream()
+            self._start_enrichment_stream()
             logger.debug("✅ Union enrichment stream started successfully")
         except Exception as e:
             logger.error(f"❌ Failed to start enrichment stream: {e}")
@@ -163,6 +167,16 @@ class StreamingManager:
         except Exception as e:
             logger.error(f"❌ Failed to start alert stream: {e}")
 
+    @profile_step(MODULE, "start_enrichment_stream")
+    def _start_enrichment_stream(self) -> None:
+        """Start the enrichment stream (profiled wrapper)."""
+        self.enrichment_manager.start_enrichment_stream()
+
+    @profile_step(MODULE, "ensure_enrichment")
+    def _ensure_enrichment_running(self) -> None:
+        """Ensure enrichment is running (profiled wrapper)."""
+        self.enrichment_manager.ensure_enrichment_running()
+
     def ensure_streams_running(self) -> None:
         """Ensure streaming jobs are running, start them if not.
         
@@ -172,7 +186,7 @@ class StreamingManager:
         with self._ensure_streams_lock:
             try:
                 # Ensure enrichment first, as downstream jobs rely on it
-                self.enrichment_manager.ensure_enrichment_running()
+                self._ensure_enrichment_running()
 
                 # Check temperature stream with lock
                 with self._avg_query_lock:
@@ -199,6 +213,7 @@ class StreamingManager:
             except Exception as e:
                 logger.error(f"Error ensuring streams are running: {e}")
 
+    @profile_step(MODULE, "start_temperature_stream")
     def start_temperature_stream(self) -> None:
         """Start the temperature averaging stream from union schema enriched data.
         
@@ -311,6 +326,7 @@ class StreamingManager:
             # Re-raise if it's another kind of error
             raise
 
+    @profile_step(MODULE, "start_alert_stream")
     def start_alert_stream(self) -> None:
         """Start the temperature alert stream from union schema enriched data.
         

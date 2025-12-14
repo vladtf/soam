@@ -470,19 +470,19 @@
     },
     {
       "type": "row",
-      "title": "Enrichment Batch Processing (Step-by-Step)",
+      "title": "Step Profiling (All Modules)",
       "gridPos": {"x": 0, "y": 50, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "type": "timeseries",
-      "title": "process_batch Step Duration",
-      "description": "Detailed timing of each step in batch processing - identify bottlenecks",
+      "title": "Step Duration by Module",
+      "description": "Detailed timing of each step across all profiled modules - identify bottlenecks",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "batch_processor_step_duration_seconds",
-          "legendFormat": "{{step}}",
+          "expr": "step_duration_seconds",
+          "legendFormat": "{{module}}/{{step}}",
           "refId": "A"
         }
       ],
@@ -504,12 +504,12 @@
     {
       "type": "bargauge",
       "title": "Step Duration (Latest)",
-      "description": "Which step takes most time",
+      "description": "Which step takes most time across all modules",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "batch_processor_step_duration_seconds",
-          "legendFormat": "{{step}}",
+          "expr": "sort_desc(step_duration_seconds)",
+          "legendFormat": "{{module}}/{{step}}",
           "refId": "A",
           "instant": true
         }
@@ -532,8 +532,18 @@
       "options": {
         "orientation": "horizontal",
         "displayMode": "gradient",
-        "reduceOptions": {"calcs": ["lastNotNull"]}
-      }
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "showUnfilled": true
+      },
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [{"field": "Value", "desc": true}]
+          }
+        }
+      ]
     }
   ],
   "refresh": "10s",

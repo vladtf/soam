@@ -3,23 +3,18 @@ Batch processing logic for enrichment streams.
 """
 import logging
 import time
-from typing import Set
+from typing import Set, Tuple
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from prometheus_client import Gauge
 from .device_filter import DeviceFilter
 from .value_transformer import ValueTransformationProcessor
 from src import metrics as backend_metrics
+from src.utils.step_profiler import profile_step
 
 
 logger = logging.getLogger(__name__)
 
-# Step duration gauges - show last observed duration for each step
-BATCH_STEP_DURATION = Gauge(
-    "batch_processor_step_duration_seconds",
-    "Duration of each step within process_batch (last observed)",
-    ["step"]
-)
+MODULE = "batch_processor"
 
 
 class BatchProcessor:
@@ -45,46 +40,25 @@ class BatchProcessor:
             batch_id: Batch identifier
         """
         batch_start_time = time.time()
-        records_processed = 0
         
         try:
             logger.info("Union enrichment batch started: batch_id=%s", batch_id)
 
             # Step 1: Get device filtering information (DB query)
-            step_start = time.perf_counter()
-            allowed_ids: Set[str]
-            has_wildcard: bool
-            allowed_ids, has_wildcard = self.device_filter.get_allowed_ingestion_ids()
-            BATCH_STEP_DURATION.labels(step="1_get_allowed_ids").set(time.perf_counter() - step_start)
+            allowed_ids, has_wildcard = self._get_allowed_ids()
             
             # Step 2: Check if we should process this batch
-            step_start = time.perf_counter()
-            if not self.device_filter.should_process_batch(allowed_ids, has_wildcard):
-                BATCH_STEP_DURATION.labels(step="2_should_process").set(time.perf_counter() - step_start)
+            if not self._should_process(allowed_ids, has_wildcard):
                 return
-            BATCH_STEP_DURATION.labels(step="2_should_process").set(time.perf_counter() - step_start)
 
             # Step 3: Filter the dataframe (lazy - builds execution plan)
-            step_start = time.perf_counter()
-            filtered_df: DataFrame = self.device_filter.filter_dataframe(batch_df, allowed_ids, has_wildcard)
-            BATCH_STEP_DURATION.labels(step="3_filter_dataframe").set(time.perf_counter() - step_start)
+            filtered_df = self._filter_dataframe(batch_df, allowed_ids, has_wildcard)
 
             # Step 4: Apply value transformations (lazy - builds execution plan)
-            step_start = time.perf_counter()
-            try:
-                transformed_df: DataFrame = self.value_transformer.apply_transformations(filtered_df)
-                logger.info("✅ Applied value transformations to batch")
-                filtered_df = transformed_df
-            except Exception as e:
-                logger.error("❌ Error applying value transformations: %s", e)
-                logger.warning("⚠️ Continuing with original data due to transformation error")
-            BATCH_STEP_DURATION.labels(step="4_apply_transformations").set(time.perf_counter() - step_start)
+            filtered_df = self._apply_transformations(filtered_df)
 
             # Step 5: Write to Delta (SPARK ACTION - main write operation)
-            step_start = time.perf_counter()
             self._write_to_delta(filtered_df)
-            write_duration = time.perf_counter() - step_start
-            BATCH_STEP_DURATION.labels(step="5_write_delta").set(write_duration)
 
             logger.info("Union enrichment: wrote data to enriched")
             
@@ -102,6 +76,34 @@ class BatchProcessor:
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=False)
 
+    @profile_step(MODULE, "1_get_allowed_ids")
+    def _get_allowed_ids(self) -> Tuple[Set[str], bool]:
+        """Get device filtering information from database."""
+        return self.device_filter.get_allowed_ingestion_ids()
+
+    @profile_step(MODULE, "2_should_process")
+    def _should_process(self, allowed_ids: Set[str], has_wildcard: bool) -> bool:
+        """Check if we should process this batch."""
+        return self.device_filter.should_process_batch(allowed_ids, has_wildcard)
+
+    @profile_step(MODULE, "3_filter_dataframe")
+    def _filter_dataframe(self, batch_df: DataFrame, allowed_ids: Set[str], has_wildcard: bool) -> DataFrame:
+        """Filter the dataframe based on allowed device IDs."""
+        return self.device_filter.filter_dataframe(batch_df, allowed_ids, has_wildcard)
+
+    @profile_step(MODULE, "4_apply_transformations")
+    def _apply_transformations(self, filtered_df: DataFrame) -> DataFrame:
+        """Apply value transformations to the dataframe."""
+        try:
+            transformed_df = self.value_transformer.apply_transformations(filtered_df)
+            logger.info("✅ Applied value transformations to batch")
+            return transformed_df
+        except Exception as e:
+            logger.error("❌ Error applying value transformations: %s", e)
+            logger.warning("⚠️ Continuing with original data due to transformation error")
+            return filtered_df
+
+    @profile_step(MODULE, "5_write_delta")
     def _write_to_delta(self, filtered_df: DataFrame) -> None:
         """Write filtered dataframe to Delta storage.
         
