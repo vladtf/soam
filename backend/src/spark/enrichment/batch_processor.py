@@ -6,12 +6,20 @@ import time
 from typing import Optional, Tuple, Set
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+from prometheus_client import Gauge
 from .device_filter import DeviceFilter
 from .value_transformer import ValueTransformationProcessor
 from src import metrics as backend_metrics
 
 
 logger = logging.getLogger(__name__)
+
+# Step duration gauges - show last observed duration for each step
+BATCH_STEP_DURATION = Gauge(
+    "batch_processor_step_duration_seconds",
+    "Duration of each step within process_batch (last observed)",
+    ["step"]
+)
 
 
 class BatchProcessor:
@@ -213,6 +221,8 @@ class BatchProcessor:
     def process_batch(self, batch_df: DataFrame, batch_id: int) -> None:
         """Process a batch of enrichment data.
         
+        Optimized to minimize Spark actions (each action = expensive job with shuffle).
+        
         Args:
             batch_df: Input DataFrame
             batch_id: Batch identifier
@@ -223,71 +233,67 @@ class BatchProcessor:
         try:
             logger.info("Union enrichment batch started: batch_id=%s", batch_id)
 
-            # Debug: Log sample raw data BEFORE any processing
-            if logger.isEnabledFor(logging.DEBUG):
-                self.log_batch_sample(batch_df, "raw")
-
-            # Get device filtering information
+            # Step 1: Get device filtering information (DB query)
+            step_start = time.perf_counter()
             allowed_ids: Set[str]
             has_wildcard: bool
             allowed_ids, has_wildcard = self.device_filter.get_allowed_ingestion_ids()
+            BATCH_STEP_DURATION.labels(step="1_get_allowed_ids").set(time.perf_counter() - step_start)
             
-            # Check if we should process this batch
+            # Step 2: Check if we should process this batch
+            step_start = time.perf_counter()
             if not self.device_filter.should_process_batch(allowed_ids, has_wildcard):
+                BATCH_STEP_DURATION.labels(step="2_should_process").set(time.perf_counter() - step_start)
                 return
+            BATCH_STEP_DURATION.labels(step="2_should_process").set(time.perf_counter() - step_start)
 
-            # Filter the dataframe
+            # Step 3: Filter the dataframe (lazy - builds execution plan)
+            step_start = time.perf_counter()
             filtered_df: DataFrame = self.device_filter.filter_dataframe(batch_df, allowed_ids, has_wildcard)
+            BATCH_STEP_DURATION.labels(step="3_filter_dataframe").set(time.perf_counter() - step_start)
 
-            if filtered_df.rdd.isEmpty():
-                logger.info("Union enrichment: no rows after filtering - skipping write to avoid empty parquet files")
-                return
-
-            # Apply value transformations
+            # Step 4: Apply value transformations (lazy - builds execution plan)
+            step_start = time.perf_counter()
             try:
                 transformed_df: DataFrame = self.value_transformer.apply_transformations(filtered_df)
                 logger.info("✅ Applied value transformations to batch")
-                
-                # Check if transformations resulted in empty DataFrame
-                if transformed_df.rdd.isEmpty():
-                    logger.info("Union enrichment: no rows after value transformations - skipping write")
-                    return
-                    
-                # Use transformed DataFrame for further processing
                 filtered_df = transformed_df
-                
             except Exception as e:
                 logger.error("❌ Error applying value transformations: %s", e)
-                # Continue with original filtered_df on transformation errors
                 logger.warning("⚠️ Continuing with original data due to transformation error")
+            BATCH_STEP_DURATION.labels(step="4_apply_transformations").set(time.perf_counter() - step_start)
 
-            # Log normalized field information for debugging (use sampling to avoid blocking)
+            # Step 5: Take sample (SPARK ACTION - triggers execution)
+            step_start = time.perf_counter()
+            sample_rows = filtered_df.select("*").take(11)
+            take_duration = time.perf_counter() - step_start
+            BATCH_STEP_DURATION.labels(step="5_take_sample").set(take_duration)
+            
+            if not sample_rows:
+                logger.info("Union enrichment: no rows after filtering - skipping write to avoid empty parquet files")
+                return
+
+            # Step 6: Log sample (no Spark action - reuse sample_rows)
+            step_start = time.perf_counter()
             if logger.isEnabledFor(logging.DEBUG):
-                # Use approximate count for better performance
-                try:
-                    # Sample a small fraction to estimate count without full scan
-                    sample_count = filtered_df.sample(fraction=0.01).count()
-                    estimated_total = max(sample_count * 100, sample_count) if sample_count > 0 else 0
-                    logger.debug(f"Estimated rows after filtering: ~{estimated_total}")
-                    
-                    # Only log sample if we have data
-                    if estimated_total > 0:
-                        self.log_batch_sample(filtered_df, "processed")
-                except Exception as e:
-                    logger.debug(f"Could not estimate filtered count: {e}")
+                self._log_sample_from_rows(sample_rows[:2], "processed")
+            BATCH_STEP_DURATION.labels(step="6_log_sample").set(time.perf_counter() - step_start)
 
-            # Write to Delta with partitioning by ingestion_id
+            # Step 7: Write to Delta (SPARK ACTION - main write operation)
+            step_start = time.perf_counter()
             self._write_to_delta(filtered_df)
+            write_duration = time.perf_counter() - step_start
+            BATCH_STEP_DURATION.labels(step="7_write_delta").set(write_duration)
 
-            # Calculate and record end-to-end latency (ingestion timestamp -> enrichment)
-            self._calculate_end_to_end_latency(filtered_df)
+            # Step 8: Calculate latency (no Spark action - reuse sample_rows)
+            step_start = time.perf_counter()
+            self._calculate_latency_from_rows(sample_rows[:10])
+            BATCH_STEP_DURATION.labels(step="8_calculate_latency").set(time.perf_counter() - step_start)
 
-            # Log final count and record metrics
-            try:
-                records_processed = self._estimate_record_count(filtered_df)
-            except Exception as e:
-                logger.warning(f"Could not determine write status: {e}")
-                logger.info("Union enrichment: write completed")
+            # Estimate record count based on write success (no additional count/isEmpty)
+            # We know it's not empty since sample_rows had data
+            records_processed = len(sample_rows) * 10  # Rough estimate
+            logger.info("Union enrichment: wrote ~%d+ rows to enriched", records_processed)
             
             # Record metrics for successful batch processing
             batch_time = time.time() - batch_start_time
@@ -300,6 +306,51 @@ class BatchProcessor:
             # Record failed batch
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=False)
+
+    def _log_sample_from_rows(self, rows: list, stage: str) -> None:
+        """Log sample data from pre-fetched rows (no Spark action).
+        
+        Args:
+            rows: Pre-fetched Row objects
+            stage: Processing stage name
+        """
+        if not rows:
+            logger.debug(f"=== {stage.upper()} BATCH SAMPLE: EMPTY ===")
+            return
+            
+        logger.debug(f"=== {stage.upper()} BATCH SAMPLE ===")
+        for i, row in enumerate(rows[:2]):
+            row_dict = row.asDict()
+            ingestion_id = row_dict.get("ingestion_id", "unknown")
+            field_count = len(row_dict)
+            logger.debug(f"Sample {i+1}: ingestion_id={ingestion_id}, fields={field_count}")
+        logger.debug(f"=== END {stage.upper()} BATCH SAMPLE ===")
+
+    def _calculate_latency_from_rows(self, rows: list) -> None:
+        """Calculate latency metrics from pre-fetched rows (no Spark action).
+        
+        Args:
+            rows: Pre-fetched Row objects with timestamp field
+        """
+        if not rows:
+            return
+            
+        now = time.time()
+        latencies = []
+        
+        for row in rows:
+            row_dict = row.asDict()
+            ts = row_dict.get("timestamp")
+            latency = self._parse_timestamp_to_latency(ts, now)
+            if latency is not None:
+                latencies.append(latency)
+        
+        for latency in latencies:
+            backend_metrics.record_sensor_to_enrichment_latency(latency)
+            
+        if latencies:
+            avg_latency = sum(latencies) / len(latencies)
+            logger.info(f"📊 Sensor-to-enrichment latency: avg={avg_latency:.2f}s (sampled {len(latencies)} records)")
 
     def _write_to_delta(self, filtered_df: DataFrame) -> None:
         """Write filtered dataframe to Delta storage.

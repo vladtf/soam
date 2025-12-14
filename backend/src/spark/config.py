@@ -28,12 +28,13 @@ class SparkConfig:
     # Silver layer checkpoints
     ENRICH_STREAM_CHECKPOINT = f"{CHECKPOINT_BASE}/enrich_stream"
 
-    # Stream processing settings (tuned for faster feedback)
-    TEMPERATURE_STREAM_TRIGGER = "1 minute"
-    ALERT_STREAM_TRIGGER = "1 minute"
-    # New: enrichment stream trigger
-    ENRICH_STREAM_TRIGGER = "1 minute"
-    MAX_FILES_PER_TRIGGER = 20
+    # Stream processing settings (tuned for high throughput)
+    TEMPERATURE_STREAM_TRIGGER = "30 seconds"
+    ALERT_STREAM_TRIGGER = "30 seconds"
+    # Enrichment stream trigger - more frequent for lower latency
+    ENRICH_STREAM_TRIGGER = "30 seconds"
+    # Increased files per trigger for higher throughput under load
+    MAX_FILES_PER_TRIGGER = 100
     WATERMARK_DELAY = "30 seconds"
 
     # Average computation window configuration

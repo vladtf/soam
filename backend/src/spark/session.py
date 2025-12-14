@@ -57,6 +57,9 @@ class SparkSessionManager:
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
             .config("spark.sql.mapKeyDedupPolicy", "LAST_WIN")  # Handle duplicate map keys
             .config("spark.sql.session.timeZone", "UTC")  # Use UTC for all timestamp operations
+            # Performance tuning - reduce shuffle partitions to match executor count
+            .config("spark.sql.shuffle.partitions", "8")  # Default 200 is too high for small clusters
+            .config("spark.default.parallelism", "8")  # Match shuffle partitions
             .getOrCreate()
         )
         
