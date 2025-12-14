@@ -74,7 +74,7 @@ class DeviceFilter:
             has_wildcard: Whether wildcard registration exists
             
         Returns:
-            Filtered DataFrame
+            Filtered DataFrame (lazy transformation - no Spark action)
         """
         from pyspark.sql import functions as F
         
@@ -83,21 +83,13 @@ class DeviceFilter:
             logger.info("Device filter: wildcard registration - accepting all data")
             return batch_df
         
-        # Discovered ingestion IDs in the batch for logging
-        ingestion_ids_in_batch = batch_df.select(F.lower(F.trim(F.col("ingestion_id")))).distinct().take(20)
-        logger.debug("Device filter: ingestion_ids in batch: %s", [row[0] for row in ingestion_ids_in_batch])
-        
-        # Log devices that will be kept/filtered
-        ids_in_batch_set = {row[0] for row in ingestion_ids_in_batch}
-        ids_to_keep = ids_in_batch_set.intersection(allowed_ids)
-        ids_to_filter = ids_in_batch_set.difference(allowed_ids)
-        logger.debug("Device filter: keeping ingestion_ids: %s", ids_to_keep)
-        logger.debug("Device filter: filtering out ingestion_ids: %s", ids_to_filter)
-        
-        # Apply filter for specific ingestion IDs
+        # Apply filter for specific ingestion IDs (lazy transformation)
+        # Normalize the ingestion_id column and check if it's in the allowed set
         filtered = batch_df.filter(
             F.lower(F.trim(F.col("ingestion_id"))).isin(list(allowed_ids))
         )
+        
+        logger.debug("Device filter: filtering to allowed ingestion_ids: %s", allowed_ids)
         
         return filtered
 
