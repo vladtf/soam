@@ -91,6 +91,10 @@ class BatchProcessor:
             # Record metrics for successful batch processing
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=True)
+            
+            # Record batch processing time as sensor-to-enrichment latency estimate
+            # This represents the time from batch trigger to write completion
+            backend_metrics.record_sensor_to_enrichment_latency(batch_time)
 
         except Exception as e:
             logger.error(f"Error in union enrichment foreachBatch: {e}")
