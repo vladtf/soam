@@ -467,6 +467,73 @@
       "options": {
         "legend": {"displayMode": "list", "placement": "bottom"}
       }
+    },
+    {
+      "type": "row",
+      "title": "Enrichment Batch Processing (Step-by-Step)",
+      "gridPos": {"x": 0, "y": 50, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "process_batch Step Duration",
+      "description": "Detailed timing of each step in batch processing - identify bottlenecks",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "batch_processor_step_duration_seconds",
+          "legendFormat": "{{step}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 51, "w": 16, "h": 10},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "fillOpacity": 20,
+            "stacking": {"mode": "normal"}
+          }
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Step Duration (Latest)",
+      "description": "Which step takes most time",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "batch_processor_step_duration_seconds",
+          "legendFormat": "{{step}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "gridPos": {"x": 16, "y": 51, "w": 8, "h": 10},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "orange", "value": 5},
+              {"color": "red", "value": 10}
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      }
     }
   ],
   "refresh": "10s",
