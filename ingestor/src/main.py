@@ -120,9 +120,11 @@ async def lifespan(app: FastAPI):
                 
                 # Calculate delay between sensor timestamp and ingestion
                 ingestion_time = datetime.now(timezone.utc)
-                if timestamp.tzinfo is not None:
-                    delay = (ingestion_time - timestamp).total_seconds()
-                    ingestor_metrics.record_timestamp_delay(source_type, delay)
+                # If timestamp is naive (no timezone), assume UTC
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+                delay = (ingestion_time - timestamp).total_seconds()
+                ingestor_metrics.record_timestamp_delay(source_type, delay)
                 
                 # Convert DataMessage to the format expected by MinIO client
                 # The MinIO client expects 'ingestion_id' and 'timestamp' as top-level fields

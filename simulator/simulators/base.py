@@ -8,7 +8,7 @@ import time
 import random
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 
 from .edge_buffer import EdgeBuffer
@@ -123,7 +123,7 @@ class BaseSimulator(ABC):
             while True:
                 payload = self.generate_payload()
                 payload["sensor_id"] = self.sensor_id
-                payload["timestamp"] = datetime.now().isoformat()
+                payload["timestamp"] = datetime.now(timezone.utc).isoformat()
                 
                 self._publish(self.topic, payload)
                 time.sleep(random.uniform(5, 15))

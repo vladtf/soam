@@ -17,6 +17,13 @@
 .PARAMETER Step
     Run only a specific step: '1' (Azure), '2' (Kubernetes), or 'all' (default)
 
+.PARAMETER Images
+    Comma-separated list of images to build (e.g., 'ingestor,simulator'). 
+    If not specified, all images are built.
+
+.PARAMETER Restart
+    Restart the corresponding Kubernetes deployments after building images.
+
 .EXAMPLE
     .\deploy.ps1 -Action deploy
     .\deploy.ps1 -Action deploy -SkipImages
@@ -24,6 +31,7 @@
     .\deploy.ps1 -Action destroy
     .\deploy.ps1 -Action status
     .\deploy.ps1 -Action port-forward
+    .\deploy.ps1 -Action images-only -Images "ingestor,simulator" -Restart
 
 .NOTES
     Prerequisites:
@@ -40,7 +48,11 @@ param(
     [switch]$SkipImages,
 
     [ValidateSet('1', '2', 'all')]
-    [string]$Step = 'all'
+    [string]$Step = 'all',
+
+    [string]$Images = '',
+
+    [switch]$Restart
 )
 
 $ErrorActionPreference = "Stop"
@@ -162,7 +174,12 @@ function Get-Step1Outputs {
 
 # Build and push Docker images
 function Build-AndPushImages {
-    param($AcrServer, $AcrName)
+    param(
+        $AcrServer, 
+        $AcrName,
+        [string]$FilterImages = '',
+        [switch]$RestartPods
+    )
     
     Write-Header "Building and Pushing Docker Images"
     
@@ -171,17 +188,26 @@ function Build-AndPushImages {
     az acr login --name $AcrName
     if ($LASTEXITCODE -ne 0) { throw "ACR login failed" }
     
-    # Define images to build
+    # Define images to build with their corresponding k8s resource type and name
     $images = @(
-        @{ Name = "backend"; Path = "backend" },
-        @{ Name = "frontend"; Path = "frontend" },
-        @{ Name = "ingestor"; Path = "ingestor" },
-        @{ Name = "mosquitto"; Path = "mosquitto" },
-        @{ Name = "spark"; Path = "spark" },
-        @{ Name = "simulator"; Path = "simulator" },
-        @{ Name = "prometheus"; Path = "prometheus" },
-        @{ Name = "grafana"; Path = "grafana" }
+        @{ Name = "backend"; Path = "backend"; K8sType = "statefulset"; K8sName = "backend" },
+        @{ Name = "frontend"; Path = "frontend"; K8sType = "deployment"; K8sName = "frontend" },
+        @{ Name = "ingestor"; Path = "ingestor"; K8sType = "deployment"; K8sName = "ingestor" },
+        @{ Name = "mosquitto"; Path = "mosquitto"; K8sType = "deployment"; K8sName = "mosquitto" },
+        @{ Name = "spark"; Path = "spark"; K8sType = "none"; K8sName = "" },
+        @{ Name = "simulator"; Path = "simulator"; K8sType = "deployment"; K8sName = "simulator" },
+        @{ Name = "prometheus"; Path = "prometheus"; K8sType = "deployment"; K8sName = "prometheus" },
+        @{ Name = "grafana"; Path = "grafana"; K8sType = "deployment"; K8sName = "grafana" }
     )
+    
+    # Filter images if specified
+    $filterList = @()
+    if ($FilterImages) {
+        $filterList = $FilterImages.Split(',') | ForEach-Object { $_.Trim().ToLower() }
+        Write-Info "Filtering to images: $($filterList -join ', ')"
+    }
+    
+    $builtImages = @()
     
     Push-Location $ProjectRoot
     try {
@@ -189,6 +215,11 @@ function Build-AndPushImages {
             $imageName = $image.Name
             $imagePath = $image.Path
             $fullImageName = "$AcrServer/${imageName}:latest"
+            
+            # Skip if filter is specified and this image is not in the list
+            if ($filterList.Count -gt 0 -and $imageName.ToLower() -notin $filterList) {
+                continue
+            }
             
             if (-not (Test-Path $imagePath)) {
                 Write-Info "Skipping $imageName (path not found: $imagePath)"
@@ -204,6 +235,7 @@ function Build-AndPushImages {
             if ($LASTEXITCODE -ne 0) { throw "Failed to push $imageName" }
             
             Write-Success "$imageName pushed to ACR"
+            $builtImages += $image
         }
     }
     finally {
@@ -211,6 +243,36 @@ function Build-AndPushImages {
     }
     
     Write-Success "All images built and pushed successfully"
+    
+    # Restart pods if requested
+    if ($RestartPods -and $builtImages.Count -gt 0) {
+        Write-Header "Restarting Kubernetes Pods"
+        
+        foreach ($image in $builtImages) {
+            if ($image.K8sType -eq "none" -or -not $image.K8sName) {
+                Write-Info "Skipping restart for $($image.Name) (no k8s resource mapped)"
+                continue
+            }
+            
+            Write-Step "Restarting $($image.K8sType)/$($image.K8sName)..."
+            kubectl rollout restart "$($image.K8sType)/$($image.K8sName)" -n soam
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "$($image.K8sName) restarted"
+            } else {
+                Write-Info "Could not restart $($image.K8sName) (may not exist yet)"
+            }
+        }
+        
+        Write-Step "Waiting for rollouts to complete..."
+        foreach ($image in $builtImages) {
+            if ($image.K8sType -eq "none" -or -not $image.K8sName) {
+                continue
+            }
+            kubectl rollout status "$($image.K8sType)/$($image.K8sName)" -n soam --timeout=120s 2>$null
+        }
+        
+        Write-Success "All pods restarted successfully"
+    }
 }
 
 # Deploy Step 2: Kubernetes Resources
@@ -523,7 +585,7 @@ try {
             }
             
             if (-not $SkipImages -and ($Step -eq 'all' -or $Step -eq '2')) {
-                Build-AndPushImages -AcrServer $step1Outputs.acr_login_server -AcrName $step1Outputs.acr_name
+                Build-AndPushImages -AcrServer $step1Outputs.acr_login_server -AcrName $step1Outputs.acr_name -FilterImages $Images -RestartPods:$Restart
             }
             
             if ($Step -eq 'all' -or $Step -eq '2') {
@@ -549,7 +611,7 @@ try {
                 Write-Error "Step 1 must be deployed first to get ACR information."
                 exit 1
             }
-            Build-AndPushImages -AcrServer $step1Outputs.acr_login_server -AcrName $step1Outputs.acr_name
+            Build-AndPushImages -AcrServer $step1Outputs.acr_login_server -AcrName $step1Outputs.acr_name -FilterImages $Images -RestartPods:$Restart
         }
         
         'port-forward' {

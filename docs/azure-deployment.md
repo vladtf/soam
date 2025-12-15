@@ -154,6 +154,15 @@ kubectl get pods -n soam
 # Rebuild images only
 .\deploy.ps1 -Action images-only
 
+# Rebuild specific images only (comma-separated)
+.\deploy.ps1 -Action images-only -Images "ingestor,simulator"
+
+# Rebuild specific images and restart their pods
+.\deploy.ps1 -Action images-only -Images "ingestor,simulator" -Restart
+
+# Rebuild all images and restart all pods
+.\deploy.ps1 -Action images-only -Restart
+
 # Check status
 .\deploy.ps1 -Action status
 
@@ -163,6 +172,18 @@ kubectl get pods -n soam
 # Destroy only Kubernetes (keep infra)
 .\deploy.ps1 -Action destroy -Step 2
 ```
+
+### Available Images
+
+The following images can be specified with `-Images`:
+- `backend` - FastAPI backend service
+- `frontend` - React frontend
+- `ingestor` - Data ingestion service
+- `mosquitto` - MQTT broker
+- `spark` - Spark base image
+- `simulator` - IoT device simulators
+- `prometheus` - Metrics collection
+- `grafana` - Monitoring dashboards
 
 ---
 
@@ -191,6 +212,9 @@ az aks get-credentials --resource-group soam-rg --name soam-aks-cluster --overwr
 # Verify connection
 kubectl cluster-info
 kubectl get nodes
+
+# Set default namespace to avoid -n soam on every command
+kubectl config set-context --current --namespace=soam
 
 # Switch contexts (if multiple clusters)
 kubectl config get-contexts
