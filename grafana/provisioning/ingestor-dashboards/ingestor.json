@@ -56,7 +56,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_messages_received_total[$__rate_interval]))",
+          "expr": "sum(rate(ingestor_messages_received_total[1m]))",
           "refId": "A"
         }
       ],
@@ -79,7 +79,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "100 * sum(rate(ingestor_messages_processed_total[$__rate_interval])) / sum(rate(ingestor_messages_received_total[$__rate_interval]))",
+          "expr": "100 * sum(rate(ingestor_messages_processed_total[1m])) / sum(rate(ingestor_messages_received_total[1m]))",
           "refId": "A"
         }
       ],
@@ -110,7 +110,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_bytes_received_total[$__rate_interval]))",
+          "expr": "sum(rate(ingestor_bytes_received_total[1m]))",
           "refId": "A"
         }
       ],
@@ -133,7 +133,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_files_written_total[$__rate_interval]))",
+          "expr": "sum(rate(ingestor_files_written_total[1m]))",
           "refId": "A"
         }
       ],
@@ -156,12 +156,12 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_messages_received_total[$__rate_interval]))",
+          "expr": "sum(rate(ingestor_messages_received_total[1m]))",
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "rate(ingestor_messages_received_total[$__rate_interval])",
+          "expr": "rate(ingestor_messages_received_total[1m])",
           "legendFormat": "{{pod}}",
           "refId": "B"
         }
@@ -184,7 +184,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum by (source_type) (rate(ingestor_messages_received_total[$__rate_interval]))",
+          "expr": "sum by (source_type) (rate(ingestor_messages_received_total[1m]))",
           "legendFormat": "{{source_type}}",
           "refId": "A"
         }
@@ -207,7 +207,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum by (ingestion_id) (rate(ingestor_messages_received_total[$__rate_interval]))",
+          "expr": "sum by (ingestion_id) (rate(ingestor_messages_received_total[1m]))",
           "legendFormat": "{{ingestion_id}}",
           "refId": "A"
         }
@@ -230,7 +230,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum by (error_type) (rate(ingestor_messages_failed_total[$__rate_interval]))",
+          "expr": "sum by (error_type) (rate(ingestor_messages_failed_total[1m]))",
           "legendFormat": "{{error_type}}",
           "refId": "A"
         }
@@ -253,12 +253,12 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_bytes_received_total[$__rate_interval]))",
+          "expr": "sum(rate(ingestor_bytes_received_total[1m]))",
           "legendFormat": "Total Bytes/s",
           "refId": "A"
         },
         {
-          "expr": "sum by (source_type) (rate(ingestor_bytes_received_total[$__rate_interval]))",
+          "expr": "sum by (source_type) (rate(ingestor_bytes_received_total[1m]))",
           "legendFormat": "{{source_type}}",
           "refId": "B"
         }

@@ -35,7 +35,9 @@ class SparkConfig:
     ENRICH_STREAM_TRIGGER = "30 seconds"
     # Increased files per trigger for higher throughput under load
     MAX_FILES_PER_TRIGGER = 100
-    WATERMARK_DELAY = "30 seconds"
+    # Watermark delay - using ingest_ts (processing time) instead of event_time
+    # so this only needs to handle normal processing delays, not restart scenarios
+    WATERMARK_DELAY = "2 minutes"
 
     # Average computation window configuration
     AVG_WINDOW = "1 minute"      # compute averages over this window

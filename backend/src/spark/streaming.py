@@ -261,17 +261,21 @@ class StreamingManager:
         )
 
         # Filter valid temperature readings
+        # Use ingest_ts (processing time) for watermark instead of event_time
+        # This ensures data is never "late" after cluster restarts since ingest_ts
+        # is set when data is written to enriched layer, not when sensor generated it
         valid_temp_stream = (
             temp_stream
             .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
-            .withWatermark("event_time", SparkConfig.WATERMARK_DELAY)
+            .withWatermark("ingest_ts", SparkConfig.WATERMARK_DELAY)
         )
 
-        # Calculate sliding window averages
+        # Calculate sliding window averages (still use event_time for the window itself
+        # to preserve actual sensor timing semantics)
         five_min_avg = (
             valid_temp_stream
             .groupBy(
-                F.window("event_time", SparkConfig.AVG_WINDOW, SparkConfig.AVG_SLIDE).alias("time_window"),
+                F.window("ingest_ts", SparkConfig.AVG_WINDOW, SparkConfig.AVG_SLIDE).alias("time_window"),
                 "sensorId"
             )
             .agg(F.round(F.avg("temperature"), 2).alias("avg_temp"))
@@ -282,24 +286,8 @@ class StreamingManager:
             )
         )
 
-        # Ensure target Delta table exists in gold layer
-        try:
-            spark.read.format("delta").load(self.gold_temp_avg_path).limit(0)
-        except Exception:
-            from pyspark.sql import types as T
-            empty_schema = T.StructType([
-                T.StructField("sensorId", T.StringType()),
-                T.StructField("time_start", T.TimestampType()),
-                T.StructField("avg_temp", T.DoubleType()),
-            ])
-            empty_df = spark.createDataFrame([], empty_schema)
-            (
-                empty_df.write
-                .format("delta")
-                .mode("ignore")
-                .option("overwriteSchema", "true")
-                .save(self.gold_temp_avg_path)
-            )
+        # Note: Delta table will be created automatically on first write
+        # No need to pre-create empty tables - this avoids empty files when there's no data
 
         # Write to Delta table in gold layer
         try:
