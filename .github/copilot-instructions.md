@@ -66,6 +66,22 @@ The architecture follows a **data lake pattern** with Bronze (raw) → Silver (n
   - `terraform/deploy.ps1` - **CRITICAL**: Orchestration script for full deployment lifecycle
 - `docs/azure-deployment.md` - Comprehensive Azure deployment guide with troubleshooting
 
+**GitHub Actions CI/CD:**
+- `.github/workflows/` - Manual CI/CD workflows for Azure AKS deployment
+  - `1-deploy-infrastructure.yml` - Creates Azure resources (AKS + ACR) via Terraform Step 1
+  - `2-deploy-application.yml` - Builds all images + deploys K8s resources via Terraform Step 2
+  - `3-update-images.yml` - Rebuilds specific images and restarts pods
+  - `4-cleanup.yml` - Destroys all Azure resources (requires "DESTROY" confirmation)
+- `scripts/setup-github-actions.ps1` - Creates Azure Service Principal + configures GitHub secrets
+- `docs/github-actions-cicd.md` - Comprehensive CI/CD setup and usage guide
+
+**GitHub Actions Features:**
+- Remote Terraform state stored in Azure Storage (`soam-tfstate-rg`)
+- Automatic resource group import if pre-existing
+- ACR registry caching for faster Docker builds
+- Service URLs displayed in workflow summary after deployment
+- Service Principal requires: Contributor + User Access Administrator roles
+
 ### Backend (Python/FastAPI) - Port 8000
 **Main Application Structure:**
 - `backend/Dockerfile` - Multi-stage build with Spark/Java dependencies
@@ -996,6 +1012,51 @@ kubectl get pods -n soam
 - Backend and ingestor PVCs have `wait_until_bound = false` to prevent Terraform timeout
 - LoadBalancer services can take 2-5 minutes to get external IP
 
+### GitHub Actions CI/CD Deployment
+
+**Initial Setup (One-time):**
+```powershell
+# 1. Login to Azure (ALWAYS use tenant ID)
+az login --tenant a0867c7c-7aeb-44cb-96ed-32fa642ebe73
+az account set --subscription "your-subscription-id"
+
+# 2. Run setup script to create Service Principal and configure GitHub secrets
+cd scripts
+.\setup-github-actions.ps1
+# Follow prompts - script creates SP with Contributor + User Access Administrator roles
+```
+
+**Deploy via GitHub Actions:**
+```powershell
+# Deploy infrastructure (Step 1 - creates AKS + ACR)
+gh workflow run "Deploy Infrastructure" --ref main; gh run watch
+
+# Deploy application (Step 2 - builds images + deploys K8s resources)
+gh workflow run "Deploy Application" --ref main; gh run watch
+
+# Update specific images without full redeploy
+gh workflow run "Update Images" --ref main -f images="backend,frontend"; gh run watch
+
+# Destroy all Azure resources (requires typing "DESTROY")
+gh workflow run "Cleanup Resources" --ref main -f confirm_destroy="DESTROY"; gh run watch
+```
+
+**Workflow Features:**
+- **Remote Terraform State**: Stored in Azure Storage (`soam-tfstate-rg`) for persistence
+- **Automatic RG Import**: Handles pre-existing resource groups automatically
+- **ACR Registry Caching**: Faster Docker builds using Azure Container Registry cache
+- **Service URLs Summary**: After deployment, workflow summary shows all service URLs
+- **Monitoring Stack**: Prometheus + Grafana deployed by default
+
+**Check Deployment Status:**
+```powershell
+# Get service URLs after deployment
+kubectl get svc -n soam | Select-String "LoadBalancer"
+
+# Or from workflow summary in GitHub Actions UI
+gh run view --web
+```
+
 ### Clean Development Environment
 ```powershell
 # Stop Skaffold and clean up
@@ -1413,6 +1474,7 @@ When implementing new features, always:
 - Try to restart the pods. Skaffold dev is handling this automatically.
 - Run `terraform destroy` without confirming with user (destroys all Azure resources)
 - Delete Kubernetes namespace in AKS (causes data loss)
+- Run `gh workflow run "Cleanup Resources"` without "DESTROY" confirmation (destroys Azure resources)
 
 ### ALWAYS:
 - Show commands before execution in destructive operations
