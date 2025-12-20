@@ -1433,6 +1433,7 @@ When implementing new features, always:
 - Use absolute paths when running scripts. This ensures the command won't fail because of relative path issues.
 - For AKS deployments, always use `-n soam` namespace flag
 - Check `docs/azure-deployment.md` for Azure/Terraform troubleshooting
+- **For Azure CLI commands, always use tenant ID**: `az login --tenant a0867c7c-7aeb-44cb-96ed-32fa642ebe73`
 
 ## AI Copilot Integration
 
