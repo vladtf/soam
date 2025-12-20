@@ -25,9 +25,9 @@ terraform {
     }
   }
 
-  backend "local" {
-    path = "terraform.tfstate"
-  }
+  # Backend configured via -backend-config in CI/CD
+  # Uses Azure Storage for remote state
+  backend "azurerm" {}
 }
 
 # =============================================================================

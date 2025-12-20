@@ -54,9 +54,63 @@ jobs:
           SUB_ID=$(az account show --query id -o tsv)
           echo "subscription_id=${SUB_ID}" >> $GITHUB_OUTPUT
       
+      - name: Create Terraform State Storage
+        id: state
+        run: |
+          # Create resource group for state (if not exists)
+          az group create --name soam-tfstate-rg --location "${{ github.event.inputs.location }}" || true
+          
+          # Create storage account (globally unique name based on subscription)
+          STORAGE_NAME="soamtfstate$(echo ${{ steps.sub.outputs.subscription_id }} | cut -c1-8)"
+          az storage account create \
+            --name $STORAGE_NAME \
+            --resource-group soam-tfstate-rg \
+            --location "${{ github.event.inputs.location }}" \
+            --sku Standard_LRS \
+            --kind StorageV2 \
+            --allow-blob-public-access false \
+            2>/dev/null || true
+          
+          # Create container for state
+          az storage container create \
+            --name tfstate \
+            --account-name $STORAGE_NAME \
+            --auth-mode login \
+            2>/dev/null || true
+          
+          echo "storage_account=$STORAGE_NAME" >> $GITHUB_OUTPUT
+      
       - name: Terraform Init
         working-directory: ${{ env.TF_DIR }}
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=soam-tfstate-rg" \
+            -backend-config="storage_account_name=${{ steps.state.outputs.storage_account }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=01-infrastructure.tfstate"
+      
+      - name: Import Resource Group (if exists)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          # Check if resource group exists in Azure
+          if az group show --name ${{ env.AZURE_RESOURCE_GROUP }} &>/dev/null; then
+            echo "Resource group exists, checking if already in state..."
+            
+            # Check if already in Terraform state
+            if ! terraform state show azurerm_resource_group.rg &>/dev/null; then
+              echo "Importing resource group into Terraform state..."
+              terraform import \
+                -var="subscription_id=${{ steps.sub.outputs.subscription_id }}" \
+                -var="location=${{ github.event.inputs.location }}" \
+                -var="aks_node_count=${{ github.event.inputs.aks_node_count }}" \
+                azurerm_resource_group.rg \
+                /subscriptions/${{ steps.sub.outputs.subscription_id }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}
+            else
+              echo "Resource group already in state, skipping import"
+            fi
+          else
+            echo "Resource group does not exist, will be created"
+          fi
       
       - name: Terraform Plan
         working-directory: ${{ env.TF_DIR }}

@@ -55,7 +55,16 @@ jobs:
         id: info
         working-directory: ${{ env.TF_STEP1_DIR }}
         run: |
-          terraform init
+          # Get storage account name
+          SUB_ID=$(az account show --query id -o tsv)
+          STORAGE_NAME="soamtfstate$(echo $SUB_ID | cut -c1-8)"
+          
+          terraform init \
+            -backend-config="resource_group_name=soam-tfstate-rg" \
+            -backend-config="storage_account_name=$STORAGE_NAME" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=01-infrastructure.tfstate"
+          
           echo "acr_login_server=$(terraform output -raw acr_login_server)" >> $GITHUB_OUTPUT
           echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
           echo "aks_host=$(terraform output -raw aks_host)" >> $GITHUB_OUTPUT
@@ -146,7 +155,15 @@ jobs:
       
       - name: Terraform Init
         working-directory: ${{ env.TF_STEP2_DIR }}
-        run: terraform init
+        run: |
+          SUB_ID=$(az account show --query id -o tsv)
+          STORAGE_NAME="soamtfstate$(echo $SUB_ID | cut -c1-8)"
+          
+          terraform init \
+            -backend-config="resource_group_name=soam-tfstate-rg" \
+            -backend-config="storage_account_name=$STORAGE_NAME" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=02-kubernetes.tfstate"
       
       - name: Terraform Apply
         working-directory: ${{ env.TF_STEP2_DIR }}

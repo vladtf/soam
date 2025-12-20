@@ -60,7 +60,15 @@ jobs:
       - name: Terraform Destroy (Step 2)
         working-directory: ${{ env.TF_STEP2_DIR }}
         run: |
-          terraform init
+          SUB_ID=$(az account show --query id -o tsv)
+          STORAGE_NAME="soamtfstate$(echo $SUB_ID | cut -c1-8)"
+          
+          terraform init \
+            -backend-config="resource_group_name=soam-tfstate-rg" \
+            -backend-config="storage_account_name=$STORAGE_NAME" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=02-kubernetes.tfstate" || true
+          
           terraform destroy -auto-approve || true
       
       - name: Delete namespace directly
@@ -97,7 +105,14 @@ jobs:
       - name: Terraform Destroy (Step 1)
         working-directory: ${{ env.TF_STEP1_DIR }}
         run: |
-          terraform init
+          STORAGE_NAME="soamtfstate$(echo ${{ steps.sub.outputs.subscription_id }} | cut -c1-8)"
+          
+          terraform init \
+            -backend-config="resource_group_name=soam-tfstate-rg" \
+            -backend-config="storage_account_name=$STORAGE_NAME" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=01-infrastructure.tfstate" || true
+          
           terraform destroy -auto-approve \
             -var="subscription_id=${{ steps.sub.outputs.subscription_id }}" || true
       

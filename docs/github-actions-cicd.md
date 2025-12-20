@@ -165,6 +165,40 @@ cache-to: type=registry,ref=acr.azurecr.io/image:buildcache,mode=max
 
 ## Troubleshooting
 
+### "Resource already exists" Error
+
+If you see an error like:
+```
+Error: A resource with the ID "..." already exists - to be managed via Terraform this resource needs to be imported into the State.
+```
+
+This happens when Azure resources exist but Terraform doesn't know about them (state mismatch). Solutions:
+
+**Option A: Delete existing resources (recommended for fresh start)**
+```bash
+# Delete the resource group and all contents
+az group delete --name soam-rg --yes --no-wait
+
+# Wait for deletion to complete
+az group wait --name soam-rg --deleted
+
+# Then re-run the workflow
+```
+
+**Option B: Import existing resources into state**
+
+This is complex and requires running Terraform locally. See [Terraform Import](https://developer.hashicorp.com/terraform/cli/import) documentation.
+
+### Terraform State
+
+The workflows use Azure Storage to persist Terraform state:
+- **Resource Group:** `soam-tfstate-rg`
+- **Storage Account:** `soamtfstate<subscription-id-prefix>`
+- **Container:** `tfstate`
+- **State files:** `01-infrastructure.tfstate`, `02-kubernetes.tfstate`
+
+This ensures state persists across workflow runs and multiple team members can deploy.
+
 ### Check Deployment Status
 
 ```bash
