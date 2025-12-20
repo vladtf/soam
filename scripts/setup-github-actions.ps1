@@ -116,6 +116,23 @@ Write-Success "Service Principal created: $spName"
 # Parse credentials
 $creds = $spCredentials | ConvertFrom-Json
 
+# Add User Access Administrator role (required for creating role assignments, e.g., AKS -> ACR pull)
+Write-Step "Adding User Access Administrator role..."
+az role assignment create `
+    --assignee $creds.clientId `
+    --role "User Access Administrator" `
+    --scope "/subscriptions/$SubscriptionId" `
+    --output none 2>$null
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Success "User Access Administrator role assigned"
+} else {
+    Write-Host "⚠️  Could not assign User Access Administrator role automatically." -ForegroundColor Yellow
+    Write-Info "You may need to assign it manually via Azure Portal:"
+    Write-Info "  Subscription -> Access control (IAM) -> Add role assignment"
+    Write-Info "  Role: User Access Administrator, Assignee: $spName"
+}
+
 Write-Host ""
 Write-Header "GitHub Secret Configuration"
 
