@@ -69,7 +69,26 @@ jobs:
             -backend-config="container_name=tfstate" \
             -backend-config="key=02-kubernetes.tfstate" || true
           
-          terraform destroy -auto-approve || true
+          # Get AKS credentials for destroy (needed by Terraform providers)
+          az aks get-credentials \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --overwrite-existing || true
+          
+          # Get ACR name from resource group
+          ACR_NAME=$(az acr list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[0].loginServer" -o tsv 2>/dev/null || echo "dummy.azurecr.io")
+          
+          # Get AKS cluster info for terraform variables
+          AKS_HOST=$(az aks show --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }} --query "fqdn" -o tsv 2>/dev/null || echo "https://dummy")
+          
+          # Destroy with required variables (use dummy values if cluster doesn't exist)
+          terraform destroy -auto-approve -input=false \
+            -var="aks_host=${AKS_HOST:-https://dummy}" \
+            -var="aks_client_certificate=" \
+            -var="aks_client_key=" \
+            -var="aks_cluster_ca_certificate=" \
+            -var="acr_login_server=${ACR_NAME:-dummy.azurecr.io}" \
+            || true
       
       - name: Delete namespace directly
         run: |
