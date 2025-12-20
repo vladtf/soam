@@ -1,5 +1,5 @@
 # Dockerfile
-FROM bitnami/spark:3.5
+FROM bitnamilegacy/spark:3.5
 
 USER root
 RUN groupadd --gid 1001 spark \
