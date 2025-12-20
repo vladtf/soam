@@ -27,11 +27,12 @@ const PipelineNavigationSidebar: React.FC<PipelineNavigationSidebarProps> = ({
           <Nav variant="pills" className="flex-column">
             <Nav.Item>
               <Nav.Link
-                eventKey="overview"
+                eventKey="devices"
                 className="d-flex align-items-center justify-content-between mb-2 text-nowrap"
                 style={{ fontSize: '0.9rem' }}
               >
-                <span>📊 Overview</span>
+                <span>🔌 Devices</span>
+                <Badge bg="secondary" style={{ fontSize: '0.7rem' }}>{devices.length}</Badge>
               </Nav.Link>
             </Nav.Item>
             <Nav.Item>
@@ -76,12 +77,11 @@ const PipelineNavigationSidebar: React.FC<PipelineNavigationSidebarProps> = ({
             </Nav.Item>
             <Nav.Item>
               <Nav.Link
-                eventKey="devices"
+                eventKey="overview"
                 className="d-flex align-items-center justify-content-between mb-2 text-nowrap"
                 style={{ fontSize: '0.9rem' }}
               >
-                <span>🔌 Devices</span>
-                <Badge bg="secondary" style={{ fontSize: '0.7rem' }}>{devices.length}</Badge>
+                <span>📊 Overview</span>
               </Nav.Link>
             </Nav.Item>
           </Nav>
