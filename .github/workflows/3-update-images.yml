@@ -1,0 +1,184 @@
+# =============================================================================
+# Update Images - Rebuild, Push, and Restart Pods
+# =============================================================================
+# Rebuilds selected images, pushes to ACR, and restarts the corresponding pods
+# =============================================================================
+
+name: "3️⃣ Update Images"
+
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'Images to rebuild (comma-separated)'
+        required: true
+        default: 'backend,frontend,ingestor'
+        type: string
+      restart_pods:
+        description: 'Restart pods after push'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  AZURE_RESOURCE_GROUP: soam-rg
+  AKS_CLUSTER_NAME: soam-aks-cluster
+  KUBERNETES_NAMESPACE: soam
+
+jobs:
+  get-acr:
+    name: Get ACR Info
+    runs-on: ubuntu-latest
+    outputs:
+      acr_login_server: ${{ steps.acr.outputs.login_server }}
+      acr_name: ${{ steps.acr.outputs.name }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get ACR
+        id: acr
+        run: |
+          ACR_NAME=$(az acr list -g ${{ env.AZURE_RESOURCE_GROUP }} --query "[0].name" -o tsv)
+          ACR_SERVER=$(az acr list -g ${{ env.AZURE_RESOURCE_GROUP }} --query "[0].loginServer" -o tsv)
+          echo "name=${ACR_NAME}" >> $GITHUB_OUTPUT
+          echo "login_server=${ACR_SERVER}" >> $GITHUB_OUTPUT
+
+  build-and-push:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: get-acr
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(format('["{0}"]', join(fromJson(format('["{0}"]', github.event.inputs.images)), '","'))) }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Parse the comma-separated input into individual images
+      - name: Check if should build
+        id: check
+        run: |
+          IMAGES="${{ github.event.inputs.images }}"
+          if echo ",$IMAGES," | grep -q ",${{ matrix.image }},"; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Login to ACR
+        run: az acr login --name ${{ needs.get-acr.outputs.acr_name }}
+      
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.image }}
+          push: true
+          tags: |
+            ${{ needs.get-acr.outputs.acr_login_server }}/${{ matrix.image }}:latest
+            ${{ needs.get-acr.outputs.acr_login_server }}/${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ needs.get-acr.outputs.acr_login_server }}/${{ matrix.image }}:buildcache
+          cache-to: type=registry,ref=${{ needs.get-acr.outputs.acr_login_server }}/${{ matrix.image }}:buildcache,mode=max
+
+  restart-pods:
+    name: Restart Pods
+    runs-on: ubuntu-latest
+    needs: [get-acr, build-and-push]
+    if: github.event.inputs.restart_pods == 'true'
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --overwrite-existing
+      
+      - name: Restart deployments
+        run: |
+          NS="${{ env.KUBERNETES_NAMESPACE }}"
+          IMAGES="${{ github.event.inputs.images }}"
+          
+          IFS=',' read -ra IMAGE_LIST <<< "$IMAGES"
+          for IMAGE in "${IMAGE_LIST[@]}"; do
+            IMAGE=$(echo $IMAGE | xargs)  # Trim whitespace
+            
+            case $IMAGE in
+              backend)
+                echo "🔄 Restarting backend..."
+                kubectl rollout restart statefulset/backend -n $NS || true
+                ;;
+              frontend)
+                echo "🔄 Restarting frontend..."
+                kubectl rollout restart deployment/frontend -n $NS || true
+                ;;
+              ingestor)
+                echo "🔄 Restarting ingestor..."
+                kubectl rollout restart deployment/ingestor -n $NS || true
+                ;;
+              simulator)
+                echo "🔄 Restarting simulator..."
+                kubectl rollout restart deployment/simulator -n $NS || true
+                ;;
+              rest-api-simulator)
+                echo "🔄 Restarting rest-api-simulator..."
+                kubectl rollout restart deployment/rest-api-simulator -n $NS || true
+                ;;
+              mosquitto)
+                echo "🔄 Restarting mosquitto..."
+                kubectl rollout restart deployment/mosquitto -n $NS || true
+                ;;
+              grafana)
+                echo "🔄 Restarting grafana..."
+                kubectl rollout restart deployment/grafana -n $NS || true
+                ;;
+              prometheus)
+                echo "🔄 Restarting prometheus..."
+                kubectl rollout restart deployment/prometheus -n $NS || true
+                ;;
+            esac
+          done
+      
+      - name: Wait for rollout
+        run: |
+          NS="${{ env.KUBERNETES_NAMESPACE }}"
+          IMAGES="${{ github.event.inputs.images }}"
+          
+          IFS=',' read -ra IMAGE_LIST <<< "$IMAGES"
+          for IMAGE in "${IMAGE_LIST[@]}"; do
+            IMAGE=$(echo $IMAGE | xargs)
+            
+            case $IMAGE in
+              backend)
+                kubectl rollout status statefulset/backend -n $NS --timeout=300s || true
+                ;;
+              frontend|ingestor|simulator|rest-api-simulator|mosquitto|grafana|prometheus)
+                kubectl rollout status deployment/$IMAGE -n $NS --timeout=180s || true
+                ;;
+            esac
+          done
+      
+      - name: Summary
+        run: |
+          echo "## ✅ Images Updated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Images rebuilt:** ${{ github.event.inputs.images }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pod Status" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.KUBERNETES_NAMESPACE }} >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

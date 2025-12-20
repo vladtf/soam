@@ -1,0 +1,124 @@
+# =============================================================================
+# Cleanup - Destroy All Resources
+# =============================================================================
+# ⚠️  DANGER: Destroys all Azure resources!
+# =============================================================================
+
+name: "4️⃣ Cleanup (Destroy All)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "DESTROY" to confirm'
+        required: true
+        type: string
+      delete_step:
+        description: 'What to delete'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - kubernetes-only
+          - infrastructure-only
+
+env:
+  AZURE_RESOURCE_GROUP: soam-rg
+  AKS_CLUSTER_NAME: soam-aks-cluster
+  KUBERNETES_NAMESPACE: soam
+  TF_STEP1_DIR: terraform/01-azure-infrastructure
+  TF_STEP2_DIR: terraform/02-kubernetes-resources
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: github.event.inputs.confirm != 'DESTROY'
+        run: |
+          echo "❌ You must type 'DESTROY' to confirm. You entered: '${{ github.event.inputs.confirm }}'"
+          exit 1
+
+  destroy-kubernetes:
+    name: Destroy Kubernetes Resources
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event.inputs.delete_step == 'all' || github.event.inputs.delete_step == 'kubernetes-only'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+      
+      - name: Terraform Destroy (Step 2)
+        working-directory: ${{ env.TF_STEP2_DIR }}
+        run: |
+          terraform init
+          terraform destroy -auto-approve || true
+      
+      - name: Delete namespace directly
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --overwrite-existing || true
+          
+          kubectl delete namespace ${{ env.KUBERNETES_NAMESPACE }} --timeout=300s || true
+
+  destroy-infrastructure:
+    name: Destroy Azure Infrastructure
+    runs-on: ubuntu-latest
+    needs: [validate, destroy-kubernetes]
+    if: always() && github.event.inputs.delete_step == 'all' || github.event.inputs.delete_step == 'infrastructure-only'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+      
+      - name: Get Subscription ID
+        id: sub
+        run: |
+          SUB_ID=$(az account show --query id -o tsv)
+          echo "subscription_id=${SUB_ID}" >> $GITHUB_OUTPUT
+      
+      - name: Terraform Destroy (Step 1)
+        working-directory: ${{ env.TF_STEP1_DIR }}
+        run: |
+          terraform init
+          terraform destroy -auto-approve \
+            -var="subscription_id=${{ steps.sub.outputs.subscription_id }}" || true
+      
+      - name: Force delete resource group
+        run: |
+          echo "🗑️ Force deleting resource group..."
+          az group delete --name ${{ env.AZURE_RESOURCE_GROUP }} --yes --no-wait || true
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [destroy-kubernetes, destroy-infrastructure]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🗑️ Cleanup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Kubernetes | ${{ needs.destroy-kubernetes.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Infrastructure | ${{ needs.destroy-infrastructure.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To redeploy, run workflows in order: 1️⃣ → 2️⃣" >> $GITHUB_STEP_SUMMARY

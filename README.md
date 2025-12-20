@@ -14,6 +14,7 @@
       - [Pre-requisites](#pre-requisites)
       - [Skaffold](#skaffold)
     - [Azure Deployment (Production)](#azure-deployment-production)
+    - [GitHub Actions CI/CD](#github-actions-cicd)
 
 ## Documentation
 
@@ -21,6 +22,7 @@ For detailed feature-specific documentation, see the `docs/` folder:
 
 - **🤖 [AI Copilot Setup Guide](docs/copilot-setup.md)** - Azure OpenAI-powered computation generation
 - **☁️ [Azure Deployment Guide](docs/azure-deployment.md)** - Deploy to AKS with Terraform
+- **🚀 [GitHub Actions CI/CD](docs/github-actions-cicd.md)** - Automated deployment pipelines
 - **🧪 [Experimental Results Validation](docs/experimental-results-validation.md)** - Test procedures and evidence for dependability mechanisms
 
 
@@ -144,4 +146,43 @@ Available deploy script actions:
 | `status` | Show deployment status and URLs |
 | `port-forward` | Forward all service ports to localhost |
 | `images-only` | Build and push Docker images only |
+
+### GitHub Actions CI/CD
+
+For automated deployments via GitHub Actions, see the **[GitHub Actions CI/CD Guide](docs/github-actions-cicd.md)**.
+
+**Setup:**
+1. Create an Azure Service Principal:
+   ```bash
+   az login
+   SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+   az ad sp create-for-rbac \
+     --name "soam-github-actions" \
+     --role contributor \
+     --scopes /subscriptions/$SUBSCRIPTION_ID \
+     --sdk-auth
+   ```
+2. Add the JSON output as a GitHub secret named `AZURE_CREDENTIALS`:
+   - Go to **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+
+**Workflows:**
+| Workflow | Purpose |
+|----------|---------|
+| 1️⃣ Deploy Infrastructure | Create Azure resources (AKS + ACR) |
+| 2️⃣ Deploy Application | Build images + deploy K8s resources |
+| 3️⃣ Update Images | Rebuild specific images and restart pods |
+| 4️⃣ Cleanup | Destroy all resources |
+
+**Quick Commands:**
+```bash
+# Initial deployment (run in order)
+gh workflow run "1️⃣ Deploy Infrastructure"
+gh workflow run "2️⃣ Deploy Application"
+
+# Update specific services
+gh workflow run "3️⃣ Update Images" -f images=backend,frontend
+
+# Cleanup everything
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY
+```
 

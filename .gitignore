@@ -11,3 +11,5 @@ node_modules/
 __pycache__/
 backend/.env
 *_PLAN.md
+# GitHub Actions credentials
+.github-sp-credentials.json

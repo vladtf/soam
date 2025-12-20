@@ -1,0 +1,94 @@
+# =============================================================================
+# Stage 1: Deploy Azure Infrastructure (AKS + ACR)
+# =============================================================================
+# Creates the foundational Azure resources:
+#   - Resource Group
+#   - Azure Container Registry (ACR)
+#   - Azure Kubernetes Service (AKS)
+# =============================================================================
+
+name: "1️⃣ Deploy Infrastructure"
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: 'Azure region'
+        required: false
+        default: 'West Europe'
+        type: string
+      aks_node_count:
+        description: 'Number of AKS nodes'
+        required: false
+        default: '3'
+        type: string
+
+env:
+  AZURE_RESOURCE_GROUP: soam-rg
+  TF_DIR: terraform/01-azure-infrastructure
+
+jobs:
+  deploy-infrastructure:
+    name: Deploy Azure Infrastructure
+    runs-on: ubuntu-latest
+    outputs:
+      acr_login_server: ${{ steps.outputs.outputs.acr_login_server }}
+      acr_name: ${{ steps.outputs.outputs.acr_name }}
+      aks_cluster_name: ${{ steps.outputs.outputs.aks_cluster_name }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      
+      - name: Get Subscription ID
+        id: sub
+        run: |
+          SUB_ID=$(az account show --query id -o tsv)
+          echo "subscription_id=${SUB_ID}" >> $GITHUB_OUTPUT
+      
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+      
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan \
+            -var="subscription_id=${{ steps.sub.outputs.subscription_id }}" \
+            -var="location=${{ github.event.inputs.location }}" \
+            -var="aks_node_count=${{ github.event.inputs.aks_node_count }}" \
+            -out=tfplan
+      
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Get Outputs
+        id: outputs
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "acr_login_server=$(terraform output -raw acr_login_server)" >> $GITHUB_OUTPUT
+          echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
+          echo "aks_cluster_name=$(terraform output -raw aks_cluster_name)" >> $GITHUB_OUTPUT
+      
+      - name: Summary
+        run: |
+          echo "## ✅ Infrastructure Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource Group | ${{ env.AZURE_RESOURCE_GROUP }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ACR | ${{ steps.outputs.outputs.acr_login_server }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| AKS Cluster | ${{ steps.outputs.outputs.aks_cluster_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Location | ${{ github.event.inputs.location }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Nodes | ${{ github.event.inputs.aks_node_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next step:** Run '2️⃣ Deploy Application' workflow" >> $GITHUB_STEP_SUMMARY

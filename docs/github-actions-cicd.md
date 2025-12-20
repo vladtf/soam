@@ -1,0 +1,207 @@
+# GitHub Actions CI/CD Pipeline Setup
+
+This document describes how to set up and use the GitHub Actions CI/CD pipelines for SOAM.
+
+## Overview
+
+The CI/CD pipeline consists of four manual workflows:
+
+| Workflow | Purpose |
+|----------|---------|
+| **1️⃣ Deploy Infrastructure** | Create Azure resources (AKS + ACR) via Terraform |
+| **2️⃣ Deploy Application** | Build images + deploy K8s resources via Terraform |
+| **3️⃣ Update Images** | Rebuild specific images and restart pods |
+| **4️⃣ Cleanup (Destroy All)** | Delete all Azure resources |
+
+## Prerequisites
+
+### 1. Create Azure Service Principal
+
+You can use the setup script or create manually:
+
+**Option A: Use Setup Script (Recommended)**
+```powershell
+.\scripts\setup-github-actions.ps1 -GitHubRepo "vladtf/soam"
+```
+
+This script will:
+- Create an Azure Service Principal
+- Output the JSON credentials for GitHub
+- Optionally set the secret automatically (if GitHub CLI is installed)
+
+**Option B: Create Manually**
+
+Create a service principal for GitHub Actions to authenticate with Azure:
+
+```bash
+# Login to Azure
+az login
+
+# Get your subscription ID
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+# Create service principal with Contributor role on subscription level
+az ad sp create-for-rbac \
+  --name "soam-github-actions" \
+  --role contributor \
+  --scopes /subscriptions/$SUBSCRIPTION_ID \
+  --sdk-auth
+```
+
+Save the JSON output - you'll need it for the `AZURE_CREDENTIALS` secret.
+
+> [!TIP]
+> To check existing secrets via GitHub CLI:
+> ```bash
+> gh secret list
+> ```
+
+### 2. Configure GitHub Secrets
+
+Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+
+| Secret Name | Description |
+|-------------|-------------|
+| `AZURE_CREDENTIALS` | Service principal JSON from step above |
+
+## Workflows
+
+### 1️⃣ Deploy Infrastructure
+
+Creates the foundational Azure resources using Terraform Step 1.
+
+**Parameters:**
+- `location`: Azure region (default: West Europe)
+- `aks_node_count`: Number of AKS nodes (default: 3)
+
+**What it creates:**
+- Azure Resource Group (`soam-rg`)
+- Azure Container Registry (ACR)
+- Azure Kubernetes Service (AKS)
+
+```bash
+gh workflow run "1️⃣ Deploy Infrastructure"
+```
+
+### 2️⃣ Deploy Application
+
+Builds all Docker images, pushes to ACR, and deploys Kubernetes resources.
+
+**Parameters:**
+- `skip_image_build`: Skip building images, use existing (default: false)
+
+**What it does:**
+1. Gets infrastructure info from Terraform Step 1
+2. Builds and pushes all service images to ACR
+3. Deploys all Kubernetes resources via Terraform Step 2
+
+```bash
+gh workflow run "2️⃣ Deploy Application"
+```
+
+### 3️⃣ Update Images
+
+Rebuilds specific images and optionally restarts the corresponding pods.
+
+**Parameters:**
+- `images`: Comma-separated list of images (default: backend,frontend,ingestor)
+- `restart_pods`: Restart pods after push (default: true)
+
+**Available images:**
+- `backend`, `frontend`, `ingestor`
+- `spark`, `simulator`, `rest-api-simulator`
+- `mosquitto`, `grafana`, `prometheus`
+
+```bash
+gh workflow run "3️⃣ Update Images" -f images=backend,frontend -f restart_pods=true
+```
+
+### 4️⃣ Cleanup (Destroy All)
+
+⚠️ **DANGER**: Destroys all Azure resources!
+
+**Parameters:**
+- `confirm`: Must type "DESTROY" to proceed
+- `delete_step`: What to delete (all, kubernetes-only, infrastructure-only)
+
+```bash
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY -f delete_step=all
+```
+
+## Deployment Flow
+
+```
+┌─────────────────────────────────────┐
+│  1️⃣ Deploy Infrastructure           │
+│  (Creates AKS + ACR)                │
+└─────────────────┬───────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────┐
+│  2️⃣ Deploy Application              │
+│  (Builds images + K8s resources)   │
+└─────────────────┬───────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────┐
+│  3️⃣ Update Images (as needed)       │
+│  (Rebuild + restart specific pods) │
+└─────────────────────────────────────┘
+```
+
+## Docker Caching
+
+Images use ACR registry caching for faster builds:
+
+```yaml
+cache-from: type=registry,ref=acr.azurecr.io/image:buildcache
+cache-to: type=registry,ref=acr.azurecr.io/image:buildcache,mode=max
+```
+
+**Benefits:**
+- Shared across all workflow runs
+- Persists indefinitely in ACR
+- Significantly faster rebuilds
+
+## Troubleshooting
+
+### Check Deployment Status
+
+```bash
+# Get AKS credentials
+az aks get-credentials --resource-group soam-rg --name soam-aks-cluster
+
+# Check pods
+kubectl get pods -n soam
+
+# Check logs
+kubectl logs -f deployment/backend -n soam
+```
+
+### Image Push Failures
+
+```bash
+# Check ACR permissions
+az aks check-acr --name soam-aks-cluster --resource-group soam-rg --acr <acr-name>.azurecr.io
+```
+
+### Terraform State Issues
+
+If Terraform state gets corrupted, you may need to:
+1. Delete state files in the GitHub runner (they're ephemeral anyway)
+2. Import existing resources or destroy and recreate
+
+## Quick Reference
+
+```bash
+# Deploy everything from scratch
+gh workflow run "1️⃣ Deploy Infrastructure"
+# Wait for completion, then:
+gh workflow run "2️⃣ Deploy Application"
+
+# Update specific services
+gh workflow run "3️⃣ Update Images" -f images=backend,ingestor
+
+# Destroy everything
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY
+```
