@@ -1,167 +1,334 @@
-import React from 'react';
-import { Container, Row, Col, Card } from 'react-bootstrap';
+import React, { useContext } from 'react';
+import { Container, Row, Col, Card, Badge } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { FaChartLine, FaSitemap, FaTachometerAlt, FaMapMarkedAlt, FaChartBar, FaDatabase, FaCloud, FaServer, FaProjectDiagram, FaDocker } from 'react-icons/fa';
+import { 
+  FaChartLine, 
+  FaSitemap, 
+  FaTachometerAlt, 
+  FaMapMarkedAlt, 
+  FaChartBar, 
+  FaDatabase, 
+  FaCloud, 
+  FaServer, 
+  FaProjectDiagram, 
+  FaDocker,
+  FaCogs,
+  FaNetworkWired,
+  FaExternalLinkAlt,
+  FaRocket,
+  FaShieldAlt,
+  FaBolt
+} from 'react-icons/fa';
+import { ConfigContext } from '../context/ConfigContext';
+import { defaultExternalServices } from '../config';
 import ErrorTestComponent from '../components/ErrorTestComponent';
 
-const Home: React.FC = () => {
+interface FeatureCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  to?: string;
+  href?: string;
+  variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'dark';
+  badge?: string;
+  portForwardCmd?: string;
+}
+
+const FeatureCard: React.FC<FeatureCardProps> = ({ 
+  icon, 
+  title, 
+  description, 
+  to, 
+  href, 
+  variant = 'primary',
+  badge,
+  portForwardCmd
+}) => {
+  const isExternalDisabled = !href && portForwardCmd;
+  const headerBg = isExternalDisabled ? 'bg-secondary' : `bg-${variant}`;
+
   return (
-    <Container fluid className="p-0">
+    <Card className={`h-100 shadow-sm border-0 ${isExternalDisabled ? 'opacity-75' : ''}`}>
+      <div className={`${headerBg} text-white p-3 d-flex align-items-center gap-2`}>
+        <span className="fs-4">{icon}</span>
+        <div>
+          <h5 className="mb-0 d-flex align-items-center gap-2">
+            {title}
+            {badge && <Badge bg="light" text="dark" className="small">{badge}</Badge>}
+            {isExternalDisabled && <Badge bg="dark" className="small">Port-Forward</Badge>}
+          </h5>
+        </div>
+      </div>
+      <Card.Body className="d-flex flex-column">
+        <Card.Text className="text-muted small flex-grow-1">
+          {description}
+        </Card.Text>
+        {isExternalDisabled && portForwardCmd && (
+          <code className="d-block mb-2 p-2 bg-light rounded small text-break">
+            {portForwardCmd}
+          </code>
+        )}
+        {to ? (
+          <Link to={to} className={`btn btn-outline-${variant} btn-sm mt-2`}>
+            Open <FaExternalLinkAlt size={10} className="ms-1" />
+          </Link>
+        ) : href ? (
+          <a 
+            href={href} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className={`btn btn-outline-${variant} btn-sm mt-2`}
+          >
+            Open <FaExternalLinkAlt size={10} className="ms-1" />
+          </a>
+        ) : null}
+      </Card.Body>
+    </Card>
+  );
+};
+
+const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string }> = ({ icon, label, value }) => (
+  <div className="text-center p-3">
+    <div className="fs-2 text-primary">{icon}</div>
+    <h3 className="mb-0 mt-2">{value}</h3>
+    <small className="text-muted">{label}</small>
+  </div>
+);
+
+const Home: React.FC = () => {
+  const config = useContext(ConfigContext);
+  const services = config?.externalServices ?? defaultExternalServices;
+
+  return (
+    <div>
       {/* Hero Section */}
-      <div
-        style={{
-          background: "url('/assets/city-skyline.png') no-repeat center center",
-          backgroundSize: "cover",
-          height: "min(60vh, 400px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          textShadow: "clamp(1px, 0.5vw, 3px) clamp(1px, 0.5vw, 3px) clamp(2px, 1vw, 5px) rgba(0,0,0,0.7)"
-        }}
-      >
-        <h1>Welcome to Smart City Middleware</h1>
+      <div className="bg-primary text-white text-center py-5">
+        <Container>
+          <h1 className="display-4 fw-bold mb-3">
+            Smart City IoT Platform
+          </h1>
+          <p className="lead mb-4 mx-auto col-lg-8">
+            Unified middleware for real-time sensor data aggregation, processing, and visualization
+          </p>
+          <div className="d-flex gap-3 flex-wrap justify-content-center">
+            <Link to="/dashboard" className="btn btn-light btn-lg px-4">
+              <FaTachometerAlt className="me-2" /> Dashboard
+            </Link>
+            <Link to="/pipeline" className="btn btn-outline-light btn-lg px-4">
+              <FaCogs className="me-2" /> Data Pipeline
+            </Link>
+          </div>
+        </Container>
       </div>
 
-      <Container className="pt-3 pb-4">
-        {/* Overview Cards */}
-        <Row className="g-3">
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaChartLine /> Real-Time Sensor Data</Card.Title>
-                <Card.Text>
-                  Monitor sensor readings in real-time for effective city management.
-                </Card.Text>
-                <Link to="/sensor-data" className="btn btn-primary">Go to Sensor Data</Link>
-              </Card.Body>
-            </Card>
+      {/* Stats Section */}
+      <Container className="py-4">
+        <Card className="shadow-sm border-0 mb-4">
+          <Card.Body>
+            <Row>
+              <Col xs={6} md={3}>
+                <StatCard icon={<FaNetworkWired />} label="Data Sources" value="Multi" />
+              </Col>
+              <Col xs={6} md={3}>
+                <StatCard icon={<FaBolt />} label="Processing" value="Real-time" />
+              </Col>
+              <Col xs={6} md={3}>
+                <StatCard icon={<FaRocket />} label="Spark Streaming" value="Active" />
+              </Col>
+              <Col xs={6} md={3}>
+                <StatCard icon={<FaShieldAlt />} label="Security" value="JWT Auth" />
+              </Col>
+            </Row>
+          </Card.Body>
+        </Card>
+
+        {/* Platform Features */}
+        <h4 className="mb-3 text-muted">
+          <FaCogs className="me-2" /> Platform Features
+        </h4>
+        <Row className="g-3 mb-4">
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaTachometerAlt />}
+              title="Dashboard"
+              description="Create custom tiles with real-time data visualization, time series charts, and auto-refresh."
+              to="/dashboard"
+              variant="primary"
+            />
           </Col>
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaSitemap /> Ontology Viewer</Card.Title>
-                <Card.Text>
-                  Explore the ontology structure and relationships in the system.
-                </Card.Text>
-                <Link to="/ontology" className="btn btn-primary">Go to Ontology</Link>
-              </Card.Body>
-            </Card>
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaCogs />}
+              title="Data Pipeline"
+              description="Configure normalization rules, value transformations, and manage data flow."
+              to="/pipeline"
+              variant="success"
+            />
           </Col>
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaTachometerAlt /> Dashboard</Card.Title>
-                <Card.Text>
-                  View analytics and insights from the collected data.
-                </Card.Text>
-                <Link to="/dashboard" className="btn btn-primary">Go to Dashboard</Link>
-              </Card.Body>
-            </Card>
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaChartLine />}
+              title="Data Sources"
+              description="Register and manage MQTT, REST API, and other data connectors."
+              to="/data-sources"
+              variant="dark"
+            />
           </Col>
-    </Row>
-    <Row className="g-3">
-          <Col md={4}>
-      <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaMapMarkedAlt /> Interactive Map</Card.Title>
-                <Card.Text>
-                  Visualize sensor locations and city infrastructure on dynamic maps.
-                </Card.Text>
-                <Link to="/map" className="btn btn-primary">Go to Map</Link>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaChartBar /> Grafana</Card.Title>
-                <Card.Text>
-                  Access Grafana for monitoring and visualization of metrics.
-                </Card.Text>
-                <a href="http://localhost:3001" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to Grafana</a>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaDatabase /> Prometheus</Card.Title>
-                <Card.Text>
-                  Access Prometheus for metrics collection and alerting.
-                </Card.Text>
-                <a href="http://localhost:9091" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to Prometheus</a>
-              </Card.Body>
-            </Card>
-          </Col>
-    </Row>
-    <Row className="g-3">
-          <Col md={4}>
-      <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaCloud /> MinIO</Card.Title>
-                <Card.Text>
-                  Access MinIO for object storage management.
-                </Card.Text>
-                <a href="http://localhost:9000" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to MinIO</a>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaServer /> Spark Master</Card.Title>
-                <Card.Text>
-                  Access the Spark Master Web UI for cluster management.
-                </Card.Text>
-                <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to Spark Master</a>
-              </Card.Body>
-            </Card>
-          </Col>
-        </Row>
-        <Row className="g-3">
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaProjectDiagram /> Neo4j</Card.Title>
-                <Card.Text>
-                  Access the Neo4j Web UI for graph database management.
-                </Card.Text>
-                <a href="http://localhost:7474" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to Neo4j</a>
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={4}>
-            <Card className="mb-3 shadow-sm border-body">
-              <Card.Body>
-                <Card.Title><FaDocker /> cAdvisor</Card.Title>
-                <Card.Text>
-                  Access cAdvisor for container resource monitoring.
-                </Card.Text>
-                <a href="http://localhost:8089" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Go to cAdvisor</a>
-              </Card.Body>
-            </Card>
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaSitemap />}
+              title="Ontology"
+              description="Explore the knowledge graph structure and semantic relationships."
+              to="/ontology"
+              variant="secondary"
+            />
           </Col>
         </Row>
 
-        {/* Information Section */}
-        <Row className="mb-4">
-          <Col>
-            <Card className="shadow-sm border-body">
-              <Card.Body>
-                <Card.Title>About Our Platform</Card.Title>
-                <Card.Text>
-                  Our middleware integrates diverse city sensors and data sources, providing real-time analytics and decision support to enhance urban living. Explore our dashboards, maps, and ontologies to learn how we streamline city operations.
-                </Card.Text>
-              </Card.Body>
-            </Card>
+        <Row className="g-3 mb-4">
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaDatabase />}
+              title="MinIO Browser"
+              description="Browse raw and processed data stored in the object storage lake."
+              to="/minio"
+              variant="danger"
+            />
+          </Col>
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaMapMarkedAlt />}
+              title="Interactive Map"
+              description="Visualize sensor locations and city infrastructure geospatially."
+              to="/map"
+              variant="primary"
+            />
+          </Col>
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaProjectDiagram />}
+              title="Schema Metadata"
+              description="View inferred schemas, field statistics, and data evolution."
+              to="/metadata"
+              variant="success"
+            />
+          </Col>
+          <Col md={6} lg={3}>
+            <FeatureCard
+              icon={<FaCogs />}
+              title="Settings"
+              description="Configure application preferences and system parameters."
+              to="/settings"
+              variant="dark"
+            />
           </Col>
         </Row>
+
+        {/* External Services */}
+        <h4 className="mb-3 text-muted">
+          <FaServer className="me-2" /> Infrastructure Services
+        </h4>
+        <Row className="g-3 mb-4">
+          <Col md={6} lg={4}>
+            <FeatureCard
+              icon={<FaChartBar />}
+              title="Grafana"
+              description="Advanced monitoring dashboards with custom visualizations and alerting."
+              href={services.grafanaUrl || undefined}
+              variant="danger"
+              badge="External"
+              portForwardCmd={!services.grafanaUrl ? "kubectl port-forward svc/grafana 3001:3000 -n soam" : undefined}
+            />
+          </Col>
+          <Col md={6} lg={4}>
+            <FeatureCard
+              icon={<FaDatabase />}
+              title="Prometheus"
+              description="Metrics collection, time-series database, and alerting rules."
+              href={services.prometheusUrl || undefined}
+              variant="dark"
+              badge="External"
+              portForwardCmd={!services.prometheusUrl ? "kubectl port-forward svc/prometheus 9091:9090 -n soam" : undefined}
+            />
+          </Col>
+          <Col md={6} lg={4}>
+            <FeatureCard
+              icon={<FaServer />}
+              title="Spark Master"
+              description="Apache Spark cluster management and streaming job monitoring."
+              href={services.sparkMasterUrl || undefined}
+              variant="success"
+              badge="External"
+              portForwardCmd={!services.sparkMasterUrl ? "kubectl port-forward svc/soam-spark-master-svc 8080:80 -n soam" : undefined}
+            />
+          </Col>
+        </Row>
+
+        <Row className="g-3 mb-4">
+          <Col md={6} lg={4}>
+            <FeatureCard
+              icon={<FaCloud />}
+              title="MinIO Console"
+              description="Object storage administration, bucket management, and access policies."
+              href={services.minioUrl || undefined}
+              variant="primary"
+              badge="External"
+              portForwardCmd={!services.minioUrl ? "kubectl port-forward svc/minio 9090:9090 -n soam" : undefined}
+            />
+          </Col>
+          <Col md={6} lg={4}>
+            <FeatureCard
+              icon={<FaProjectDiagram />}
+              title="Neo4j Browser"
+              description="Graph database interface for exploring ontology and relationships."
+              href={services.neo4jUrl || undefined}
+              variant="secondary"
+              badge="External"
+              portForwardCmd={!services.neo4jUrl ? "kubectl port-forward svc/neo4j 7474:7474 -n soam" : undefined}
+            />
+          </Col>
+          <Col md={6} lg={4}>
+            <FeatureCard
+              icon={<FaDocker />}
+              title="cAdvisor"
+              description="Container resource usage monitoring and performance analysis."
+              href={services.cadvisorUrl || undefined}
+              variant="danger"
+              badge="External"
+              portForwardCmd={!services.cadvisorUrl ? "kubectl port-forward svc/cadvisor 8089:8080 -n soam" : undefined}
+            />
+          </Col>
+        </Row>
+
+        {/* About Section */}
+        <Card className="shadow-sm border-0 mb-4 bg-light">
+          <Card.Body className="p-4">
+            <Row className="align-items-center">
+              <Col md={8}>
+                <h4 className="mb-3">About SOAM Platform</h4>
+                <p className="text-muted mb-0">
+                  SOAM (Smart City Open Aggregation Middleware) integrates diverse IoT sensors and data sources 
+                  into a unified platform. Built with Python/FastAPI backend, React/TypeScript frontend, 
+                  Apache Spark for stream processing, and Kubernetes for orchestration. Features include 
+                  real-time data ingestion, schema inference, configurable normalization, and AI-powered 
+                  computation generation.
+                </p>
+              </Col>
+              <Col md={4} className="text-center">
+                <div className="d-flex flex-column gap-2 align-items-center">
+                  <Badge bg="primary" className="px-3 py-2">Python • FastAPI</Badge>
+                  <Badge bg="dark" className="px-3 py-2">React • TypeScript</Badge>
+                  <Badge bg="success" className="px-3 py-2">Spark • Kubernetes</Badge>
+                </div>
+              </Col>
+            </Row>
+          </Card.Body>
+        </Card>
 
         {/* Error Testing Component - Development Only */}
         <ErrorTestComponent />
       </Container>
-    </Container>
+    </div>
   );
 };
 

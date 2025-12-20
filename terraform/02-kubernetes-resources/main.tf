@@ -1188,6 +1188,17 @@ resource "kubernetes_config_map" "frontend_config" {
     "config.json" = jsonencode({
       backendUrl  = "http://${kubernetes_service.backend_external.status[0].load_balancer[0].ingress[0].ip}:8000"
       ingestorUrl = "http://${kubernetes_service.ingestor_external.status[0].load_balancer[0].ingress[0].ip}:8001"
+      externalServices = {
+        # Grafana is exposed via LoadBalancer when monitoring is enabled
+        grafanaUrl     = var.deploy_monitoring ? "http://${kubernetes_service.grafana[0].status[0].load_balancer[0].ingress[0].ip}:3000" : ""
+        # These services use ClusterIP - users need to use port-forwarding to access them
+        # kubectl port-forward svc/<service> <local-port>:<service-port> -n soam
+        prometheusUrl  = "" # Use: kubectl port-forward svc/prometheus 9091:9090 -n soam
+        minioUrl       = "" # Use: kubectl port-forward svc/minio 9090:9090 -n soam
+        sparkMasterUrl = "" # Use: kubectl port-forward svc/soam-spark-master-svc 8080:80 -n soam
+        neo4jUrl       = "" # Use: kubectl port-forward svc/neo4j 7474:7474 -n soam
+        cadvisorUrl    = "" # Use: kubectl port-forward svc/cadvisor 8089:8080 -n soam
+      }
     })
   }
 
