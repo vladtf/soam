@@ -99,10 +99,11 @@ if (-not $rgExists) {
 Write-Step "Creating Azure Service Principal..."
 $spName = "soam-github-actions-$([guid]::NewGuid().ToString().Substring(0,8))"
 
+# Assign Contributor at SUBSCRIPTION level (required for creating resource groups, AKS, ACR)
 $spCredentials = az ad sp create-for-rbac `
     --name $spName `
     --role contributor `
-    --scopes "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup" `
+    --scopes "/subscriptions/$SubscriptionId" `
     --sdk-auth 2>$null
 
 if (-not $spCredentials) {

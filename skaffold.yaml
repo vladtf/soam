@@ -53,7 +53,8 @@ deploy:
     hooks:
       before:
         - host:
-            command: ["pwsh", "-c", "./utils/cleanup-images.ps1; ./utils/cleanup-minio.ps1"]
+            # command: ["pwsh", "-c", "./utils/cleanup-images.ps1; ./utils/cleanup-minio.ps1"]
+            command: ["pwsh", "-c", "./utils/cleanup-images.ps1"]
   # install manually: helm install soam oci://registry-1.docker.io/bitnamicharts/spark --version 6.3.16 -f spark-values.yaml
   # helm:
   #   releases:
