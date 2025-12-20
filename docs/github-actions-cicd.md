@@ -79,8 +79,8 @@ Creates the foundational Azure resources using Terraform Step 1.
 - Azure Container Registry (ACR)
 - Azure Kubernetes Service (AKS)
 
-```bash
-gh workflow run "1️⃣ Deploy Infrastructure"
+```powershell
+gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
 ```
 
 ### 2️⃣ Deploy Application
@@ -95,8 +95,8 @@ Builds all Docker images, pushes to ACR, and deploys Kubernetes resources.
 2. Builds and pushes all service images to ACR
 3. Deploys all Kubernetes resources via Terraform Step 2
 
-```bash
-gh workflow run "2️⃣ Deploy Application"
+```powershell
+gh workflow run "2️⃣ Deploy Application"; gh run watch
 ```
 
 ### 3️⃣ Update Images
@@ -112,8 +112,8 @@ Rebuilds specific images and optionally restarts the corresponding pods.
 - `spark`, `simulator`, `rest-api-simulator`
 - `mosquitto`, `grafana`, `prometheus`
 
-```bash
-gh workflow run "3️⃣ Update Images" -f images=backend,frontend -f restart_pods=true
+```powershell
+gh workflow run "3️⃣ Update Images" -f images=backend,frontend -f restart_pods=true; gh run watch
 ```
 
 ### 4️⃣ Cleanup (Destroy All)
@@ -124,8 +124,8 @@ gh workflow run "3️⃣ Update Images" -f images=backend,frontend -f restart_po
 - `confirm`: Must type "DESTROY" to proceed
 - `delete_step`: What to delete (all, kubernetes-only, infrastructure-only)
 
-```bash
-gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY -f delete_step=all
+```powershell
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY -f delete_step=all; gh run watch
 ```
 
 ## Deployment Flow
@@ -227,15 +227,14 @@ If Terraform state gets corrupted, you may need to:
 
 ## Quick Reference
 
-```bash
+```powershell
 # Deploy everything from scratch
-gh workflow run "1️⃣ Deploy Infrastructure"
-# Wait for completion, then:
-gh workflow run "2️⃣ Deploy Application"
+gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
+gh workflow run "2️⃣ Deploy Application"; gh run watch
 
 # Update specific services
-gh workflow run "3️⃣ Update Images" -f images=backend,ingestor
+gh workflow run "3️⃣ Update Images" -f images=backend,ingestor; gh run watch
 
 # Destroy everything
-gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY; gh run watch
 ```

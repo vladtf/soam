@@ -151,6 +151,7 @@ jobs:
           aks_cluster_ca_certificate = "${{ needs.get-infra.outputs.aks_ca_cert }}"
           acr_login_server           = "${{ needs.get-infra.outputs.acr_login_server }}"
           kubernetes_namespace       = "${{ env.KUBERNETES_NAMESPACE }}"
+          deploy_monitoring          = true
           EOF
       
       - name: Terraform Init
@@ -185,10 +186,28 @@ jobs:
           kubectl get svc -n ${{ env.KUBERNETES_NAMESPACE }}
       
       - name: Summary
+        working-directory: ${{ env.TF_STEP2_DIR }}
         run: |
+          # Get URLs from Terraform outputs
+          FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "N/A")
+          BACKEND_URL=$(terraform output -raw backend_url 2>/dev/null || echo "N/A")
+          BACKEND_DOCS_URL=$(terraform output -raw backend_docs_url 2>/dev/null || echo "N/A")
+          INGESTOR_URL=$(terraform output -raw ingestor_url 2>/dev/null || echo "N/A")
+          GRAFANA_URL=$(terraform output -raw grafana_url 2>/dev/null || echo "N/A")
+          
           echo "## ✅ Application Deployed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Services" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Service URLs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend** | $FRONTEND_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Backend API** | $BACKEND_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Backend Docs** | $BACKEND_DOCS_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Ingestor** | $INGESTOR_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Grafana** | $GRAFANA_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Pod Status" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          kubectl get svc -n ${{ env.KUBERNETES_NAMESPACE }} >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.KUBERNETES_NAMESPACE }} >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

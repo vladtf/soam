@@ -134,7 +134,7 @@ variable "deploy_rest_api_simulator" {
 variable "deploy_monitoring" {
   description = "Deploy monitoring stack (Prometheus + Grafana)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "grafana_admin_password" {
