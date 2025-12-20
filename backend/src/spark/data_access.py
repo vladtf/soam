@@ -95,51 +95,67 @@ class DataAccessManager:
     def _record_sensor_to_gold_latency(self, rows: List[Dict[str, Any]]) -> None:
         """Record latency from sensor timestamp (window start) to gold layer availability.
         
+        Also records enrichment-to-gold latency if min_enrichment_ts is available.
+        
         The gold layer contains aggregated data with time_start representing the 
         window start time. The latency is calculated as current_time - time_start,
         which shows how long it takes for data to become available in gold layer.
         
         Args:
-            rows: List of gold layer records containing time_start
+            rows: List of gold layer records containing time_start and optionally min_enrichment_ts
         """
         if not rows:
             return
             
         try:
             now = time.time()
-            latencies = []
+            sensor_latencies = []
+            enrichment_latencies = []
             
             # Sample recent records (last 5 windows)
             recent_rows = rows[-5:] if len(rows) > 5 else rows
             
             for row in recent_rows:
                 time_start = row.get("time_start")
-                if time_start is None:
-                    continue
-                    
-                # Convert time_start to epoch seconds
-                if hasattr(time_start, 'timestamp'):
-                    # datetime object
-                    ts_epoch = time_start.timestamp()
-                else:
-                    continue
-                    
-                latency = now - ts_epoch
+                min_enrichment_ts = row.get("min_enrichment_ts")
                 
-                # Only record reasonable latencies (0 to 1 hour)
-                if 0 <= latency <= 3600:
-                    latencies.append(latency)
+                # Calculate sensor-to-gold latency
+                if time_start is not None:
+                    # Convert time_start to epoch seconds
+                    if hasattr(time_start, 'timestamp'):
+                        ts_epoch = time_start.timestamp()
+                        latency = now - ts_epoch
+                        # Only record reasonable latencies (0 to 1 hour)
+                        if 0 <= latency <= 3600:
+                            sensor_latencies.append(latency)
+                
+                # Calculate enrichment-to-gold latency
+                if min_enrichment_ts is not None:
+                    if hasattr(min_enrichment_ts, 'timestamp'):
+                        enrich_epoch = min_enrichment_ts.timestamp()
+                        enrich_latency = now - enrich_epoch
+                        # Only record reasonable latencies (0 to 1 hour)
+                        if 0 <= enrich_latency <= 3600:
+                            enrichment_latencies.append(enrich_latency)
             
-            # Record metrics
-            for latency in latencies:
+            # Record sensor-to-gold metrics
+            for latency in sensor_latencies:
                 backend_metrics.record_sensor_to_gold_latency(latency)
+            
+            # Record enrichment-to-gold metrics
+            for latency in enrichment_latencies:
+                backend_metrics.record_enrichment_to_gold_latency(latency)
                 
-            if latencies:
-                avg_latency = sum(latencies) / len(latencies)
-                logger.debug(f"📊 Sensor-to-gold latency: avg={avg_latency:.2f}s (sampled {len(latencies)} windows)")
+            if sensor_latencies:
+                avg_latency = sum(sensor_latencies) / len(sensor_latencies)
+                logger.debug(f"📊 Sensor-to-gold latency: avg={avg_latency:.2f}s (sampled {len(sensor_latencies)} windows)")
+            
+            if enrichment_latencies:
+                avg_enrich_latency = sum(enrichment_latencies) / len(enrichment_latencies)
+                logger.debug(f"📊 Enrichment-to-gold latency: avg={avg_enrich_latency:.2f}s (sampled {len(enrichment_latencies)} windows)")
                 
         except Exception as e:
-            logger.debug(f"Could not calculate sensor-to-gold latency: {e}")
+            logger.debug(f"Could not calculate gold layer latencies: {e}")
 
     def get_temperature_alerts(self, since_minutes: int = 60) -> List[Dict[str, Any]]:
         """

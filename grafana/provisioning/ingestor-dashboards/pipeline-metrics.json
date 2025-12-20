@@ -294,7 +294,40 @@
           "refId": "C"
         }
       ],
-      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 24, "w": 8, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Enrichment → Gold Layer Latency (p50, p95, p99)",
+      "description": "Latency from enrichment (silver layer) to gold layer aggregation - shows how long data waits before being aggregated",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "gridPos": {"x": 8, "y": 24, "w": 8, "h": 8},
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -322,7 +355,7 @@
           "refId": "B"
         }
       ],
-      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+      "gridPos": {"x": 16, "y": 24, "w": 8, "h": 8},
       "fieldConfig": {
         "defaults": {
           "unit": "s",

@@ -34,6 +34,15 @@ SENSOR_TO_GOLD_LATENCY = Histogram(
     buckets=(1, 2, 5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600)
 )
 
+# Enrichment to Gold latency: from enrichment timestamp to gold layer processing
+# This measures how long data waits in silver layer before being aggregated
+ENRICHMENT_TO_GOLD_LATENCY = Histogram(
+    "pipeline_enrichment_to_gold_latency_seconds",
+    "Latency from enrichment to gold layer aggregation (seconds)",
+    ["pod"],
+    buckets=(1, 2, 5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600)
+)
+
 # Latency by pipeline stage
 STAGE_LATENCY = Histogram(
     "pipeline_stage_latency_seconds",
@@ -153,6 +162,11 @@ def record_sensor_to_enrichment_latency(latency_seconds: float):
 def record_sensor_to_gold_latency(latency_seconds: float):
     """Record latency from sensor timestamp to gold layer availability."""
     SENSOR_TO_GOLD_LATENCY.labels(pod=POD_NAME).observe(latency_seconds)
+
+
+def record_enrichment_to_gold_latency(latency_seconds: float):
+    """Record latency from enrichment to gold layer aggregation."""
+    ENRICHMENT_TO_GOLD_LATENCY.labels(pod=POD_NAME).observe(latency_seconds)
 
 
 def record_stage_latency(stage: str, latency_seconds: float):

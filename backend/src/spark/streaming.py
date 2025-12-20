@@ -272,17 +272,22 @@ class StreamingManager:
 
         # Calculate sliding window averages (still use event_time for the window itself
         # to preserve actual sensor timing semantics)
+        # Include min_enrichment_ts to track enrichment-to-gold latency
         five_min_avg = (
             valid_temp_stream
             .groupBy(
                 F.window("ingest_ts", SparkConfig.AVG_WINDOW, SparkConfig.AVG_SLIDE).alias("time_window"),
                 "sensorId"
             )
-            .agg(F.round(F.avg("temperature"), 2).alias("avg_temp"))
+            .agg(
+                F.round(F.avg("temperature"), 2).alias("avg_temp"),
+                F.min("ingest_ts").alias("min_enrichment_ts")
+            )
             .selectExpr(
                 "sensorId",
                 "time_window.start as time_start",
-                "avg_temp"
+                "avg_temp",
+                "min_enrichment_ts"
             )
         )
 
