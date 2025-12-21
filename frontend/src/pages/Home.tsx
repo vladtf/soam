@@ -20,6 +20,7 @@ import {
   FaBolt
 } from 'react-icons/fa';
 import { ConfigContext } from '../context/ConfigContext';
+import { useTheme } from '../context/ThemeContext';
 import { defaultExternalServices } from '../config';
 import ErrorTestComponent from '../components/ErrorTestComponent';
 
@@ -29,9 +30,10 @@ interface FeatureCardProps {
   description: string;
   to?: string;
   href?: string;
-  variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'dark';
+  variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'dark' | 'info';
   badge?: string;
   portForwardCmd?: string;
+  isDark?: boolean;
 }
 
 const FeatureCard: React.FC<FeatureCardProps> = ({ 
@@ -42,13 +44,14 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
   href, 
   variant = 'primary',
   badge,
-  portForwardCmd
+  portForwardCmd,
+  isDark = false
 }) => {
   const isExternalDisabled = !href && portForwardCmd;
   const headerBg = isExternalDisabled ? 'bg-secondary' : `bg-${variant}`;
 
   return (
-    <Card className={`h-100 shadow-sm border-0 ${isExternalDisabled ? 'opacity-75' : ''}`}>
+    <Card className={`h-100 shadow-sm ${isExternalDisabled ? 'opacity-75' : ''}`} bg={isDark ? 'dark' : undefined} text={isDark ? 'light' : undefined}>
       <div className={`${headerBg} text-white p-3 d-flex align-items-center gap-2`}>
         <span className="fs-4">{icon}</span>
         <div>
@@ -60,11 +63,11 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
         </div>
       </div>
       <Card.Body className="d-flex flex-column">
-        <Card.Text className="text-muted small flex-grow-1">
+        <Card.Text className={`small flex-grow-1 ${isDark ? 'text-light opacity-75' : 'text-muted'}`}>
           {description}
         </Card.Text>
         {isExternalDisabled && portForwardCmd && (
-          <code className="d-block mb-2 p-2 bg-light rounded small text-break">
+          <code className={`d-block mb-2 p-2 rounded small text-break ${isDark ? 'bg-black text-warning' : 'bg-light'}`}>
             {portForwardCmd}
           </code>
         )}
@@ -91,12 +94,14 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string }
   <div className="text-center p-3">
     <div className="fs-2 text-primary">{icon}</div>
     <h3 className="mb-0 mt-2">{value}</h3>
-    <small className="text-muted">{label}</small>
+    <small className="text-body-secondary">{label}</small>
   </div>
 );
 
 const Home: React.FC = () => {
   const config = useContext(ConfigContext);
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const services = config?.externalServices ?? defaultExternalServices;
 
   return (
@@ -123,7 +128,7 @@ const Home: React.FC = () => {
 
       {/* Stats Section */}
       <Container className="py-4">
-        <Card className="shadow-sm border-0 mb-4">
+        <Card className="shadow-sm mb-4" bg={isDark ? 'dark' : undefined} text={isDark ? 'light' : undefined}>
           <Card.Body>
             <Row>
               <Col xs={6} md={3}>
@@ -143,7 +148,7 @@ const Home: React.FC = () => {
         </Card>
 
         {/* Platform Features */}
-        <h4 className="mb-3 text-muted">
+        <h4 className="mb-3 text-body-secondary">
           <FaCogs className="me-2" /> Platform Features
         </h4>
         <Row className="g-3 mb-4">
@@ -154,6 +159,7 @@ const Home: React.FC = () => {
               description="Create custom tiles with real-time data visualization, time series charts, and auto-refresh."
               to="/dashboard"
               variant="primary"
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={3}>
@@ -163,6 +169,7 @@ const Home: React.FC = () => {
               description="Configure normalization rules, value transformations, and manage data flow."
               to="/pipeline"
               variant="success"
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={3}>
@@ -171,7 +178,8 @@ const Home: React.FC = () => {
               title="Data Sources"
               description="Register and manage MQTT, REST API, and other data connectors."
               to="/data-sources"
-              variant="dark"
+              variant="info"
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={3}>
@@ -181,6 +189,7 @@ const Home: React.FC = () => {
               description="Explore the knowledge graph structure and semantic relationships."
               to="/ontology"
               variant="secondary"
+              isDark={isDark}
             />
           </Col>
         </Row>
@@ -193,6 +202,7 @@ const Home: React.FC = () => {
               description="Browse raw and processed data stored in the object storage lake."
               to="/minio"
               variant="danger"
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={3}>
@@ -202,6 +212,7 @@ const Home: React.FC = () => {
               description="Visualize sensor locations and city infrastructure geospatially."
               to="/map"
               variant="primary"
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={3}>
@@ -211,6 +222,7 @@ const Home: React.FC = () => {
               description="View inferred schemas, field statistics, and data evolution."
               to="/metadata"
               variant="success"
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={3}>
@@ -219,13 +231,14 @@ const Home: React.FC = () => {
               title="Settings"
               description="Configure application preferences and system parameters."
               to="/settings"
-              variant="dark"
+              variant="info"
+              isDark={isDark}
             />
           </Col>
         </Row>
 
         {/* External Services */}
-        <h4 className="mb-3 text-muted">
+        <h4 className="mb-3 text-body-secondary">
           <FaServer className="me-2" /> Infrastructure Services
         </h4>
         <Row className="g-3 mb-4">
@@ -238,6 +251,7 @@ const Home: React.FC = () => {
               variant="danger"
               badge="External"
               portForwardCmd={!services.grafanaUrl ? "kubectl port-forward svc/grafana 3001:3000 -n soam" : undefined}
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={4}>
@@ -246,9 +260,10 @@ const Home: React.FC = () => {
               title="Prometheus"
               description="Metrics collection, time-series database, and alerting rules."
               href={services.prometheusUrl || undefined}
-              variant="dark"
+              variant="info"
               badge="External"
               portForwardCmd={!services.prometheusUrl ? "kubectl port-forward svc/prometheus 9091:9090 -n soam" : undefined}
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={4}>
@@ -260,6 +275,7 @@ const Home: React.FC = () => {
               variant="success"
               badge="External"
               portForwardCmd={!services.sparkMasterUrl ? "kubectl port-forward svc/soam-spark-master-svc 8080:80 -n soam" : undefined}
+              isDark={isDark}
             />
           </Col>
         </Row>
@@ -274,6 +290,7 @@ const Home: React.FC = () => {
               variant="primary"
               badge="External"
               portForwardCmd={!services.minioUrl ? "kubectl port-forward svc/minio 9090:9090 -n soam" : undefined}
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={4}>
@@ -285,6 +302,7 @@ const Home: React.FC = () => {
               variant="secondary"
               badge="External"
               portForwardCmd={!services.neo4jUrl ? "kubectl port-forward svc/neo4j 7474:7474 -n soam" : undefined}
+              isDark={isDark}
             />
           </Col>
           <Col md={6} lg={4}>
@@ -296,17 +314,18 @@ const Home: React.FC = () => {
               variant="danger"
               badge="External"
               portForwardCmd={!services.cadvisorUrl ? "kubectl port-forward svc/cadvisor 8089:8080 -n soam" : undefined}
+              isDark={isDark}
             />
           </Col>
         </Row>
 
         {/* About Section */}
-        <Card className="shadow-sm border-0 mb-4 bg-light">
+        <Card className="shadow-sm mb-4" bg={isDark ? 'dark' : 'light'} text={isDark ? 'light' : undefined}>
           <Card.Body className="p-4">
             <Row className="align-items-center">
               <Col md={8}>
                 <h4 className="mb-3">About SOAM Platform</h4>
-                <p className="text-muted mb-0">
+                <p className={`mb-0 ${isDark ? 'text-light opacity-75' : 'text-muted'}`}>
                   SOAM (Smart City Open Aggregation Middleware) integrates diverse IoT sensors and data sources 
                   into a unified platform. Built with Python/FastAPI backend, React/TypeScript frontend, 
                   Apache Spark for stream processing, and Kubernetes for orchestration. Features include 
