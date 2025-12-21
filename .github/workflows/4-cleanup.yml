@@ -98,6 +98,18 @@ jobs:
             --overwrite-existing || true
           
           kubectl delete namespace ${{ env.KUBERNETES_NAMESPACE }} --timeout=300s || true
+      
+      - name: Release Terraform state lock on failure
+        if: failure()
+        run: |
+          SUB_ID=$(az account show --query id -o tsv)
+          STORAGE_NAME="soamtfstate$(echo $SUB_ID | cut -c1-8)"
+          echo "🔓 Releasing Terraform state lock for 02-kubernetes.tfstate..."
+          az storage blob lease break \
+            --blob-name "02-kubernetes.tfstate" \
+            --container-name "tfstate" \
+            --account-name "$STORAGE_NAME" \
+            --auth-mode key || true
 
   destroy-infrastructure:
     name: Destroy Azure Infrastructure
@@ -139,6 +151,18 @@ jobs:
         run: |
           echo "🗑️ Force deleting resource group..."
           az group delete --name ${{ env.AZURE_RESOURCE_GROUP }} --yes --no-wait || true
+      
+      - name: Release Terraform state lock on failure
+        if: failure()
+        run: |
+          SUB_ID=$(az account show --query id -o tsv)
+          STORAGE_NAME="soamtfstate$(echo $SUB_ID | cut -c1-8)"
+          echo "🔓 Releasing Terraform state lock for 01-infrastructure.tfstate..."
+          az storage blob lease break \
+            --blob-name "01-infrastructure.tfstate" \
+            --container-name "tfstate" \
+            --account-name "$STORAGE_NAME" \
+            --auth-mode key || true
 
   summary:
     name: Summary

@@ -211,3 +211,15 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           kubectl get pods -n ${{ env.KUBERNETES_NAMESPACE }} >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+      
+      - name: Release Terraform state lock on failure
+        if: failure()
+        run: |
+          SUB_ID=$(az account show --query id -o tsv)
+          STORAGE_NAME="soamtfstate$(echo $SUB_ID | cut -c1-8)"
+          echo "🔓 Releasing Terraform state lock for 02-kubernetes.tfstate..."
+          az storage blob lease break \
+            --blob-name "02-kubernetes.tfstate" \
+            --container-name "tfstate" \
+            --account-name "$STORAGE_NAME" \
+            --auth-mode key || true

@@ -225,6 +225,30 @@ If Terraform state gets corrupted, you may need to:
 1. Delete state files in the GitHub runner (they're ephemeral anyway)
 2. Import existing resources or destroy and recreate
 
+### Terraform State Lock Issues
+
+If a workflow fails while holding the state lock, you'll see an error like:
+```
+Error: Error acquiring the state lock
+Error message: state blob is already locked
+```
+
+The workflows now **automatically release the lock on failure**, but if you need to manually unlock:
+
+```powershell
+# Login to Azure
+az login --tenant a0867c7c-7aeb-44cb-96ed-32fa642ebe73
+
+# Break the lease on the locked state file (replace filename as needed)
+# For kubernetes state:
+az storage blob lease break --blob-name "02-kubernetes.tfstate" --container-name "tfstate" --account-name "soamtfstate60344ef8" --auth-mode key
+
+# For infrastructure state:
+az storage blob lease break --blob-name "01-infrastructure.tfstate" --container-name "tfstate" --account-name "soamtfstate60344ef8" --auth-mode key
+```
+
+> **Note:** Replace `soamtfstate60344ef8` with your actual storage account name (first 8 chars of subscription ID).
+
 ## Quick Reference
 
 ```powershell

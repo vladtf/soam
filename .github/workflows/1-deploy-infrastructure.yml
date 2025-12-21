@@ -146,3 +146,15 @@ jobs:
           echo "| Nodes | ${{ github.event.inputs.aks_node_count }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Next step:** Run '2️⃣ Deploy Application' workflow" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Release Terraform state lock on failure
+        if: failure()
+        run: |
+          SUB_ID=$(az account show --query id -o tsv)
+          STORAGE_NAME="soamtfstate$(echo $SUB_ID | cut -c1-8)"
+          echo "🔓 Releasing Terraform state lock for 01-infrastructure.tfstate..."
+          az storage blob lease break \
+            --blob-name "01-infrastructure.tfstate" \
+            --container-name "tfstate" \
+            --account-name "$STORAGE_NAME" \
+            --auth-mode key || true
