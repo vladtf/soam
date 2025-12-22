@@ -70,7 +70,7 @@ const TemperatureAlertsCard: React.FC<TemperatureAlertsCardProps> = ({
             {loading ? (
               <div className="text-body-secondary d-flex align-items-center justify-content-center flex-grow-1">Loading...</div>
             ) : alerts.length > 0 ? (
-              <div className="flex-grow-1" style={{ overflow: 'auto' }}>
+              <div className="flex-grow-1" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 <ListGroup variant="flush">
                   {alerts.map((alert, index) => (
                     <ListGroup.Item key={index}>

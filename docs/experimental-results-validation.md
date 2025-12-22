@@ -620,9 +620,9 @@ The script automatically calculates the number of threads needed based on a cons
 3. **Alternative: Run inside the cluster** (avoids network overhead):
    ```powershell
    # Copy script to simulator container and run
-   $TEMP_POD_ID = kubectl get pods -l app=simulator-temperature -o jsonpath="{.items[0].metadata.name}"
+   $TEMP_POD_ID = kubectl get pods -l app=simulator -o jsonpath="{.items[0].metadata.name}"
    kubectl cp tests/perf_test_mqtt.py "${TEMP_POD_ID}:/tmp/perf_test_mqtt.py"
-   kubectl exec -it $TEMP_POD_ID -- python /tmp/perf_test_mqtt.py --rate 3000 --duration 6000
+   kubectl exec -it $TEMP_POD_ID -- python /tmp/perf_test_mqtt.py --rate 3000 --duration 600
    ```
 
 **Method 2: Grafana Dashboard Monitoring**
