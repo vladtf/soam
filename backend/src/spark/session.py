@@ -5,9 +5,12 @@ import os
 import logging
 from typing import Optional
 from pyspark.sql import SparkSession
-import time
+from cachetools import TTLCache, cached
 
 logger = logging.getLogger(__name__)
+
+# Shared TTL cache for connection checks (1 entry, 5 second TTL)
+_connection_cache: TTLCache = TTLCache(maxsize=1, ttl=5.0)
 
 
 class SparkSessionManager:
@@ -73,8 +76,13 @@ class SparkSessionManager:
         
         return spark
     
+    @cached(_connection_cache)
     def is_connected(self) -> bool:
-        """Check if Spark session is available and working."""
+        """
+        Check if Spark session is available and working.
+        
+        Results are cached for 5 seconds to avoid frequent expensive SQL queries.
+        """
         try:
             self.spark.sql("SELECT 1").collect()
             return True

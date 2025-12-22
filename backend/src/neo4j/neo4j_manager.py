@@ -3,8 +3,13 @@ import logging
 import time
 from typing import List, Dict, Any, Optional
 from neo4j.exceptions import ServiceUnavailable, AuthError
+from cachetools import TTLCache, cached
 
 logger = logging.getLogger(__name__)
+
+# Shared TTL cache for health checks (1 entry, 5 second TTL)
+_health_cache: TTLCache = TTLCache(maxsize=1, ttl=5.0)
+
 
 class Neo4jManager:
     def __init__(self, uri: str, user: str, password: str) -> None:
@@ -251,20 +256,19 @@ class Neo4jManager:
             self.driver.close()
             logger.info("Neo4j connection closed")
 
+    @cached(_health_cache)
     def health_check(self):
-        """Check if Neo4j connection is healthy."""
-        try:
-            if not self.driver:
-                raise ConnectionError("No database connection")
-            
-            with self.driver.session() as session:
-                result = session.run("RETURN 1 as test")
-                record = result.single()
-                if record and record["test"] == 1:
-                    return {"message": "Neo4j connection is working"}
-                else:
-                    raise RuntimeError("Unexpected response from database")
-        except Exception as e:
-            if isinstance(e, (ConnectionError, RuntimeError)):
-                raise
-            raise RuntimeError(f"Database health check failed: {str(e)}")
+        """
+        Check if Neo4j connection is healthy.
+        
+        Results are cached for 5 seconds to avoid frequent expensive queries.
+        """
+        if not self.driver:
+            raise ConnectionError("No database connection")
+        
+        with self.driver.session() as session:
+            result = session.run("RETURN 1 as test")
+            record = result.single()
+            if record and record["test"] == 1:
+                return {"message": "Neo4j connection is working"}
+            raise RuntimeError("Unexpected response from database")
