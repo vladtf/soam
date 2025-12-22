@@ -96,6 +96,9 @@ spec:
               value: "1"
             - name: LOG_LEVEL
               value: "INFO"
+          # Scalene profiling - full profile including I/O wait time
+          command: ["/bin/sh", "-c"]
+          args: ["scalene run --profile-interval 60 -o /app/scalene-profile.json run_server.py"]
           volumeMounts:
             - name: spark-events
               mountPath: /tmp/spark-events
