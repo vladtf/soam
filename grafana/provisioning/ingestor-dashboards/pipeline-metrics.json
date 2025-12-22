@@ -451,8 +451,72 @@
     },
     {
       "type": "row",
-      "title": "Error Tracking",
+      "title": "Normalization Rules",
       "gridPos": {"x": 0, "y": 41, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Normalization Rule Applications (Rate)",
+      "description": "Rate of normalization rule applications per raw_key during enrichment",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (raw_key) (rate(normalization_rule_applied_total[1m]))",
+          "legendFormat": "{{raw_key}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 42, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "sum"]}
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Top Normalization Rules (Total Applications)",
+      "description": "Most frequently applied normalization rules",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "topk(10, sum by (raw_key) (normalization_rule_applied_total))",
+          "legendFormat": "{{raw_key}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "gridPos": {"x": 12, "y": 42, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null},
+              {"color": "green", "value": 100},
+              {"color": "yellow", "value": 1000},
+              {"color": "orange", "value": 10000}
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "showUnfilled": true
+      }
+    },
+    {
+      "type": "row",
+      "title": "Error Tracking",
+      "gridPos": {"x": 0, "y": 51, "w": 24, "h": 1},
       "collapsed": false
     },
     {
@@ -467,7 +531,7 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"x": 0, "y": 42, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 52, "w": 12, "h": 8},
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -490,7 +554,7 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"x": 12, "y": 42, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 52, "w": 12, "h": 8},
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -504,7 +568,7 @@
     {
       "type": "row",
       "title": "Step Profiling (All Modules)",
-      "gridPos": {"x": 0, "y": 50, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 61, "w": 24, "h": 1},
       "collapsed": false
     },
     {
@@ -519,7 +583,7 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"x": 0, "y": 51, "w": 16, "h": 10},
+      "gridPos": {"x": 0, "y": 62, "w": 16, "h": 10},
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -547,7 +611,7 @@
           "instant": true
         }
       ],
-      "gridPos": {"x": 16, "y": 51, "w": 8, "h": 10},
+      "gridPos": {"x": 16, "y": 62, "w": 8, "h": 10},
       "fieldConfig": {
         "defaults": {
           "unit": "s",
