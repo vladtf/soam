@@ -86,7 +86,7 @@ soam/
 ### Architecture Diagram
 
 <div style="border: 2px solid black; padding: 10px; display: inline-block;">
-    <img src="assets/architecture.png" alt="Architecture" width="100%"/>
+    <img src="docs/assets/architecture_diagram.png" alt="Architecture" width="100%"/>
 </div>
 
 ### Local Development
