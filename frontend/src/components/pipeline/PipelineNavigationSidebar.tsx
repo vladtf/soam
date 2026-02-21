@@ -27,6 +27,15 @@ const PipelineNavigationSidebar: React.FC<PipelineNavigationSidebarProps> = ({
           <Nav variant="pills" className="flex-column">
             <Nav.Item>
               <Nav.Link
+                eventKey="overview"
+                className="d-flex align-items-center justify-content-between mb-2 text-nowrap"
+                style={{ fontSize: '0.9rem' }}
+              >
+                <span>📊 Overview</span>
+              </Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link
                 eventKey="devices"
                 className="d-flex align-items-center justify-content-between mb-2 text-nowrap"
                 style={{ fontSize: '0.9rem' }}
@@ -73,15 +82,6 @@ const PipelineNavigationSidebar: React.FC<PipelineNavigationSidebarProps> = ({
               >
                 <span>⚡ Compute</span>
                 <Badge bg="secondary" style={{ fontSize: '0.7rem' }}>{relatedComputations.length}</Badge>
-              </Nav.Link>
-            </Nav.Item>
-            <Nav.Item>
-              <Nav.Link
-                eventKey="overview"
-                className="d-flex align-items-center justify-content-between mb-2 text-nowrap"
-                style={{ fontSize: '0.9rem' }}
-              >
-                <span>📊 Overview</span>
               </Nav.Link>
             </Nav.Item>
           </Nav>
