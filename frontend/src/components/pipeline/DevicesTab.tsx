@@ -214,7 +214,21 @@ const DevicesTab: React.FC<DevicesTabProps> = ({
                       <Col md={6} lg={3} key={device.id} className="mb-3">
                         <Card
                           className="h-100"
-                          style={{ fontSize: '0.85rem', minHeight: '200px', cursor: 'pointer' }}
+                          style={{ 
+                          fontSize: '0.85rem', 
+                          minHeight: '200px', 
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          }}
+                          onMouseEnter={(e) => {
+                          e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.15)';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          }}
+                          onMouseLeave={(e) => {
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          }}
                           onClick={() => handleDeviceClick(device)}
                         >
                           <Card.Header className="py-2">
