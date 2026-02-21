@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from src.database.database import get_db
 from src.services.normalization_preview import DataNormalizationPreview
 from src.minio.minio_browser import MinioBrowser
-from src.api.dependencies import get_minio_client, get_config, AppConfig
+from src.api.dependencies import MinioClientDep, ConfigDep, AppConfig
 from src.api.models import ApiResponse
 from src.api.response_utils import success_response, internal_server_error
 from minio import Minio
@@ -60,10 +60,9 @@ class RuleValidationRequest(BaseModel):
 
 
 def get_preview_service(
-    minio_client: Minio = Depends(get_minio_client),
-    config: AppConfig = Depends(get_config)
+    minio_client: MinioClientDep,
+    config: ConfigDep
 ) -> DataNormalizationPreview:
-    """Dependency to get normalization preview service."""
     minio_browser = MinioBrowser(client=minio_client, bucket=config.minio_bucket)
     return DataNormalizationPreview(minio_browser)
 

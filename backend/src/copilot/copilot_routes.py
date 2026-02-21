@@ -1,14 +1,12 @@
 """
 API routes for Copilot-powered computation generation.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from src.api.models import ApiResponse
 from src.api.response_utils import success_response, internal_server_error
-from src.api.dependencies import get_spark_manager, get_minio_client, ConfigDep, MinioClientDep
+from src.api.dependencies import SparkManagerDep, MinioClientDep
 from src.copilot.copilot_service import CopilotService, ComputationRequest
 from src.computations.validation import validate_computation_definition
-from src.spark.spark_manager import SparkManager
-from minio import Minio
 import os
 from src.utils.logging import get_logger
 
@@ -19,8 +17,8 @@ router = APIRouter(prefix="/api", tags=["copilot"])
 @router.post("/copilot/generate-computation", response_model=ApiResponse)
 async def generate_computation(
     request: ComputationRequest,
-    spark_manager: SparkManager = Depends(get_spark_manager),
-    minio_client: Minio = Depends(get_minio_client)
+    spark_manager: SparkManagerDep,
+    minio_client: MinioClientDep
 ) -> ApiResponse:
     """Generate a computation using Azure OpenAI Copilot."""
     try:
@@ -55,8 +53,8 @@ async def generate_computation(
 
 @router.get("/copilot/context", response_model=ApiResponse)
 async def get_copilot_context(
-    spark_manager: SparkManager = Depends(get_spark_manager),
-    minio_client: Minio = Depends(get_minio_client)
+    spark_manager: SparkManagerDep,
+    minio_client: MinioClientDep
 ):
     """Get current data context for copilot suggestions."""
     try:

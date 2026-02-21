@@ -13,8 +13,7 @@ from src.database.database import get_db
 from src.database.models import DashboardTile, Computation, DataSensitivity
 from src.computations.executor import ComputationExecutor
 from src.computations.sensitivity import can_access_sensitivity, get_restriction_message
-from src.api.dependencies import get_spark_manager
-from src.spark.spark_manager import SparkManager
+from src.api.dependencies import SparkManagerDep
 from src.auth.dependencies import get_user_roles_from_token
 from src.utils.logging import get_logger
 from src.utils.api_utils import handle_api_errors_sync
@@ -161,7 +160,7 @@ def get_dashboard_tile_examples(db: Session = Depends(get_db)):
 
 
 @router.post("/tiles/{tile_id}/preview", response_model=ApiResponse)
-async def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
+async def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: SparkManagerDep = None):
     def _execute_tile_preview():
         """Execute tile preview in thread pool."""
         tile = db.get(DashboardTile, tile_id)
@@ -196,7 +195,7 @@ async def preview_tile(tile_id: int, db: Session = Depends(get_db), spark: Spark
 
 
 @router.post("/tiles/preview", response_model=ApiResponse)
-async def preview_tile_config(tile_config: dict, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
+async def preview_tile_config(tile_config: dict, db: Session = Depends(get_db), spark: SparkManagerDep = None):
     """Preview a dashboard tile using tile configuration (for new tiles)."""
     def _execute_config_preview():
         """Execute tile config preview in thread pool."""

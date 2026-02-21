@@ -1,9 +1,6 @@
-"""
-Dependency injection for FastAPI.
-"""
+"""Dependency injection for FastAPI."""
 import os
-from functools import lru_cache
-from fastapi import Depends
+from fastapi import Depends, Request
 from typing import Annotated
 
 from src.spark import SparkManager
@@ -15,15 +12,13 @@ logger = get_logger(__name__)
 
 
 class AppConfig:
-    """Application configuration."""
+    """Application configuration loaded from environment variables."""
 
     def __init__(self):
-        # Neo4j configuration
         self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
         self.neo4j_password = os.getenv("NEO4J_PASSWORD", "verystrongpassword")
 
-        # Spark configuration
         self.spark_host = os.getenv("SPARK_HOST", "localhost")
         self.spark_port = os.getenv("SPARK_PORT", "7077")
         self.spark_ui_port = os.getenv("SPARK_UI_PORT", "8080")
@@ -33,55 +28,79 @@ class AppConfig:
         self.minio_bucket = os.getenv("MINIO_BUCKET", "lake")
 
 
-@lru_cache()
-def get_config() -> AppConfig:
-    """Get application configuration (cached)."""
-    return AppConfig()
+# ------------------------------------------------------------------ #
+# Singleton registry — populated during app lifespan, read by Depends
+# ------------------------------------------------------------------ #
+
+_config: AppConfig | None = None
+_spark_manager: SparkManager | None = None
+_neo4j_manager: Neo4jManager | None = None
+_minio_client: Minio | None = None
 
 
-@lru_cache()
-def get_spark_manager(config: Annotated[AppConfig, Depends(get_config)]) -> SparkManager:
-    """Get SparkManager instance (cached)."""
-    return SparkManager(
-        config.spark_host,
-        config.spark_port,
-        config.minio_endpoint,
-        config.minio_access_key,
-        config.minio_secret_key,
-        config.minio_bucket,
+def init_dependencies(config: AppConfig) -> None:
+    """Create all singleton instances. Called once during app startup."""
+    global _config, _spark_manager, _neo4j_manager, _minio_client
+    _config = config
+
+    _spark_manager = SparkManager(
+        config.spark_host, config.spark_port,
+        config.minio_endpoint, config.minio_access_key,
+        config.minio_secret_key, config.minio_bucket,
         config.spark_ui_port,
     )
 
-
-@lru_cache()
-def get_neo4j_manager(config: Annotated[AppConfig, Depends(get_config)]) -> Neo4jManager:
-    """Get Neo4jManager instance (cached)."""
-    manager = Neo4jManager(config.neo4j_uri, config.neo4j_user, config.neo4j_password)
-    # Provision data on first access
+    _neo4j_manager = Neo4jManager(config.neo4j_uri, config.neo4j_user, config.neo4j_password)
     try:
-        manager.provision_data()
+        _neo4j_manager.provision_data()
     except Exception as e:
-        logger.warning(f"Failed to provision Neo4j data: {e}")
-    return manager
+        logger.warning("⚠️ Failed to provision Neo4j data: %s", e)
 
-
-@lru_cache()
-def get_minio_client(config: Annotated[AppConfig, Depends(get_config)]) -> Minio:
-    """Create a MinIO client using app configuration (cached)."""
     endpoint = config.minio_endpoint
-    # Default to HTTP unless explicitly https://
     secure = False
-    # Normalize endpoint and secure flag based on scheme
     if endpoint.startswith("http://"):
         endpoint = endpoint[len("http://"):]
-        secure = False
     elif endpoint.startswith("https://"):
         endpoint = endpoint[len("https://"):]
         secure = True
-    return Minio(endpoint, config.minio_access_key, config.minio_secret_key, secure=secure)
+    _minio_client = Minio(endpoint, config.minio_access_key, config.minio_secret_key, secure=secure)
+
+    logger.info("✅ All dependencies initialized")
 
 
-# Type aliases for dependency injection
+def shutdown_dependencies() -> None:
+    """Gracefully close all singletons. Called during app shutdown."""
+    if _spark_manager:
+        logger.info("🛑 Stopping SparkManager...")
+        _spark_manager.close()
+    if _neo4j_manager:
+        logger.info("🛑 Stopping Neo4jManager...")
+        _neo4j_manager.close()
+    logger.info("✅ All dependencies shut down")
+
+
+# ------------------------------------------------------------------ #
+# FastAPI dependency getters
+# ------------------------------------------------------------------ #
+
+def get_config() -> AppConfig:
+    assert _config is not None, "Dependencies not initialized — call init_dependencies() during startup"
+    return _config
+
+
+def get_spark_manager() -> SparkManager:
+    assert _spark_manager is not None, "SparkManager not initialized"
+    return _spark_manager
+
+
+def get_neo4j_manager() -> Neo4jManager:
+    assert _neo4j_manager is not None, "Neo4jManager not initialized"
+    return _neo4j_manager
+
+
+def get_minio_client() -> Minio:
+    assert _minio_client is not None, "MinIO client not initialized"
+    return _minio_client
 
 
 # Type aliases for dependency injection

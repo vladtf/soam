@@ -26,7 +26,7 @@ from src.auth import routes as auth_routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.dependencies import get_spark_manager, get_neo4j_manager, get_config
+from src.api.dependencies import AppConfig, init_dependencies, shutdown_dependencies
 from src.logging_config import setup_logging
 from src.middleware import RequestIdMiddleware
 from src.spark import spark_routes
@@ -54,31 +54,12 @@ app_state: Dict[str, Any] = {
 
 
 def signal_handler(signum: int, frame) -> None:
-    """Handle shutdown signals gracefully."""
-    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-    
+    logger.info("Received signal %s, initiating graceful shutdown...", signum)
     try:
-        config = get_config()
-        spark_manager = get_spark_manager(config)
-        neo4j_manager = get_neo4j_manager(config)
-        
-        if spark_manager:
-            logger.info("Signal handler stopping SparkManager...")
-            spark_manager.close()
-            
-        # Close Neo4j connection
-        if neo4j_manager:
-            logger.info("Signal handler stopping Neo4jManager...")
-            neo4j_manager.close()
-            
-        try:
-            NormalizationRuleUsageTracker.stop()
-        except Exception as e:
-            logger.warning("Error stopping normalization usage aggregator in signal handler: %s", e)
-            
+        shutdown_dependencies()
+        NormalizationRuleUsageTracker.stop()
     except Exception as e:
-        logger.error(f"Error in signal handler: {e}")
-    
+        logger.error("❌ Error in signal handler: %s", e)
     logger.info("Signal handler cleanup complete, exiting...")
     sys.exit(0)
 
@@ -164,12 +145,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Could not start normalization usage aggregator: %s", e)
 
     try:
-        config = get_config()
-        spark_manager = get_spark_manager(config)
-        neo4j_manager = get_neo4j_manager(config)
-        logger.info("All dependencies initialized successfully")
+        config = AppConfig()
+        init_dependencies(config)
     except Exception as e:
-        logger.error(f"Failed to initialize dependencies: {e}")
+        logger.error("❌ Failed to initialize dependencies: %s", e)
         raise
 
     yield
@@ -178,27 +157,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("🛑 Shutting down SOAM Smart City Backend...")
 
     try:
-        config = get_config()
-        spark_manager = get_spark_manager(config)
-        neo4j_manager = get_neo4j_manager(config)
-
-        # Stop Spark streams and close manager
-        if spark_manager:
-            logger.info("Stopping SparkManager...")
-            spark_manager.close()
-            logger.info("SparkManager stopped successfully")
-
-        if neo4j_manager:
-            logger.info("Stopping Neo4jManager...")
-            neo4j_manager.close()
-            logger.info("Neo4jManager stopped successfully")
-
+        shutdown_dependencies()
     except Exception as e:
-        logger.error(f"Error during manager shutdown: {e}")
+        logger.error("❌ Error during manager shutdown: %s", e)
 
     for key, thread in app_state["threads"].items():
         if thread.is_alive():
-            logger.info(f"Stopping thread {key}")
+            logger.info("Stopping thread %s", key)
             thread.join(timeout=5)
 
     try:

@@ -9,8 +9,7 @@ from src.api.models import ComputationCreate, ComputationUpdate, ComputationResp
 from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.database.database import get_db
 from src.database.models import Device
-from src.api.dependencies import get_spark_manager, ConfigDep, MinioClientDep
-from src.spark.spark_manager import SparkManager
+from src.api.dependencies import SparkManagerDep, ConfigDep, MinioClientDep
 
 # Import refactored modules
 from src.computations.examples import EXAMPLE_DEFINITIONS, get_example_by_id, get_dsl_info
@@ -92,7 +91,7 @@ def analyze_computation_sensitivity(payload: dict, db: Session = Depends(get_db)
 
 
 @router.post("/computations/examples/{example_id}/preview", response_model=ApiResponse)
-async def preview_example_computation(example_id: str, spark: SparkManager = Depends(get_spark_manager)):
+async def preview_example_computation(example_id: str, spark: SparkManagerDep):
     """Preview an example computation by ID."""
     example = get_example_by_id(example_id)
     if not example:
@@ -125,7 +124,7 @@ async def preview_example_computation(example_id: str, spark: SparkManager = Dep
 
 
 @router.get("/computations/schemas", response_model=ApiResponse)
-async def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManager = Depends(get_spark_manager)):
+async def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkManagerDep):
     """Return detected sources plus inferred column schemas for each source using Spark."""
     def _get_schemas():
         """Get schemas in thread pool."""
@@ -223,7 +222,7 @@ def check_computation_dependencies(comp_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/computations/{comp_id}/preview", response_model=ApiResponse)
-async def preview_computation(comp_id: int, db: Session = Depends(get_db), spark: SparkManager = Depends(get_spark_manager)):
+async def preview_computation(comp_id: int, db: Session = Depends(get_db), spark: SparkManagerDep = None):
     """Preview a computation's results."""
     def _execute_computation_preview():
         """Execute computation preview in thread pool."""
