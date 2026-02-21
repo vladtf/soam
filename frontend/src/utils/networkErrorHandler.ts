@@ -1,5 +1,6 @@
 import React from 'react';
 import { toast } from 'react-toastify';
+import { isDev } from './logger';
 
 export interface NetworkError extends Error {
   status?: number;
@@ -106,7 +107,7 @@ class NetworkErrorHandler {
     };
 
     // Log detailed error in development
-    if ((import.meta as any).env?.MODE === 'development') {
+    if (isDev()) {
       console.group(`🌐 Network Error: ${error.method} ${error.url}`);
       console.error('Error:', error);
       console.log('Request:', errorDetails.request);
@@ -202,7 +203,7 @@ export async function fetchWithErrorHandling(
     }
 
     // Log successful requests in development
-    if ((import.meta as any).env?.MODE === 'development') {
+    if (isDev()) {
       const duration = Date.now() - startTime;
       console.log(`✅ ${requestDetails.method} ${url} - ${response.status} (${duration}ms)`);
     }

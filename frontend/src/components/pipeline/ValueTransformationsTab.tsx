@@ -14,6 +14,8 @@ import {
   getIngestorDatasetSchema,
   SchemaField
 } from '../../api/backendRequests';
+import { extractErrorMessage } from '../../utils/errorHandling';
+import { logger } from '../../utils/logger';
 
 interface TransformationTypeDefinition {
   type: string;
@@ -82,8 +84,7 @@ const ValueTransformationsTab: React.FC<ValueTransformationsTabProps> = ({
             allFields.add(field.name);
           });
         } catch (err) {
-          // Skip datasets that can't be fetched (might be old/inactive)
-          console.warn(`Could not fetch schema for ${ingestionId}:`, err);
+          logger.warn('ValueTransformations', `Could not fetch schema for ${ingestionId}`, err);
         }
       }
       
@@ -91,8 +92,7 @@ const ValueTransformationsTab: React.FC<ValueTransformationsTabProps> = ({
       const fieldArray = Array.from(allFields).sort();
       setAvailableFields(fieldArray);
     } catch (err) {
-      console.error('Error loading available fields:', err);
-      // Don't set error state - this is optional functionality
+      logger.warn('ValueTransformations', 'Failed to load available fields', err);
     } finally {
       setLoadingFields(false);
     }
@@ -109,8 +109,8 @@ const ValueTransformationsTab: React.FC<ValueTransformationsTabProps> = ({
       setTransformationTypes(typesData);
       setError(null);
     } catch (err) {
-      setError('Failed to load value transformation rules');
-      console.error('Error loading data:', err);
+      logger.error('ValueTransformations', 'Failed to load rules', err);
+      setError(extractErrorMessage(err, 'Failed to load value transformation rules'));
     } finally {
       setLoading(false);
     }
@@ -214,8 +214,8 @@ const ValueTransformationsTab: React.FC<ValueTransformationsTabProps> = ({
       setShowModal(false);
       await loadData();
     } catch (err) {
-      setError('Failed to save transformation rule');
-      console.error('Error saving rule:', err);
+      logger.error('ValueTransformations', 'Failed to save rule', err);
+      setError(extractErrorMessage(err, 'Failed to save transformation rule'));
     }
   };
 
@@ -225,8 +225,8 @@ const ValueTransformationsTab: React.FC<ValueTransformationsTabProps> = ({
         await deleteValueTransformationRule(id);
         await loadData();
       } catch (err) {
-        setError('Failed to delete transformation rule');
-        console.error('Error deleting rule:', err);
+        logger.error('ValueTransformations', 'Failed to delete rule', err);
+        setError(extractErrorMessage(err, 'Failed to delete transformation rule'));
       }
     }
   };
@@ -236,8 +236,8 @@ const ValueTransformationsTab: React.FC<ValueTransformationsTabProps> = ({
       await toggleValueTransformationRule(id);
       await loadData();
     } catch (err) {
-      setError('Failed to toggle transformation rule');
-      console.error('Error toggling rule:', err);
+      logger.error('ValueTransformations', 'Failed to toggle rule', err);
+      setError(extractErrorMessage(err, 'Failed to toggle transformation rule'));
     }
   };
 

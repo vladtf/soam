@@ -2,6 +2,7 @@ import { getConfig } from '../config';
 import { Building } from '../models/Building';
 import { fetchWithErrorHandling, NetworkError } from '../utils/networkErrorHandler';
 import { withAuth, tryRefreshToken, clearAuthData } from '../utils/authUtils';
+import { logger, isDev } from '../utils/logger';
 
 export interface SensorData {
   sensorId?: string;
@@ -59,11 +60,7 @@ async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean =
       error.url = url;
       error.method = options?.method || 'GET';
       
-      // Log parsing error in development
-      if ((import.meta as any).env?.MODE === 'development') {
-        console.error('Response parsing failed:', parseError);
-        console.log('Response:', response);
-      }
+      logger.error('doFetch', `Response parsing failed for ${url}`, parseError);
       
       throw error;
     }
@@ -82,13 +79,9 @@ async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean =
       throw apiError;
     }
 
-    // Log successful API calls in development
-    if ((import.meta as any).env?.MODE === 'development') {
+    if (isDev()) {
       const duration = Date.now() - startTime;
-      console.log(`📡 API Success: ${options?.method || 'GET'} ${url} (${duration}ms)`, {
-        request: { url, options },
-        response: result,
-      });
+      logger.debug('doFetch', `${options?.method || 'GET'} ${url} (${duration}ms)`, result);
     }
 
     // Return the data field if present, otherwise return the raw result
@@ -103,16 +96,14 @@ async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean =
     if (error instanceof Error && useAuth && !isRetry) {
       const networkError = error as NetworkError;
       if (networkError.status === 401) {
-        console.log('🔄 Attempting to refresh token...');
+        logger.info('doFetch', 'Attempting to refresh token...');
         const refreshed = await tryRefreshToken();
         
         if (refreshed) {
-          // Retry the original request with new token
-          console.log('🔄 Retrying request with new token...');
+          logger.info('doFetch', 'Retrying request with new token...');
           return doFetch<T>(url, options, useAuth, true);
         } else {
-          // Token refresh failed, clear auth and let user know
-          console.log('❌ Token refresh failed, logging out...');
+          logger.error('doFetch', 'Token refresh failed, logging out...');
           clearAuthData();
         }
       }
@@ -124,8 +115,7 @@ async function doFetch<T>(url: string, options?: RequestInit, useAuth: boolean =
       enhancedError.url = enhancedError.url || url;
       enhancedError.method = enhancedError.method || options?.method || 'GET';
       
-      // Add request details for debugging
-      if ((import.meta as any).env?.MODE === 'development') {
+      if (isDev()) {
         (enhancedError as any).requestDetails = {
           url,
           options,

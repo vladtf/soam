@@ -34,6 +34,8 @@ import {
   ConnectorStatusOverview
 } from '../types/dataSource';
 import DynamicConfigForm from '../components/DynamicConfigForm';
+import { extractErrorMessage } from '../utils/errorHandling';
+import { logger } from '../utils/logger';
 
 const DataSourcesPage: React.FC = () => {
   // State management
@@ -83,8 +85,8 @@ const DataSourcesPage: React.FC = () => {
       setDataSources(sources);
       setError(null);
     } catch (err) {
-      console.error('Failed to load data sources:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data sources');
+      logger.error('DataSourcesPage', 'Failed to load data sources', err);
+      setError(extractErrorMessage(err, 'Failed to load data sources'));
     }
   };
 
@@ -93,8 +95,8 @@ const DataSourcesPage: React.FC = () => {
       const types = await fetchDataSourceTypes();
       setDataSourceTypes(types);
     } catch (err) {
-      console.error('Failed to load data source types:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data source types');
+      logger.error('DataSourcesPage', 'Failed to load data source types', err);
+      setError(extractErrorMessage(err, 'Failed to load data source types'));
     } finally {
       setLoading(false);
     }
@@ -105,8 +107,7 @@ const DataSourcesPage: React.FC = () => {
       const overview = await getConnectorStatusOverview();
       setStatusOverview(overview);
     } catch (err) {
-      console.error('Failed to load status overview:', err);
-      // Don't set error for status overview failures
+      logger.warn('DataSourcesPage', 'Failed to load status overview', err);
     }
   };
 
@@ -117,8 +118,8 @@ const DataSourcesPage: React.FC = () => {
       setCreateForm({ name: '', type_name: '', config: {}, enabled: true });
       await loadDataSources();
     } catch (err) {
-      console.error('Failed to create data source:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create data source');
+      logger.error('DataSourcesPage', 'Failed to create data source', err);
+      setError(extractErrorMessage(err, 'Failed to create data source'));
     }
   };
 
@@ -132,8 +133,8 @@ const DataSourcesPage: React.FC = () => {
       setSelectedSource(null);
       await loadDataSources();
     } catch (err) {
-      console.error('Failed to update data source:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update data source');
+      logger.error('DataSourcesPage', 'Failed to update data source', err);
+      setError(extractErrorMessage(err, 'Failed to update data source'));
     }
   };
 
@@ -146,8 +147,8 @@ const DataSourcesPage: React.FC = () => {
       setSelectedSource(null);
       await loadDataSources();
     } catch (err) {
-      console.error('Failed to delete data source:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete data source');
+      logger.error('DataSourcesPage', 'Failed to delete data source', err);
+      setError(extractErrorMessage(err, 'Failed to delete data source'));
     }
   };
 
@@ -157,8 +158,8 @@ const DataSourcesPage: React.FC = () => {
       await loadDataSources();
       await loadStatusOverview();
     } catch (err) {
-      console.error('Failed to start data source:', err);
-      setError(err instanceof Error ? err.message : 'Failed to start data source');
+      logger.error('DataSourcesPage', 'Failed to start data source', err);
+      setError(extractErrorMessage(err, 'Failed to start data source'));
     }
   };
 
@@ -168,8 +169,8 @@ const DataSourcesPage: React.FC = () => {
       await loadDataSources();
       await loadStatusOverview();
     } catch (err) {
-      console.error('Failed to stop data source:', err);
-      setError(err instanceof Error ? err.message : 'Failed to stop data source');
+      logger.error('DataSourcesPage', 'Failed to stop data source', err);
+      setError(extractErrorMessage(err, 'Failed to stop data source'));
     }
   };
 
@@ -179,8 +180,8 @@ const DataSourcesPage: React.FC = () => {
       await loadDataSources();
       await loadStatusOverview();
     } catch (err) {
-      console.error('Failed to restart data source:', err);
-      setError(err instanceof Error ? err.message : 'Failed to restart data source');
+      logger.error('DataSourcesPage', 'Failed to restart data source', err);
+      setError(extractErrorMessage(err, 'Failed to restart data source'));
     }
   };
 
@@ -192,7 +193,7 @@ const DataSourcesPage: React.FC = () => {
       setConfigCurrentPage(1); // Reset pagination when opening modal
       setShowDetailsModal(true);
     } catch (err) {
-      console.error('Failed to get health status:', err);
+      logger.warn('DataSourcesPage', 'Failed to get health status', err);
       // Show modal anyway with basic info, but without health data
       setSelectedHealth(null);
       setSelectedSource(source);

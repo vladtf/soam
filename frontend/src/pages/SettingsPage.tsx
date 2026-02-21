@@ -3,6 +3,7 @@ import { Container, Row, Col, Card, Table, Button, Alert, Spinner, Badge, Modal,
 import { FaCog, FaUser, FaClock, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
 import { listSettings, deleteSetting, createSetting, type Setting } from '../api/backendRequests';
 import { useAuth } from '../context/AuthContext';
+import { extractErrorMessage } from '../utils/errorHandling';
 import TemperatureThresholdModal from '../components/TemperatureThresholdModal';
 
 const SettingsPage: React.FC = () => {
@@ -35,7 +36,7 @@ const SettingsPage: React.FC = () => {
       const settingsData = await listSettings();
       setSettings(settingsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load settings');
+      setError(extractErrorMessage(err, 'Failed to load settings'));
     } finally {
       setLoading(false);
     }
@@ -56,7 +57,7 @@ const SettingsPage: React.FC = () => {
       setDeleteKey(null);
       await loadSettings(); // Refresh the list
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete setting');
+      setError(extractErrorMessage(err, 'Failed to delete setting'));
     } finally {
       setDeleting(false);
     }
@@ -113,7 +114,7 @@ const SettingsPage: React.FC = () => {
       setShowNewSettingModal(false);
       await loadSettings(); // Refresh the list
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create setting');
+      setError(extractErrorMessage(err, 'Failed to create setting'));
     } finally {
       setSavingNewSetting(false);
     }

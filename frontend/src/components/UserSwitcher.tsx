@@ -4,6 +4,7 @@ import { FaUserCog, FaUser, FaUserShield, FaEye, FaExchangeAlt } from 'react-ico
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 import { getTestUsers, TestUser } from '../api/backendRequests';
+import { logger } from '../utils/logger';
 
 /**
  * UserSwitcher component for quickly switching between test users.
@@ -27,8 +28,7 @@ const UserSwitcher: React.FC = () => {
       const users = await getTestUsers();
       setTestUsers(users);
     } catch (error) {
-      console.error('Failed to load test users:', error);
-      // Don't show error toast - this is optional dev feature
+      logger.warn('UserSwitcher', 'Failed to load test users', error);
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,7 @@ const UserSwitcher: React.FC = () => {
         window.location.reload();
       }, 500);
     } catch (error) {
-      console.error('Failed to switch user:', error);
+      logger.error('UserSwitcher', 'Failed to switch user', error);
       toast.error(`Failed to switch to ${testUser.username}`);
       setSwitching(false);
     }

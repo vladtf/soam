@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Card, Button, Alert, Badge, Row, Col, ListGroup, Spinner } from 'react-bootstrap';
 import { fetchEnrichmentDiagnostic, EnrichmentDiagnosticData, fetchIngestorTopicAnalysis, IngestorTopicAnalysis } from '../../api/backendRequests';
+import { extractErrorMessage } from '../../utils/errorHandling';
+import { logger } from '../../utils/logger';
 
 const EnrichmentDiagnosticCard: React.FC = () => {
   const [diagnostic, setDiagnostic] = useState<EnrichmentDiagnosticData | null>(null);
@@ -18,7 +20,7 @@ const EnrichmentDiagnosticCard: React.FC = () => {
       setDiagnostic(result);
       setShowDiagnostic(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to run diagnostic');
+      setError(extractErrorMessage(err, 'Failed to run diagnostic'));
     } finally {
       setLoading(false);
     }
@@ -29,11 +31,11 @@ const EnrichmentDiagnosticCard: React.FC = () => {
     setError(null);
     try {
       const result = await fetchIngestorTopicAnalysis();
-      console.log('Ingestor analysis result:', result);
+      logger.debug('EnrichmentDiagnostic', 'Ingestor analysis result', result);
       setIngestorAnalysis(result);
     } catch (err) {
-      console.error('Ingestor analysis error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to run ingestor analysis');
+      logger.error('EnrichmentDiagnostic', 'Ingestor analysis failed', err);
+      setError(extractErrorMessage(err, 'Failed to run ingestor analysis'));
     } finally {
       setIngestorLoading(false);
     }

@@ -24,6 +24,7 @@ import {
 } from '../../api/backendRequests';
 import { useAuth } from '../../context/AuthContext';
 import { extractComputationErrorMessage, extractPreviewErrorMessage, extractDeleteErrorMessage } from '../../utils/errorHandling';
+import { logger } from '../../utils/logger';
 import CopilotAssistant from '../computations/CopilotAssistant';
 
 interface ComputationsSectionProps {
@@ -98,10 +99,10 @@ const ComputationsSection: React.FC<ComputationsSectionProps> = ({
     const checkCopilotHealth = async () => {
       try {
         const health = await getCopilotHealth();
-        console.log('Copilot health:', health);
+        logger.debug('ComputationsSection', 'Copilot health check', health);
         setCopilotAvailable(health.available);
       } catch (error) {
-        console.error('Error checking copilot health:', error);
+        logger.warn('ComputationsSection', 'Copilot health check failed', error);
         setCopilotAvailable(false);
       }
     };

@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useError } from '../context/ErrorContext';
 import { useAuth } from '../context/AuthContext';
 import { formatDisplayValue, isNumericValue } from '../utils/numberUtils';
+import { extractErrorMessage } from '../utils/errorHandling';
+import { logger } from '../utils/logger';
 import {
   fetchSensorData,
   SensorData,
@@ -67,8 +69,8 @@ export const usePipelineData = () => {
       setValueTransformationRules(valueRules);
       setComputations(comps || []); // Ensure it's always an array
     } catch (err) {
-      console.error('Error loading pipeline data:', err);
-      setError(err instanceof Error ? err.message : String(err));
+      logger.error('usePipelineData', 'Failed to load pipeline data', err);
+      setError(extractErrorMessage(err, 'Failed to load pipeline data'));
     }
   };
 
@@ -83,7 +85,8 @@ export const usePipelineData = () => {
       setSensorData(sensorData);
       setDevices(deviceData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      logger.error('usePipelineData', 'Failed to load sensor data', err);
+      setError(extractErrorMessage(err, 'Failed to load sensor data'));
     }
   };
 
@@ -128,7 +131,7 @@ export const usePipelineData = () => {
     try {
       await setBufferMaxRows(Math.max(1, bufferSize));
     } catch (err) {
-      console.error('Error setting buffer size:', err);
+      logger.error('usePipelineData', 'Failed to set buffer size', err);
     }
   };
 
@@ -156,8 +159,8 @@ export const usePipelineData = () => {
       setDataRetentionDays(90);
       loadSensorData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      reportClientError({ message: String(err), severity: 'error', component: 'DataPipelinePage', context: 'registerDevice' }).catch(() => {});
+      setError(extractErrorMessage(err, 'Failed to register device'));
+      reportClientError({ message: String(err), severity: 'error', component: 'usePipelineData', context: 'registerDevice' }).catch(() => {});
     }
   };
 
@@ -166,8 +169,8 @@ export const usePipelineData = () => {
       await toggleDevice(id);
       loadSensorData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      reportClientError({ message: String(err), severity: 'error', component: 'DataPipelinePage', context: 'toggleDevice' }).catch(() => {});
+      setError(extractErrorMessage(err, 'Failed to toggle device'));
+      reportClientError({ message: String(err), severity: 'error', component: 'usePipelineData', context: 'toggleDevice' }).catch(() => {});
     }
   };
 
@@ -176,8 +179,8 @@ export const usePipelineData = () => {
       await deleteDevice(id);
       loadSensorData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      reportClientError({ message: String(err), severity: 'error', component: 'DataPipelinePage', context: 'deleteDevice' }).catch(() => {});
+      setError(extractErrorMessage(err, 'Failed to delete device'));
+      reportClientError({ message: String(err), severity: 'error', component: 'usePipelineData', context: 'deleteDevice' }).catch(() => {});
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert, Spinner } from 'react-bootstrap';
 import { getSetting, updateSetting, createSetting } from '../api/backendRequests';
 import { useAuth } from '../context/AuthContext';
+import { logger } from '../utils/logger';
 
 interface TemperatureThresholdModalProps {
   show: boolean;
@@ -32,10 +33,10 @@ const TemperatureThresholdModal: React.FC<TemperatureThresholdModalProps> = ({ s
       const setting = await getSetting('temperature_threshold');
       const thresholdValue = parseFloat(setting.value);
       setThreshold(thresholdValue);
-      console.log(`Loaded current temperature threshold: ${thresholdValue}°C`);
-    } catch (err) {
-      console.log('Temperature threshold setting not found, using default');
-      setThreshold(30.0); // Default value
+      logger.debug('TemperatureThreshold', `Current threshold: ${thresholdValue}°C`);
+    } catch {
+      logger.debug('TemperatureThreshold', 'Setting not found, using default 30°C');
+      setThreshold(30.0);
     } finally {
       setLoading(false);
     }
@@ -56,7 +57,7 @@ const TemperatureThresholdModal: React.FC<TemperatureThresholdModalProps> = ({ s
       try {
         await getSetting('temperature_threshold');
         settingExists = true;
-      } catch (err) {
+      } catch {
         settingExists = false;
       }
 

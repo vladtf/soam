@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Container, Form, Button } from 'react-bootstrap';
+import { logger } from '../utils/logger';
 
 const NewEventsPage: React.FC = () => {
   const [eventTitle, setEventTitle] = useState("");
@@ -8,7 +9,7 @@ const NewEventsPage: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // For now, simply print the event to console
-    console.log("New event:", { eventTitle, eventDescription });
+    logger.info('NewEventsPage', 'New event submitted', { eventTitle, eventDescription });
     // Reset form fields
     setEventTitle("");
     setEventDescription("");

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Container, Form, Button, Alert, Card, Badge, Spinner } from 'react-bootstrap';
 import { submitFeedback, fetchFeedbacks, FeedbackData, FeedbackResponse } from '../api/backendRequests';
 import ThemedTable from '../components/ThemedTable';
+import { extractErrorMessage } from '../utils/errorHandling';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MESSAGE_MIN = 10;
@@ -31,7 +32,7 @@ const FeedbackPage: React.FC = () => {
       const data = await fetchFeedbacks();
       setFeedbacks(data);
     } catch (err) {
-      setFeedbacksError(err instanceof Error ? err.message : 'Failed to load feedbacks');
+      setFeedbacksError(extractErrorMessage(err, 'Failed to load feedbacks'));
     } finally {
       setFeedbacksLoading(false);
     }
@@ -110,7 +111,7 @@ const FeedbackPage: React.FC = () => {
 
       await loadFeedbacks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit feedback');
+      setError(extractErrorMessage(err, 'Failed to submit feedback'));
     } finally {
       setLoading(false);
     }

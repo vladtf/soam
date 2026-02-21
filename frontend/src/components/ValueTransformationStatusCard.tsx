@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Spinner, Alert, Button } from 'react-bootstrap';
 import { listValueTransformationRules, ValueTransformationRule } from '../api/backendRequests';
+import { logger } from '../utils/logger';
 
 const ValueTransformationStatusCard: React.FC = () => {
   const [rules, setRules] = useState<ValueTransformationRule[]>([]);
@@ -19,7 +20,7 @@ const ValueTransformationStatusCard: React.FC = () => {
       setError(null);
     } catch (err) {
       setError('Failed to load transformation rules');
-      console.error('Error loading rules:', err);
+      logger.error('ValueTransformationStatusCard', 'Failed to load rules', err);
     } finally {
       setLoading(false);
     }

@@ -20,6 +20,8 @@ import {
   MetadataStats
 } from '../api/backendRequests';
 import { useTheme } from '../context/ThemeContext';
+import { extractErrorMessage } from '../utils/errorHandling';
+import { logger } from '../utils/logger';
 
 interface MetadataViewerProps {
   className?: string;
@@ -64,8 +66,8 @@ const MetadataViewer: React.FC<MetadataViewerProps> = ({ className }) => {
       setDatasets(datasetsData);
       setTopics(topicsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load metadata');
-      console.error('Error loading metadata:', err);
+      setError(extractErrorMessage(err, 'Failed to load metadata'));
+      logger.error('MetadataViewer', 'Failed to load metadata', err);
     } finally {
       setLoading(false);
     }

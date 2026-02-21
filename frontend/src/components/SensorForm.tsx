@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchBuildings } from '../api/backendRequests';
 import { useError } from '../context/ErrorContext';
 import { reportClientError } from '../errors';
+import { logger } from '../utils/logger';
 
 const SENSOR_CLASS = 'http://example.org/smartcity#Sensor';
 const RDFS_DOMAIN = 'http://www.w3.org/2000/01/rdf-schema#domain';
@@ -84,7 +85,7 @@ const SensorForm: React.FC<SensorFormProps> = ({ dataSchema }) => {
 
 	const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
-		console.log('Submitted Sensor Data:', formData);
+		logger.info('SensorForm', 'Sensor data submitted', formData);
 	};
 
 	if (loading)

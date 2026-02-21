@@ -30,7 +30,8 @@ worker:
       cpu: "4"
       memory: "8Gi"
 image:
-  repository: spark
+  registry: localhost:5000
+  repository: soam/spark
   tag: latest
 global:
   security:

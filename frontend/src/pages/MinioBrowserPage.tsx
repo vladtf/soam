@@ -4,6 +4,8 @@ import PageHeader from '../components/PageHeader';
 import { minioList, minioFind, minioPreviewParquet, MinioListResponse, MinioObjectInfo, ParquetPreview, minioDeleteObjects, minioDeletePrefix, MinioPaginatedResponse, MinioFindOptions } from '../api/backendRequests';
 import { FaFolder, FaFileAlt, FaSync, FaLevelUpAlt, FaHome, FaSearch, FaEye, FaCopy, FaTable, FaCode } from 'react-icons/fa';
 import ThemedReactJson from '../components/ThemedReactJson';
+import { extractErrorMessage } from '../utils/errorHandling';
+import { logger } from '../utils/logger';
 
 const MinioBrowserPage: React.FC = () => {
   const [prefix, setPrefix] = useState<string>('');
@@ -71,7 +73,7 @@ const MinioBrowserPage: React.FC = () => {
       
       return response;
     } catch (e) {
-      console.warn("Failed to load paginated files:", e);
+      logger.warn('MinioBrowser', 'Failed to load paginated files', e);
       return null;
     }
   };
@@ -98,7 +100,7 @@ const MinioBrowserPage: React.FC = () => {
           const response = await minioFind(options);
           setPageCache(prev => new Map(prev).set(cacheKey, response));
         } catch (e) {
-          console.warn(`Failed to preload page ${page}:`, e);
+          logger.warn('MinioBrowser', `Failed to preload page ${page}`, e);
         } finally {
           setPreloadingPages(prev => {
             const next = new Set(prev);
@@ -185,7 +187,7 @@ const MinioBrowserPage: React.FC = () => {
             setHasPrev(false);
           }
         } catch (e) {
-          console.warn("Failed to fetch file details:", e);
+          logger.warn('MinioBrowser', 'Failed to fetch file details', e);
           setFileInfos([]);
           setTotalItems(0);
           setTotalPages(0);
@@ -202,8 +204,7 @@ const MinioBrowserPage: React.FC = () => {
         setHasPrev(false);
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(extractErrorMessage(e, 'Failed to load files'));
     } finally {
       setLoading(false);
       setIsDrilling(false);
@@ -247,8 +248,7 @@ const MinioBrowserPage: React.FC = () => {
         preloadAdjacentPages(prefix, response.pagination.page);
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(extractErrorMessage(e, 'Failed to navigate page'));
     } finally {
       setLoading(false);
     }
@@ -296,8 +296,7 @@ const MinioBrowserPage: React.FC = () => {
       const res = await minioPreviewParquet(key, limit);
       setPreview(res);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(extractErrorMessage(e, 'Failed to preview parquet file'));
     } finally {
       setLoading(false);
     }
@@ -324,8 +323,7 @@ const MinioBrowserPage: React.FC = () => {
       await load(prefix);
       setSelected({});
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(extractErrorMessage(e, 'Failed to delete selected files'));
     } finally {
       setLoading(false);
     }
@@ -341,8 +339,7 @@ const MinioBrowserPage: React.FC = () => {
       await load(prefix);
       setSelected({});
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(extractErrorMessage(e, 'Failed to delete folder contents'));
     } finally {
       setLoading(false);
     }

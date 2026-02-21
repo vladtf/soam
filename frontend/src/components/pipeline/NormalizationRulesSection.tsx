@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Button, Table, Badge, Form, Row, Col, Modal } from 'react-bootstrap';
+import { toast } from 'react-toastify';
 import {
   NormalizationRule,
   createNormalizationRule,
@@ -9,6 +10,8 @@ import {
   SensorData,
 } from '../../api/backendRequests';
 import { useAuth } from '../../context/AuthContext';
+import { extractErrorMessage } from '../../utils/errorHandling';
+import { logger } from '../../utils/logger';
 
 interface NormalizationRulesSectionProps {
   rules: NormalizationRule[];
@@ -69,7 +72,8 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
       setEditingId(null);
       onRulesChange();
     } catch (error) {
-      console.error('Error saving rule:', error);
+      logger.error('NormalizationRules', 'Failed to save rule', error);
+      toast.error(extractErrorMessage(error, 'Failed to save normalization rule'));
     }
   };
 
@@ -90,7 +94,8 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
         await deleteNormalizationRule(id);
         onRulesChange();
       } catch (error) {
-        console.error('Error deleting rule:', error);
+        logger.error('NormalizationRules', 'Failed to delete rule', error);
+        toast.error(extractErrorMessage(error, 'Failed to delete normalization rule'));
       }
     }
   };
@@ -100,7 +105,8 @@ const NormalizationRulesSection: React.FC<NormalizationRulesSectionProps> = ({
       await toggleNormalizationRule(id);
       onRulesChange();
     } catch (error) {
-      console.error('Error toggling rule:', error);
+      logger.error('NormalizationRules', 'Failed to toggle rule', error);
+      toast.error(extractErrorMessage(error, 'Failed to toggle normalization rule'));
     }
   };
 

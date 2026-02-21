@@ -14,6 +14,8 @@ import {
   NormalizationPreviewSampleData,
   NormalizationPreviewResult 
 } from '../api/backendRequests';
+import { extractErrorMessage } from '../utils/errorHandling';
+import { logger } from '../utils/logger';
 
 interface NormalizationRule {
   raw_key: string;
@@ -60,18 +62,18 @@ const NormalizationPreviewModal: React.FC<{
     setError('');
     
     try {
-      console.log('Loading sample data with params:', { 
+      logger.debug('NormalizationPreview', 'Loading sample data', { 
         ingestionId: selectedIngestionId, 
         limit: sampleLimit 
       });
       
       const result = await getNormalizationSampleData(selectedIngestionId || undefined, sampleLimit);
       
-      console.log('Sample data loaded:', result);
+      logger.debug('NormalizationPreview', 'Sample data loaded', result);
       setSampleData(result);
     } catch (err) {
-      console.error('Error loading sample data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load sample data');
+      logger.error('NormalizationPreview', 'Failed to load sample data', err);
+      setError(extractErrorMessage(err, 'Failed to load sample data'));
     } finally {
       setLoading(false);
     }
@@ -96,7 +98,7 @@ const NormalizationPreviewModal: React.FC<{
       setPreviewResult(result.data.preview);
       setActiveTab('preview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to run preview');
+      setError(extractErrorMessage(err, 'Failed to run preview'));
     } finally {
       setLoading(false);
     }
@@ -121,7 +123,7 @@ const NormalizationPreviewModal: React.FC<{
       setValidationResult(result.validation);
       setActiveTab('validation');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to validate rules');
+      setError(extractErrorMessage(err, 'Failed to validate rules'));
     } finally {
       setLoading(false);
     }
@@ -160,7 +162,7 @@ const NormalizationPreviewModal: React.FC<{
       setCustomRules([]);
       
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save normalization rules');
+      setError(extractErrorMessage(err, 'Failed to save normalization rules'));
     } finally {
       setSaving(false);
     }
@@ -196,7 +198,7 @@ const NormalizationPreviewModal: React.FC<{
       setSaveSuccess(`Successfully saved ${rulesToSave.length} normalization rule${rulesToSave.length > 1 ? 's' : ''} from preview results`);
       
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save applied rules as normalization rules');
+      setError(extractErrorMessage(err, 'Failed to save applied rules as normalization rules'));
     } finally {
       setSaving(false);
     }

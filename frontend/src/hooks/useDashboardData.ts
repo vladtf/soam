@@ -8,6 +8,7 @@ import {
   SparkStreamsStatus
 } from '../api/backendRequests';
 import { reportClientError } from '../errors';
+import { logger } from '../utils/logger';
 
 interface TemperatureData {
   time_start: string;
@@ -59,9 +60,8 @@ export const useDashboardData = () => {
   // Handle errors when they change
   useEffect(() => {
     if (latestError) {
-      console.error('Dashboard data error:', latestError);
-      // Implement error handling here if needed, e.g., setError(latestError);
-      setLatestError(null); // Clear after handling
+      logger.error('useDashboardData', 'Data fetch error', latestError);
+      setLatestError(null);
     }
   }, [latestError]);
 
