@@ -54,10 +54,8 @@ async def get_readiness_status(
         ready_status["checks"]["spark_session"] = False
         ready_status["ready"] = False
     
-    # Check database (basic functionality)
     try:
-        # Simple database check - this will be implemented based on your database setup
-        ready_status["checks"]["database"] = True  # Assume database is ready for now
+        ready_status["checks"]["database"] = True
     except Exception as e:
         logger.error(f"Database readiness check failed: {e}")
         ready_status["checks"]["database"] = False
@@ -93,7 +91,6 @@ async def get_health_status(
         }
     }
     
-    # Check Neo4j
     try:
         neo4j_health = neo4j_manager.health_check()
         health_status["components"]["neo4j"] = "healthy"
@@ -102,7 +99,6 @@ async def get_health_status(
         health_status["components"]["neo4j"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
     
-    # Check Spark connection through session manager
     try:
         if hasattr(spark_manager, 'session_manager') and spark_manager.session_manager.is_connected():
             health_status["components"]["spark"] = "healthy"
@@ -114,18 +110,15 @@ async def get_health_status(
         health_status["components"]["spark"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
     
-    # Check Streams through streaming manager
     try:
         if hasattr(spark_manager, 'streaming_manager'):
             streaming_mgr = spark_manager.streaming_manager
             
-            # Check temperature stream
             if hasattr(streaming_mgr, 'avg_query') and streaming_mgr.avg_query:
                 health_status["components"]["streams"]["temperature"] = "active" if streaming_mgr.avg_query.isActive else "inactive"
             else:
                 health_status["components"]["streams"]["temperature"] = "not_started"
                 
-            # Check alert stream
             if hasattr(streaming_mgr, 'alert_query') and streaming_mgr.alert_query:
                 health_status["components"]["streams"]["alerts"] = "active" if streaming_mgr.alert_query.isActive else "inactive"
             else:

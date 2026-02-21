@@ -2,6 +2,7 @@
 Spark session management and connectivity utilities.
 """
 import os
+import time
 import logging
 from typing import Optional
 from pyspark.sql import SparkSession

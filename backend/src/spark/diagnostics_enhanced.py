@@ -8,6 +8,7 @@ from src.database.database import engine
 from src.database.models import Device
 from .session import SparkSessionManager
 from pyspark.sql import functions as F
+from src.utils.spark_utils import extract_sensor_id
 
 logger = logging.getLogger(__name__)
 
@@ -66,15 +67,8 @@ def diagnose_enrichment_filtering(spark_manager: SparkSessionManager, enriched_p
                 for iid in ingestion_ids:
                     # Extract sensorId from sensor_data map (union schema)
                     sensor_df = (
-                        df.filter(df.ingestion_id == iid)
-                        .select(
-                            F.coalesce(
-                                df.sensor_data.getItem("sensorId"),
-                                df.sensor_data.getItem("sensorid"),
-                                df.sensor_data.getItem("sensor_id"),
-                                F.lit("unknown")
-                            ).alias("sensorId")
-                        )
+                        extract_sensor_id(df.filter(df.ingestion_id == iid), fallback_to_ingestion_id=False)
+                        .select("sensorId")
                         .filter(F.col("sensorId").isNotNull() & (F.col("sensorId") != "unknown"))
                         .distinct()
                     )
@@ -83,14 +77,8 @@ def diagnose_enrichment_filtering(spark_manager: SparkSessionManager, enriched_p
                 
                 # Total unique sensors - extract from sensor_data map
                 total_sensors_df = (
-                    df.select(
-                        F.coalesce(
-                            df.sensor_data.getItem("sensorId"),
-                            df.sensor_data.getItem("sensorid"), 
-                            df.sensor_data.getItem("sensor_id"),
-                            F.lit("unknown")
-                        ).alias("sensorId")
-                    )
+                    extract_sensor_id(df, fallback_to_ingestion_id=False)
+                    .select("sensorId")
                     .filter(F.col("sensorId").isNotNull() & (F.col("sensorId") != "unknown"))
                     .distinct()
                 )

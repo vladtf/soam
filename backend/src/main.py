@@ -58,12 +58,10 @@ def signal_handler(signum: int, frame) -> None:
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
     
     try:
-        # Get cached instances for cleanup
         config = get_config()
         spark_manager = get_spark_manager(config)
         neo4j_manager = get_neo4j_manager(config)
         
-        # Stop Spark streams and close manager
         if spark_manager:
             logger.info("Signal handler stopping SparkManager...")
             spark_manager.close()
@@ -73,7 +71,6 @@ def signal_handler(signum: int, frame) -> None:
             logger.info("Signal handler stopping Neo4jManager...")
             neo4j_manager.close()
             
-        # Stop usage aggregator
         try:
             NormalizationRuleUsageTracker.stop()
         except Exception as e:
@@ -86,7 +83,6 @@ def signal_handler(signum: int, frame) -> None:
     sys.exit(0)
 
 
-# Register signal handlers for graceful shutdown
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -97,16 +93,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Application lifespan manager for startup and shutdown events.
     """
     # Startup
-    logger.info("Starting SOAM Smart City Backend...")
+    logger.info("🚀 Starting SOAM Smart City Backend...")
 
-    # Initialize Prometheus metrics
     backend_metrics.init_metrics()
-    logger.info("📊 Prometheus metrics initialized")
 
-    # Load environment variables from .env file
     load_dotenv()
 
-    # Initialize database tables
     try:
         create_tables()
         logger.info("Database tables created successfully")
@@ -149,7 +141,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error("Error seeding normalization rules: %s", e)
 
-    # Initialize default settings and admin user
     try:
         from src.database.database import SessionLocal
         from src.utils.settings_manager import settings_manager
@@ -167,13 +158,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("Could not initialize default settings or admin user: %s", e)
 
-    # Start background aggregator for normalization rule usage
     try:
         NormalizationRuleUsageTracker.start()
     except Exception as e:
         logger.warning("Could not start normalization usage aggregator: %s", e)
 
-    # Initialize dependencies to ensure they're created
     try:
         config = get_config()
         spark_manager = get_spark_manager(config)
@@ -186,11 +175,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
-    logger.info("Shutting down SOAM Smart City Backend...")
+    logger.info("🛑 Shutting down SOAM Smart City Backend...")
 
-    # Clean shutdown of managers first (to stop streaming queries)
     try:
-        # Get cached instances for cleanup
         config = get_config()
         spark_manager = get_spark_manager(config)
         neo4j_manager = get_neo4j_manager(config)
@@ -201,7 +188,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             spark_manager.close()
             logger.info("SparkManager stopped successfully")
 
-        # Close Neo4j connection
         if neo4j_manager:
             logger.info("Stopping Neo4jManager...")
             neo4j_manager.close()
@@ -210,13 +196,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"Error during manager shutdown: {e}")
 
-    # Stop and join all threads stored in the map
     for key, thread in app_state["threads"].items():
         if thread.is_alive():
             logger.info(f"Stopping thread {key}")
-            thread.join(timeout=5)  # join with timeout for safety
+            thread.join(timeout=5)
 
-    # Stop usage aggregator
     try:
         NormalizationRuleUsageTracker.stop()
     except Exception as e:

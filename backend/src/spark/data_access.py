@@ -26,13 +26,9 @@ class DataAccessManager:
         self.session_manager = session_manager
         self.minio_bucket = minio_bucket
 
-        # Build paths
-        # Gold layer paths (primary)
         self.gold_temp_avg_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_PATH}"
         self.gold_alerts_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_ALERTS_PATH}"
-        # Silver layer paths
         self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}"
-        # Bronze layer paths
         self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}"
     
     def _handle_table_not_found_error(self, error: Exception) -> bool:
@@ -112,7 +108,6 @@ class DataAccessManager:
             sensor_latencies = []
             enrichment_latencies = []
             
-            # Sample recent records (last 5 windows)
             recent_rows = rows[-5:] if len(rows) > 5 else rows
             
             for row in recent_rows:
@@ -129,7 +124,6 @@ class DataAccessManager:
                         if 0 <= latency <= 3600:
                             sensor_latencies.append(latency)
                 
-                # Calculate enrichment-to-gold latency
                 if min_enrichment_ts is not None:
                     if hasattr(min_enrichment_ts, 'timestamp'):
                         enrich_epoch = min_enrichment_ts.timestamp()
@@ -138,11 +132,9 @@ class DataAccessManager:
                         if 0 <= enrich_latency <= 3600:
                             enrichment_latencies.append(enrich_latency)
             
-            # Record sensor-to-gold metrics
             for latency in sensor_latencies:
                 backend_metrics.record_sensor_to_gold_latency(latency)
             
-            # Record enrichment-to-gold metrics
             for latency in enrichment_latencies:
                 backend_metrics.record_enrichment_to_gold_latency(latency)
                 
@@ -215,7 +207,6 @@ class DataAccessManager:
         Returns:
             Dict containing enrichment summary information in the expected frontend format
         """
-        # Initialize result with the expected structure
         result: Dict[str, Any] = {
             "registered_total": 0,
             "registered_any_partition": False,
@@ -234,7 +225,6 @@ class DataAccessManager:
             },
         }
 
-        # Load device registrations (enabled)
         try:
             from sqlalchemy.orm import sessionmaker
             from src.database.database import engine
@@ -258,11 +248,9 @@ class DataAccessManager:
         try:
             spark = self.session_manager.spark
             
-            # Calculate time bounds
             current_time = F.current_timestamp()
             time_bound = current_time - F.expr(f"INTERVAL {minutes} MINUTES")
             
-            # Try to read enriched union data
             try:
                 enriched_df = (
                     spark.read
@@ -275,23 +263,14 @@ class DataAccessManager:
                 
                 if not enriched_df.rdd.isEmpty():
                     # Extract sensorId from union schema
-                    analysis_df = enriched_df.withColumn(
-                        "sensorId",
-                        F.coalesce(
-                            enriched_df.sensor_data.getItem("sensorId"),
-                            enriched_df.sensor_data.getItem("sensorid"), 
-                            enriched_df.sensor_data.getItem("sensor_id"),
-                            enriched_df.ingestion_id
-                        )
-                    )
+                    from src.utils.spark_utils import extract_sensor_id
+                    analysis_df = extract_sensor_id(enriched_df)
                     
-                    # Aggregate basic metrics
                     summary = analysis_df.agg(
                         F.count("*").alias("total_records"),
                         F.countDistinct("sensorId").alias("unique_sensors")
                     ).collect()[0]
                     
-                    # Get sample sensors
                     sample_sensors = (
                         analysis_df
                         .select("sensorId")
@@ -301,16 +280,9 @@ class DataAccessManager:
                         .collect()
                     )
                     
-                    # Calculate processing metrics
                     processing_metrics = self._calculate_processing_metrics(analysis_df, minutes)
-                    
-                    # Calculate streaming metrics
                     streaming_metrics = self._get_streaming_metrics()
-                    
-                    # Calculate normalization statistics
                     normalization_stats = self._get_normalization_stats(minutes)
-                    
-                    # Calculate data quality metrics
                     data_quality = self._get_data_quality_metrics(analysis_df)
                     
                     result["enriched"]["recent_rows"] = summary["total_records"]

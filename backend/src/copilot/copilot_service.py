@@ -78,17 +78,12 @@ class CopilotService:
             logger.info("✅ Data context built successfully. Available sources: %s", list(context.get('available_sources', [])))
             logger.debug("📋 Full data context: %s", context)
 
-            # Create the prompt for Azure OpenAI
-            logger.info("📝 Creating prompts for Azure OpenAI...")
             system_prompt = self._create_system_prompt(context)
             user_prompt = self._create_user_prompt(request, context)
-            logger.info("✅ Prompts created successfully. System prompt length: %d chars, User prompt length: %d chars", 
+            logger.info("📝 Prompts created (system: %d chars, user: %d chars)", 
                        len(system_prompt), len(user_prompt))
-            logger.debug("📄 System prompt: %s", system_prompt[:500] + "..." if len(system_prompt) > 500 else system_prompt)
-            logger.debug("📄 User prompt: %s", user_prompt)
 
-            # Make the Azure OpenAI API call
-            logger.info("🤖 Calling Azure OpenAI API with model: %s", self.model)
+            logger.info("🤖 Calling Azure OpenAI API (model: %s)", self.model)
             api_params = {
                 "model": self.model,
                 "messages": [
@@ -99,31 +94,18 @@ class CopilotService:
                 "max_tokens": 2000,
                 "response_format": {"type": "json_object"}
             }
-            logger.debug("🔧 API parameters: %s", {k: v if k != 'messages' else f"[{len(v)} messages]" for k, v in api_params.items()})
 
             response = self.client.chat.completions.create(**api_params)
-            logger.info("✅ Azure OpenAI API call successful")
             
-            # Parse the response
-            logger.info("📦 Parsing Azure OpenAI response...")
             raw_content = response.choices[0].message.content
-            logger.debug("📄 Raw response content: %s", raw_content)
+            logger.debug("📄 Raw response: %s", raw_content)
             
             result = json.loads(raw_content)
-            logger.info("✅ Response parsed successfully")
-            logger.debug("🔍 Raw parsed result: %s", result)
-            
-            # Clean and normalize the result before creating the Pydantic model
-            logger.info("🧹 Normalizing response data...")
             result = self._normalize_openai_response(result)
-            logger.info("✅ Response normalized successfully")
-            logger.debug("🔍 Normalized result: %s", result)
             
-            # Create and return the final suggestion
-            logger.info("🎯 Creating ComputationSuggestion object...")
             suggestion = ComputationSuggestion(**result)
-            logger.info("✅ Computation generation completed successfully! Title: '%s', Dataset: '%s', Confidence: %.2f", 
-                       suggestion.title, suggestion.dataset, suggestion.confidence)
+            logger.info("✅ Generated computation '%s' (confidence: %.2f)", 
+                       suggestion.title, suggestion.confidence)
             
             return suggestion
             
@@ -160,62 +142,39 @@ class CopilotService:
             except Exception as e:
                 logger.warning("⚠️ Failed to get context from ingestor, falling back to direct detection: %s", e)
             
-            # Fallback: Direct detection and schema inference (legacy approach)
-            logger.info("🔍 Falling back to direct data source detection...")
-            
-            # Get available data sources
-            logger.info("🔍 Detecting available data sources...")
             sources = self._detect_available_sources(minio_client)
-            logger.info("✅ Detected %d data sources: %s", len(sources), sources)
+            logger.info("🔍 Detected %d data sources: %s", len(sources), sources)
             
-            # Get schema information for each source
-            logger.info("📊 Retrieving schema information for each source...")
             schemas = {}
             sample_data = {}
             
-            for i, source in enumerate(sources, 1):
-                logger.info("📋 Processing source %d/%d: '%s'", i, len(sources), source)
+            for source in sources:
                 try:
-                    # Get schema
-                    logger.debug("🔍 Getting schema for source: %s", source)
                     schema_info = self._infer_schemas(spark_manager.session_manager.spark, [source], minio_client)
                     schemas[source] = schema_info.get(source, {})
-                    logger.debug("✅ Schema retrieved for '%s': %s", source, schemas[source])
                     
-                    # Get sample data (first 3 rows for context)
                     if source in ["bronze", "silver", "enriched", "gold", "alerts"]:
-                        logger.debug("🔍 Getting sample data for source: %s", source)
                         sample_df = spark_manager.session_manager.spark.read.parquet(f"s3a://lake/{source}").limit(3)
                         sample_data[source] = [row.asDict() for row in sample_df.collect()]
-                        logger.debug("✅ Sample data retrieved for '%s': %d rows", source, len(sample_data[source]))
-                    else:
-                        logger.debug("⏭️ Skipping sample data for non-standard source: %s", source)
-                        
                 except Exception as e:
                     logger.warning("⚠️ Could not get schema/sample for source '%s': %s", source, e)
                     schemas[source] = {"error": str(e)}
                     sample_data[source] = []
             
-            # Build final context
-            logger.info("🏗️ Assembling final data context...")
             context = {
                 "available_sources": sources,
                 "schemas": schemas,
                 "sample_data": sample_data,
-                "example_computations": EXAMPLE_DEFINITIONS[:5],  # Include some examples
+                "example_computations": EXAMPLE_DEFINITIONS[:5],
                 "computation_syntax": self._get_computation_syntax_guide()
             }
             
-            logger.info("✅ Data context built successfully!")
-            logger.info("📊 Context summary: %d sources, %d schemas, %d sample datasets, %d examples", 
-                       len(sources), len(schemas), len(sample_data), len(context["example_computations"]))
-            
+            logger.info("✅ Data context built: %d sources, %d schemas", len(sources), len(schemas))
             return context
             
         except Exception as e:
             logger.error("❌ Error building data context: %s", e, exc_info=True)
             # Return minimal context to prevent complete failure
-            logger.warning("🔄 Falling back to minimal data context")
             return {
                 "available_sources": [],
                 "schemas": {},
@@ -226,69 +185,30 @@ class CopilotService:
             }
     
     def _detect_available_sources(self, minio_client) -> List[str]:
-        """Detect available data sources in MinIO."""
-        logger.debug("🔍 Detecting available data sources from MinIO...")
-        
         try:
             sources = []
-            # Check for common data lake layers
-            logger.debug("📁 Checking for common data lake layers...")
-            
             for layer in ["bronze", "silver", "enriched", "gold", "alerts"]:
                 try:
-                    logger.debug("🔍 Checking for layer: %s", layer)
                     objects = list(minio_client.list_objects("lake", prefix=f"{layer}/", recursive=False))
                     if objects:
                         sources.append(layer)
-                        logger.debug("✅ Found layer '%s' with %d objects", layer, len(objects))
-                    else:
-                        logger.debug("⚪ No objects found for layer: %s", layer)
-                except Exception as e:
-                    logger.debug("⚠️ Error checking layer '%s': %s", layer, e)
+                except Exception:
                     pass
-                    
-            logger.info("✅ Detected %d data sources: %s", len(sources), sources)
             return sources
-            
         except Exception as e:
-            logger.error("❌ Error detecting sources: %s", e, exc_info=True)
-            fallback = ["bronze", "enriched", "gold"]
-            logger.warning("🔄 Using fallback sources: %s", fallback)
-            return fallback
+            logger.error("❌ Error detecting sources: %s", e)
+            return ["bronze", "enriched", "gold"]
     
     def _infer_schemas(self, spark, sources: List[str], minio_client) -> Dict[str, Dict]:
-        """Infer schemas for available data sources."""
-        logger.debug("📊 Inferring schemas for %d sources: %s", len(sources), sources)
-        
         schemas = {}
-        for i, source in enumerate(sources, 1):
-            logger.debug("📋 Processing schema %d/%d for source: '%s'", i, len(sources), source)
-            
+        for source in sources:
             try:
-                logger.debug("📖 Reading parquet data from: s3a://lake/%s", source)
                 df = spark.read.parquet(f"s3a://lake/{source}").limit(1)
-                
-                logger.debug("🔍 Extracting schema fields for: %s", source)
-                schema_dict = {}
-                for field in df.schema.fields:
-                    schema_dict[field.name] = str(field.dataType)
-                    
-                logger.debug("🔢 Getting row count for: %s", source)
-                row_count = df.count()
-                
-                schemas[source] = {
-                    "columns": schema_dict,
-                    "count": row_count
-                }
-                
-                logger.debug("✅ Schema extracted for '%s': %d columns, %d rows", 
-                           source, len(schema_dict), row_count)
-                
+                schema_dict = {field.name: str(field.dataType) for field in df.schema.fields}
+                schemas[source] = {"columns": schema_dict, "count": df.count()}
             except Exception as e:
-                logger.warning("⚠️ Error inferring schema for source '%s': %s", source, e)
+                logger.warning("⚠️ Error inferring schema for '%s': %s", source, e)
                 schemas[source] = {"error": str(e)}
-                
-        logger.info("✅ Schema inference complete for %d sources", len(sources))
         return schemas
     
     def _get_computation_syntax_guide(self) -> Dict[str, Any]:

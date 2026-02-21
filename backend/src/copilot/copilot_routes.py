@@ -24,29 +24,21 @@ async def generate_computation(
 ) -> ApiResponse:
     """Generate a computation using Azure OpenAI Copilot."""
     try:
-        # Get copilot service instance
         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         api_key = os.getenv("AZURE_OPENAI_KEY")
         
         if not azure_endpoint or not api_key:
             raise HTTPException(status_code=503, detail="Azure OpenAI not configured")
 
-        logger.info("Using Azure OpenAI endpoint: %s", azure_endpoint)
-
         copilot_service = CopilotService(azure_endpoint, api_key)
 
-        logger.info("Processing generate computation request: %s", request)
-
-        # Generate computation
         suggestion = await copilot_service.generate_computation(
             request, spark_manager, minio_client
         )
         
-        # Validate the generated computation
         validation_result = validate_computation_definition(suggestion.definition)
         
         if not validation_result.get("valid", False):
-            # Lower confidence if validation issues found
             suggestion.confidence *= 0.7
             suggestion.explanation += f"\n\nValidation Notes: {validation_result.get('message', '')}"
         
@@ -68,14 +60,11 @@ async def get_copilot_context(
 ):
     """Get current data context for copilot suggestions."""
     try:
-        # Get copilot service instance
         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         api_key = os.getenv("AZURE_OPENAI_KEY")
         
         if not azure_endpoint or not api_key:
             raise HTTPException(status_code=503, detail="Azure OpenAI not configured")
-
-        logger.info("Using Azure OpenAI endpoint: %s", azure_endpoint)
 
         copilot_service = CopilotService(azure_endpoint, api_key)
         

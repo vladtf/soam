@@ -1,19 +1,17 @@
-"""
-Spark streaming job management.
-"""
+"""Spark streaming job management."""
 import logging
-import time
 import threading
 from typing import Optional
-from pyspark.sql import functions as F
+from pyspark.sql import DataFrame, functions as F
 from pyspark.sql.streaming import StreamingQuery
 
-from .config import SparkConfig, SparkSchemas
-from .enrichment.cleaner import DataCleaner
+from .config import SparkConfig
 from .session import SparkSessionManager
 from .enrichment import EnrichmentManager
+from .query_manager import StreamingQueryManager
 from src.utils.settings_manager import settings_manager
 from src.utils.step_profiler import profile_step
+from src.utils.spark_utils import extract_sensor_id
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,6 @@ MODULE = "streaming_manager"
 
 
 def get_temperature_threshold() -> float:
-    """Get the temperature threshold from database settings or fallback to default."""
     return settings_manager.get_temperature_threshold(SparkConfig.TEMP_THRESHOLD)
 
 
@@ -29,252 +26,153 @@ class StreamingManager:
     """Manages Spark streaming jobs for temperature data and alerts."""
 
     def __init__(self, session_manager: SparkSessionManager, minio_bucket: str):
-        """Initialize StreamingManager.
-
-        Args:
-            session_manager: Spark session manager
-            minio_bucket: MinIO bucket name
-        """
         self.session_manager = session_manager
         self.minio_bucket = minio_bucket
 
-        # Build paths
         self.bronze_path = f"s3a://{minio_bucket}/{SparkConfig.BRONZE_PATH}/"
-        # Silver layer paths
         self.enriched_path = f"s3a://{minio_bucket}/{SparkConfig.ENRICHED_PATH}/"
-        # Gold layer paths
         self.gold_temp_avg_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_PATH}/"
         self.gold_alerts_path = f"s3a://{minio_bucket}/{SparkConfig.GOLD_ALERTS_PATH}/"
 
-        # Initialize enrichment manager
         self.enrichment_manager = EnrichmentManager(
-            self.session_manager.spark,
-            minio_bucket,
-            self.bronze_path,
-            self.enriched_path
+            self.session_manager.spark, minio_bucket,
+            self.bronze_path, self.enriched_path
         )
 
-        # Streaming queries
         self.avg_query: Optional[StreamingQuery] = None
         self.alert_query: Optional[StreamingQuery] = None
 
-        # Query names (union schema is now default)
         self.AVG_QUERY_NAME = "temperature_5min_averages"
         self.ALERT_QUERY_NAME = "temperature_alert_detector"
-        
-        # Thread locks to prevent concurrent stream starts
+
         self._avg_query_lock = threading.Lock()
         self._alert_query_lock = threading.Lock()
         self._ensure_streams_lock = threading.Lock()
 
-    def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
-        """Return active StreamingQuery by name if present."""
-        try:
-            for q in self.session_manager.spark.streams.active:
-                try:
-                    if q.name == name:
-                        return q
-                except Exception:
-                    continue
-        except Exception:
-            return None
-        return None
+        self._qm = StreamingQueryManager(self.session_manager.spark)
 
-    def _stop_existing_query(self, query_name: str) -> None:
-        """Stop existing streaming query by name if active."""
-        existing_query = self._get_query_by_name(query_name)
-        if existing_query and existing_query.isActive:
-            logger.info(f"Gracefully stopping existing query: {query_name}")
-            try:
-                existing_query.stop()
-                
-                # Wait for graceful shutdown with shorter timeout for individual queries
-                max_wait_seconds = 15
-                waited = 0
-                while existing_query.isActive and waited < max_wait_seconds:
-                    time.sleep(1)
-                    waited += 1
-                
-                if existing_query.isActive:
-                    logger.warning(f"Query {query_name} did not stop gracefully within {max_wait_seconds}s")
-                else:
-                    logger.info(f"Query {query_name} stopped successfully")
-                    
-            except Exception as e:
-                logger.warning(f"Error stopping existing query {query_name}: {e}")
+    # ------------------------------------------------------------------ #
+    # Shared helpers
+    # ------------------------------------------------------------------ #
 
-    @profile_step(MODULE, "stop_all_existing_queries")
-    def _stop_all_existing_queries(self) -> None:
-        """Stop all existing streaming queries to ensure clean restart."""
-        logger.info("Stopping all existing streaming queries...")
+    def _read_enriched_stream(self) -> Optional[DataFrame]:
         try:
-            active_queries = self.session_manager.spark.streams.active
-            for query in active_queries:
-                try:
-                    query_name = getattr(query, 'name', 'unnamed')
-                    logger.info(f"Stopping active query: {query_name}")
-                    query.stop()
-                except Exception as e:
-                    logger.warning(f"Error stopping query: {e}")
-            
-            # Give time for queries to fully stop
-            if active_queries:
-                time.sleep(3)
-                logger.info("All existing queries stopped")
+            return self.session_manager.spark.readStream.format("delta").load(self.enriched_path)
         except Exception as e:
-            logger.warning(f"Error stopping existing queries: {e}")
+            logger.info("Enriched delta not available yet: %s", e)
+            return None
+
+    def _extract_temperature_stream(self, enriched_stream: DataFrame) -> DataFrame:
+        from .enrichment.union_schema import UnionSchemaTransformer
+        stream = UnionSchemaTransformer.extract_column_from_union(
+            enriched_stream, "temperature", prefer_normalized=True
+        )
+        return extract_sensor_id(stream)
+
+    def _filter_valid_temperature(self, df: DataFrame) -> DataFrame:
+        return df.filter(F.col("temperature").isNotNull() & ~F.isnan(F.col("temperature")))
+
+    def _write_gold_stream(
+        self, df: DataFrame, query_name: str, output_path: str,
+        checkpoint_suffix: str, output_mode: str, trigger: str,
+    ) -> StreamingQuery:
+        try:
+            return (
+                df.writeStream
+                .format("delta")
+                .option("path", output_path)
+                .option("checkpointLocation", f"s3a://{self.minio_bucket}/{checkpoint_suffix}")
+                .option("mergeSchema", "true")
+                .outputMode(output_mode)
+                .queryName(query_name)
+                .trigger(processingTime=trigger)
+                .start()
+            )
+        except Exception as e:
+            if "already active" in str(e) or "Cannot start query with name" in str(e):
+                logger.warning("⚠️ Query %s conflict, reattaching", query_name)
+                existing = self._qm.get_by_name(query_name)
+                if existing and existing.isActive:
+                    return existing
+            raise
+
+    # ------------------------------------------------------------------ #
+    # Public API
+    # ------------------------------------------------------------------ #
 
     def is_data_directory_ready(self) -> bool:
-        """Check if the bronze data directory exists and is accessible."""
         try:
-            # Try to access the bronze directory - even if empty, this will work
-            self.session_manager.spark.read.option("basePath", self.bronze_path).option("recursiveFileLookup", "true").option("pathGlobFilter", "*.parquet").parquet(self.bronze_path)
+            self.session_manager.spark.read \
+                .option("basePath", self.bronze_path) \
+                .option("recursiveFileLookup", "true") \
+                .option("pathGlobFilter", "*.parquet") \
+                .parquet(self.bronze_path)
             return True
         except Exception as e:
-            # Check if it's just an empty directory (which is fine)
             if "Path does not exist" in str(e) or "Unable to infer schema" in str(e):
-                logger.info(f"Bronze directory empty or doesn't exist yet - this is normal for initial startup: {e}")
-                return False
+                logger.info("🔍 Bronze directory not ready yet: %s", e)
             else:
-                logger.debug(f"Data directory not ready: {e}")
-                return False
+                logger.debug("🔍 Data directory not ready: %s", e)
+            return False
 
     def start_streams_safely(self) -> None:
-        """Start streaming jobs with error handling."""
-        # First, stop any existing queries to ensure clean restart
-        self._stop_all_existing_queries()
-        
-        try:
-            logger.debug("🔧 Starting enrichment stream...")
-            self._start_enrichment_stream()
-            logger.debug("✅ Union enrichment stream started successfully")
-        except Exception as e:
-            logger.error(f"❌ Failed to start enrichment stream: {e}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-
-        try:
-            logger.debug("🔧 Starting temperature stream...")
-            self.start_temperature_stream()
-            logger.info("Union temperature streaming started successfully")
-        except Exception as e:
-            logger.error(f"❌ Failed to start temperature stream: {e}")
-
-        try:
-            logger.debug("🔧 Starting alert stream...")
-            self.start_alert_stream()
-            logger.info("✅ Union alert streaming started successfully")
-        except Exception as e:
-            logger.error(f"❌ Failed to start alert stream: {e}")
+        self._qm.stop_all()
+        for label, fn in [
+            ("enrichment", self._start_enrichment_stream),
+            ("temperature", self.start_temperature_stream),
+            ("alert", self.start_alert_stream),
+        ]:
+            try:
+                fn()
+                logger.info("✅ %s stream started", label.capitalize())
+            except Exception as e:
+                logger.error("❌ Failed to start %s stream: %s", label, e)
+                if label == "enrichment":
+                    import traceback
+                    logger.error("Traceback: %s", traceback.format_exc())
 
     @profile_step(MODULE, "start_enrichment_stream")
     def _start_enrichment_stream(self) -> None:
-        """Start the enrichment stream (profiled wrapper)."""
         self.enrichment_manager.start_enrichment_stream()
 
     @profile_step(MODULE, "ensure_enrichment")
     def _ensure_enrichment_running(self) -> None:
-        """Ensure enrichment is running (profiled wrapper)."""
         self.enrichment_manager.ensure_enrichment_running()
 
     def ensure_streams_running(self) -> None:
-        """Ensure streaming jobs are running, start them if not.
-        
-        Thread-safe: Uses locks to prevent concurrent stream starts.
-        """
-        # Use a global lock to prevent multiple threads from entering this method
         with self._ensure_streams_lock:
             try:
-                # Ensure enrichment first, as downstream jobs rely on it
                 self._ensure_enrichment_running()
 
-                # Check temperature stream with lock
                 with self._avg_query_lock:
-                    if self.avg_query is None or not self.avg_query.isActive:
-                        logger.info("Temperature stream not active, attempting to start...")
-                        existing = self._get_query_by_name(self.AVG_QUERY_NAME)
-                        if existing and existing.isActive:
-                            self.avg_query = existing
-                            logger.info("Reattached to existing temperature stream")
-                        else:
-                            self.start_temperature_stream()
+                    if not self.avg_query or not self.avg_query.isActive:
+                        self.avg_query = self._qm.start_or_reattach(
+                            self.AVG_QUERY_NAME, self.start_temperature_stream
+                        )
 
-                # Check alert stream with lock
                 with self._alert_query_lock:
-                    if self.alert_query is None or not self.alert_query.isActive:
-                        logger.info("Alert stream not active, attempting to start...")
-                        existing = self._get_query_by_name(self.ALERT_QUERY_NAME)
-                        if existing and existing.isActive:
-                            self.alert_query = existing
-                            logger.info("Reattached to existing alert stream")
-                        else:
-                            self.start_alert_stream()
-
+                    if not self.alert_query or not self.alert_query.isActive:
+                        self.alert_query = self._qm.start_or_reattach(
+                            self.ALERT_QUERY_NAME, self.start_alert_stream
+                        )
             except Exception as e:
-                logger.error(f"Error ensuring streams are running: {e}")
+                logger.error("❌ Error ensuring streams are running: %s", e)
 
     @profile_step(MODULE, "start_temperature_stream")
     def start_temperature_stream(self) -> None:
-        """Start the temperature averaging stream from union schema enriched data.
-        
-        Should be called with _avg_query_lock held to prevent concurrent starts.
-        """
-        spark = self.session_manager.spark
-        
-        # Double-check that query isn't already running
-        existing = self._get_query_by_name(self.AVG_QUERY_NAME)
-        if existing and existing.isActive:
-            logger.info(f"Temperature stream already running, reusing existing query")
-            self.avg_query = existing
-            return
-        
-        # Stop any existing query with the same name first
-        self._stop_existing_query(self.AVG_QUERY_NAME)
-
-        # Read streaming data from enriched union delta
-        try:
-            enriched_stream = (
-                spark.readStream
-                .format("delta")
-                .load(self.enriched_path)
-            )
-        except Exception as e:
-            logger.info("Enriched union delta not available yet, skipping temperature stream start: %s", e)
+        enriched_stream = self._read_enriched_stream()
+        if enriched_stream is None:
             return
 
-        # Extract temperature from union schema and filter valid values
-        from .enrichment.union_schema import UnionSchemaTransformer
+        temp_stream = self._extract_temperature_stream(enriched_stream)
 
-        temp_stream = UnionSchemaTransformer.extract_column_from_union(
-            enriched_stream, "temperature", prefer_normalized=True
-        )
-
-        # Extract sensorId from sensor_data map
-        temp_stream = temp_stream.withColumn(
-            "sensorId",
-            F.coalesce(
-                temp_stream.sensor_data.getItem("sensorId"),
-                temp_stream.sensor_data.getItem("sensorid"),
-                temp_stream.sensor_data.getItem("sensor_id"),
-                temp_stream.ingestion_id  # fallback to ingestion_id
-            )
-        )
-
-        # Filter valid temperature readings
-        # Use ingest_ts (processing time) for watermark instead of event_time
-        # This ensures data is never "late" after cluster restarts since ingest_ts
-        # is set when data is written to enriched layer, not when sensor generated it
-        valid_temp_stream = (
-            temp_stream
-            .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
+        valid = (
+            self._filter_valid_temperature(temp_stream)
             .withWatermark("ingest_ts", SparkConfig.WATERMARK_DELAY)
         )
 
-        # Calculate sliding window averages (still use event_time for the window itself
-        # to preserve actual sensor timing semantics)
-        # Include min_enrichment_ts to track enrichment-to-gold latency
         five_min_avg = (
-            valid_temp_stream
+            valid
             .groupBy(
                 F.window("ingest_ts", SparkConfig.AVG_WINDOW, SparkConfig.AVG_SLIDE).alias("time_window"),
                 "sensorId"
@@ -283,95 +181,29 @@ class StreamingManager:
                 F.round(F.avg("temperature"), 2).alias("avg_temp"),
                 F.min("ingest_ts").alias("min_enrichment_ts")
             )
-            .selectExpr(
-                "sensorId",
-                "time_window.start as time_start",
-                "avg_temp",
-                "min_enrichment_ts"
-            )
+            .selectExpr("sensorId", "time_window.start as time_start", "avg_temp", "min_enrichment_ts")
         )
 
-        # Note: Delta table will be created automatically on first write
-        # No need to pre-create empty tables - this avoids empty files when there's no data
-
-        # Write to Delta table in gold layer
-        try:
-            self.avg_query = (
-                five_min_avg.writeStream
-                .format("delta")
-                .option("path", self.gold_temp_avg_path)
-                .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.GOLD_TEMP_AVG_CHECKPOINT}_union")
-                .option("mergeSchema", "true")
-                .outputMode("complete")
-                .queryName(self.AVG_QUERY_NAME)
-                .trigger(processingTime=SparkConfig.TEMPERATURE_STREAM_TRIGGER)
-                .start()
-            )
-        except Exception as e:
-            # Handle case where query with same name already exists
-            if "already active" in str(e) or "Cannot start query with name" in str(e):
-                logger.warning(f"Query {self.AVG_QUERY_NAME} already exists, attempting to reuse existing query")
-                existing = self._get_query_by_name(self.AVG_QUERY_NAME)
-                if existing and existing.isActive:
-                    self.avg_query = existing
-                    logger.info(f"Reusing existing temperature query: {self.AVG_QUERY_NAME}")
-                    return
-            # Re-raise if it's another kind of error
-            raise
+        self.avg_query = self._write_gold_stream(
+            df=five_min_avg, query_name=self.AVG_QUERY_NAME,
+            output_path=self.gold_temp_avg_path,
+            checkpoint_suffix=f"{SparkConfig.GOLD_TEMP_AVG_CHECKPOINT}_union",
+            output_mode="complete", trigger=SparkConfig.TEMPERATURE_STREAM_TRIGGER,
+        )
 
     @profile_step(MODULE, "start_alert_stream")
     def start_alert_stream(self) -> None:
-        """Start the temperature alert stream from union schema enriched data.
-        
-        Should be called with _alert_query_lock held to prevent concurrent starts.
-        """
-        spark = self.session_manager.spark
-        
-        # Double-check that query isn't already running
-        existing = self._get_query_by_name(self.ALERT_QUERY_NAME)
-        if existing and existing.isActive:
-            logger.info(f"Alert stream already running, reusing existing query")
-            self.alert_query = existing
-            return
-        
-        # Stop any existing query with the same name first
-        self._stop_existing_query(self.ALERT_QUERY_NAME)
-
-        # Read streaming data from enriched union delta
-        try:
-            enriched_stream = (
-                spark.readStream
-                .format("delta")
-                .load(self.enriched_path)
-            )
-        except Exception as e:
-            logger.info("Enriched union delta not available yet, skipping alert stream start: %s", e)
+        enriched_stream = self._read_enriched_stream()
+        if enriched_stream is None:
             return
 
-        # Extract temperature and sensorId from union schema
-        from .enrichment.union_schema import UnionSchemaTransformer
+        alert_stream = self._extract_temperature_stream(enriched_stream)
 
-        alert_stream = UnionSchemaTransformer.extract_column_from_union(
-            enriched_stream, "temperature", prefer_normalized=True
-        )
-
-        alert_stream = alert_stream.withColumn(
-            "sensorId",
-            F.coalesce(
-                alert_stream.sensor_data.getItem("sensorId"),
-                alert_stream.sensor_data.getItem("sensorid"),
-                alert_stream.sensor_data.getItem("sensor_id"),
-                alert_stream.ingestion_id
-            )
-        )
-
-        # Filter for temperature alerts
         temp_threshold = get_temperature_threshold()
-        logger.info(f"Using temperature threshold: {temp_threshold}°C")
-        
+        logger.info("📊 Temperature alert threshold: %s°C", temp_threshold)
+
         alerts = (
-            alert_stream
-            .filter((F.col("temperature").isNotNull()) & (~F.isnan(F.col("temperature"))))
+            self._filter_valid_temperature(alert_stream)
             .filter(F.col("temperature") > temp_threshold)
             .withColumn("alert_type", F.lit("TEMP_OVER_LIMIT"))
             .withColumn("alert_id", F.concat(F.col("sensorId"), F.lit("_"), F.col("event_time")))
@@ -380,69 +212,23 @@ class StreamingManager:
             .select("sensorId", "temperature", "event_time", "alert_type")
         )
 
-        # Write to Delta table in gold layer
-        try:
-            self.alert_query = (
-                alerts.writeStream
-                .format("delta")
-                .option("path", self.gold_alerts_path)
-                .option("checkpointLocation", f"s3a://{self.minio_bucket}/{SparkConfig.GOLD_ALERT_CHECKPOINT}_union")
-                .option("mergeSchema", "true")
-                .outputMode("append")
-                .queryName(self.ALERT_QUERY_NAME)
-                .trigger(processingTime=SparkConfig.ALERT_STREAM_TRIGGER)
-                .start()
-            )
-        except Exception as e:
-            # Handle case where query with same name already exists
-            if "already active" in str(e) or "Cannot start query with name" in str(e):
-                logger.warning(f"Query {self.ALERT_QUERY_NAME} already exists, attempting to reuse existing query")
-                existing = self._get_query_by_name(self.ALERT_QUERY_NAME)
-                if existing and existing.isActive:
-                    self.alert_query = existing
-                    logger.info(f"Reusing existing alert query: {self.ALERT_QUERY_NAME}")
-                    return
-            # Re-raise if it's another kind of error
-            raise
+        self.alert_query = self._write_gold_stream(
+            df=alerts, query_name=self.ALERT_QUERY_NAME,
+            output_path=self.gold_alerts_path,
+            checkpoint_suffix=f"{SparkConfig.GOLD_ALERT_CHECKPOINT}_union",
+            output_mode="append", trigger=SparkConfig.ALERT_STREAM_TRIGGER,
+        )
 
     def stop_streams(self) -> None:
-        """Stop all streaming queries gracefully."""
-        logger.info("Stopping all streaming queries...")
-        
-        streams = [
-            ("Temperature stream", self.avg_query),
-            ("Alert stream", self.alert_query)
-        ]
+        for label, query in [("Temperature", self.avg_query), ("Alert", self.alert_query)]:
+            if query and query.isActive:
+                self._qm.stop_gracefully(label, timeout_seconds=30)
 
-        for stream_name, query in streams:
-            try:
-                if query and query.isActive:
-                    logger.info(f"Gracefully stopping {stream_name.lower()}...")
-                    query.stop()
-                    
-                    # Wait for graceful shutdown with timeout
-                    max_wait_seconds = 30
-                    waited = 0
-                    while query.isActive and waited < max_wait_seconds:
-                        time.sleep(1)
-                        waited += 1
-                    
-                    if query.isActive:
-                        logger.warning(f"{stream_name} did not stop gracefully within {max_wait_seconds}s")
-                    else:
-                        logger.info(f"{stream_name} stopped successfully")
-            except Exception as e:
-                logger.error(f"Error stopping {stream_name.lower()}: {e}")
-
-        # Stop enrichment stream with same graceful approach
         try:
-            logger.info("Gracefully stopping enrichment stream...")
             self.enrichment_manager.stop_enrichment_stream()
         except Exception as e:
-            logger.error(f"Error stopping enrichment stream: {e}")
+            logger.error("❌ Error stopping enrichment stream: %s", e)
 
-        # Reset queries
         self.avg_query = None
         self.alert_query = None
-        
-        logger.info("All streaming queries stopped")
+        logger.info("✅ All streaming queries stopped")

@@ -3,12 +3,39 @@ Spark utilities for consistent session management and configuration.
 """
 import os
 from typing import Optional, Dict, Any
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import functions as F
 from pyspark.conf import SparkConf
 
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def extract_sensor_id(df: DataFrame, fallback_to_ingestion_id: bool = True) -> DataFrame:
+    """Extract sensorId from the sensor_data map column using common key variations.
+    
+    Handles multiple naming conventions (sensorId, sensorid, sensor_id) and
+    optionally falls back to ingestion_id when no sensor ID is found.
+    
+    Args:
+        df: DataFrame with a sensor_data map column
+        fallback_to_ingestion_id: If True, use ingestion_id as fallback
+        
+    Returns:
+        DataFrame with a new 'sensorId' column
+    """
+    coalesce_args = [
+        df.sensor_data.getItem("sensorId"),
+        df.sensor_data.getItem("sensorid"),
+        df.sensor_data.getItem("sensor_id"),
+    ]
+    if fallback_to_ingestion_id and "ingestion_id" in df.columns:
+        coalesce_args.append(df.ingestion_id)
+    else:
+        coalesce_args.append(F.lit("unknown"))
+    
+    return df.withColumn("sensorId", F.coalesce(*coalesce_args))
 
 
 def get_spark_config(app_name: str, additional_config: Optional[Dict[str, str]] = None) -> SparkConf:

@@ -14,6 +14,7 @@ from pyspark.sql.types import IntegerType, LongType, DoubleType, FloatType, Stri
 from .cleaner import DataCleaner
 from ..config import SparkConfig, SparkSchemas
 from .batch_processor import BatchProcessor
+from ..query_manager import StreamingQueryManager
 from ...utils.logging import log_execution_time
 from ...services.ingestor_schema_client import IngestorSchemaClient
 
@@ -38,44 +39,19 @@ class EnrichmentManager:
         self.enriched_path: str = enriched_path
         self.batch_processor: BatchProcessor = BatchProcessor(enriched_path)
         
-        # Query management
         self.ENRICH_QUERY_NAME: str = "sensor_data_enrichment"
         self.enrich_query: Optional[StreamingQuery] = None
-        
-        # Thread lock to prevent concurrent stream starts
         self._enrich_query_lock = threading.Lock()
-        
-        # Ingestor schema client for fast schema retrieval
+        self._qm = StreamingQueryManager(self.spark)
         self.ingestor_client: IngestorSchemaClient = IngestorSchemaClient()
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
-        """Return active StreamingQuery by name if present.
-        
-        Args:
-            name: Query name to search for
-            
-        Returns:
-            StreamingQuery if found and active, None otherwise
-        """
-        try:
-            for q in self.spark.streams.active:
-                try:
-                    if q.name == name:
-                        return q
-                except Exception:
-                    continue
-        except Exception:
-            return None
-        return None
+        """Return active StreamingQuery by name if present."""
+        return self._qm.get_by_name(name)
 
     def _stop_existing_query(self) -> None:
         """Stop existing enrichment query if active."""
-        existing_query = self._get_query_by_name(self.ENRICH_QUERY_NAME)
-        if existing_query and existing_query.isActive:
-            logger.info(f"Stopping existing enrichment query: {self.ENRICH_QUERY_NAME}")
-            existing_query.stop()
-            # Wait a moment for cleanup
-            time.sleep(2)
+        self._qm.stop_gracefully(self.ENRICH_QUERY_NAME, timeout_seconds=2)
 
     @log_execution_time(operation_name="Streaming Schema Retrieval")
     def _get_streaming_schema(self) -> StructType:
@@ -142,9 +118,6 @@ class EnrichmentManager:
         return True
 
     def _log_discovered_files(self) -> None:
-        """Log the files that Spark can discover in the bronze layer."""
-
-        # skip logging if not in debug mode
         if not logger.isEnabledFor(logging.DEBUG):
             return
 
@@ -152,14 +125,11 @@ class EnrichmentManager:
             pattern = f"{self.bronze_path}ingestion_id=*/date=*/hour=*"
             logger.debug(f"🔍 Checking discoverable files with pattern: {pattern}")
             
-            # Use Hadoop FileSystem to list files
-            hadoop_conf = self.spark._jsc.hadoopConfiguration()
-            
-            # Parse the bronze_path to get the correct URI
-            # bronze_path is like "s3a://lake/bronze/" 
+            # Parse s3a:// URI to get the base bucket URI for Hadoop FileSystem
             bronze_uri = self.bronze_path.rstrip('/')
             
-            # Get the base URI (e.g., "s3a://lake")
+            hadoop_conf = self.spark._jsc.hadoopConfiguration()
+
             if bronze_uri.startswith("s3a://"):
                 parts = bronze_uri.split("/", 3)  # ['s3a:', '', 'bucket', 'path']
                 base_uri = f"{parts[0]}//{parts[2]}"  # "s3a://bucket"
@@ -302,8 +272,8 @@ class EnrichmentManager:
                 flexible_fields.append(flexible_field)
                 logger.debug(f"🔄 Converted field '{field.name}': {field.dataType} -> StringType")
             else:
-                # Keep other fields as they are (StringType, ArrayType, MapType, etc.)
                 flexible_fields.append(field)
+
         
         flexible_schema = StructType(flexible_fields)
         logger.info(f"✅ Created flexible schema with {len(flexible_fields)} fields (all numeric/timestamp as String)")
@@ -385,14 +355,12 @@ class EnrichmentManager:
         Raises:
             Exception: If schema inference fails due to no data or other issues
         """
-        # Double-check that query isn't already running
         existing = self._get_query_by_name(self.ENRICH_QUERY_NAME)
         if existing and existing.isActive:
-            logger.info(f"Enrichment stream already running, reusing existing query")
+            logger.info("✅ Enrichment stream already running, reusing existing query")
             self.enrich_query = existing
             return
         
-        # Stop existing query
         self._stop_existing_query()
 
         try:
@@ -409,16 +377,9 @@ class EnrichmentManager:
             logger.error("4. Ensure at least one device is sending data")
             raise Exception(f"Enrichment stream startup failed: {e}")
         
-        # Create raw stream
         raw_stream = self._create_raw_stream(schema)
-        
-        # Transform to union schema
         union_stream = self._transform_to_union_schema(raw_stream, schema)
-        
-        # Add enrichment metadata
         enriched_union = self._add_enrichment_metadata(union_stream)
-
-        # Ensure target enriched Delta table exists
         self._ensure_target_table_exists()
 
         # Start the streaming query with error handling

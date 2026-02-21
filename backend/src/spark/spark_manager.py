@@ -183,52 +183,26 @@ class SparkManager:
                 "timestamp": time.time()
             }
 
-    # ================================================================
-    # Data Access Methods
-    # ================================================================
-
     def get_streaming_average_temperature(self, minutes: int = 30) -> List[Dict[str, Any]]:
-        """Get streaming average temperature data for the specified time window."""
-        # Ensure streams are running
         self.streaming_manager.ensure_streams_running()
         return self.data_access.get_streaming_average_temperature(minutes)
 
     def get_temperature_alerts(self, since_minutes: int = 60) -> List[Dict[str, Any]]:
-        """Get recent temperature alerts."""
-        # Ensure streams are running
         self.streaming_manager.ensure_streams_running()
         return self.data_access.get_temperature_alerts(since_minutes)
 
     def get_enrichment_summary(self, minutes: int = 10) -> Dict[str, Any]:
-        """Summarize enrichment inputs and recent activity."""
-        # Ensure enrichment has been attempted
         self.streaming_manager.ensure_streams_running()
         return self.data_access.get_enrichment_summary(minutes)
 
-    # ================================================================
-    # Testing and Diagnostics
-    # ================================================================
-
     def test_spark_basic_computation(self) -> Dict[str, Any]:
-        """Test basic Spark functionality."""
         return self.diagnostics.test_spark_basic_computation()
 
     def test_sensor_data_access(self) -> Dict[str, Any]:
-        """Test access to sensor data in MinIO."""
         return self.diagnostics.test_sensor_data_access()
 
-    # ================================================================
-    # Lifecycle Management
-    # ================================================================
-
     def close(self) -> None:
-        """Clean shutdown of SparkManager."""
-        logger.info("Shutting down SparkManager...")
-
-        # Stop streaming queries
+        logger.info("🛑 Shutting down SparkManager...")
         self.streaming_manager.stop_streams()
-
-        # Stop Spark session
         self.session_manager.stop()
-
-        logger.info("SparkManager shutdown complete")
+        logger.info("✅ SparkManager shutdown complete")
