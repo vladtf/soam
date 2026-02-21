@@ -3,9 +3,27 @@ Utilities for creating consistent API responses across all endpoints.
 This module ensures all endpoints follow the same response structure
 that matches frontend expectations.
 """
-from typing import Any, List, Optional
-from fastapi import HTTPException, status
+from typing import Any, List, Optional, Tuple
+from fastapi import HTTPException, Query, status
+from sqlalchemy.orm import Query as SAQuery
 from src.api.models import ApiResponse, ApiListResponse
+
+# Default pagination values
+DEFAULT_PAGE = 1
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 500
+
+
+def paginate_query(query: SAQuery, page: int, page_size: int) -> Tuple[list, int]:
+    """Apply pagination to a SQLAlchemy query.
+    
+    Returns:
+        Tuple of (paginated_rows, total_count)
+    """
+    total = query.count()
+    offset = (page - 1) * page_size
+    rows = query.offset(offset).limit(page_size).all()
+    return rows, total
 
 
 def success_response(

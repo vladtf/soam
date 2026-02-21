@@ -3,14 +3,14 @@ Authentication API routes.
 Provides login, registration, token refresh, and user management endpoints.
 """
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field
 
 from src.database.database import get_db
 from src.database.models import User, UserRole
 from src.api.models import ApiResponse, ApiListResponse
-from src.api.response_utils import success_response, list_response, bad_request_error, not_found_error, internal_server_error
+from src.api.response_utils import success_response, list_response, bad_request_error, not_found_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.utils.logging import get_logger
 from src.auth.security import verify_password, hash_password, create_access_token, create_refresh_token, decode_token
 from src.auth.dependencies import get_current_user, require_admin

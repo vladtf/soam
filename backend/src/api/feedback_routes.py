@@ -1,12 +1,12 @@
 """
 Feedback API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 
 from src.api.models import FeedbackCreate, FeedbackResponse, ApiResponse, ApiListResponse
-from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.database import get_db, Feedback
 from src.utils.logging import get_logger
 from src.utils.api_utils import handle_api_errors
@@ -43,12 +43,12 @@ async def create_feedback(
 @router.get("/feedback", response_model=ApiListResponse[FeedbackResponse])
 @handle_api_errors("get feedbacks")
 async def get_feedbacks(
-    skip: int = 0,
-    limit: int = 100,
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db)
 ):
-    """Get all feedback submissions."""
-    feedbacks = db.query(Feedback).offset(skip).limit(limit).all()
+    query = db.query(Feedback).order_by(Feedback.id.desc())
+    rows, total = paginate_query(query, page, page_size)
     
     feedback_responses = [
         FeedbackResponse(
@@ -57,10 +57,10 @@ async def get_feedbacks(
             message=f.message,
             created_at=f.created_at.isoformat() if f.created_at else ""
         )
-        for f in feedbacks
+        for f in rows
     ]
     
-    return list_response(feedback_responses, message="Feedback retrieved successfully")
+    return list_response(feedback_responses, total=total, page=page, page_size=page_size, message="Feedback retrieved successfully")
 
 
 @router.get("/feedback/{feedback_id}", response_model=ApiResponse[FeedbackResponse])

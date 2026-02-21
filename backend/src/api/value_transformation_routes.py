@@ -4,12 +4,12 @@ Value transformation routes for managing data value transformation rules.
 import json
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 # API models and response utilities
 from src.api.models import ApiResponse, ApiListResponse, ValueTransformationRuleCreate, ValueTransformationRuleUpdate, ValueTransformationRuleResponse
-from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 # Dependencies
 from src.database.database import get_db
@@ -79,29 +79,31 @@ def _validate_transformation_config(transformation_type: str, config: dict) -> N
 
 
 @router.get("/value-transformations", response_model=ApiListResponse[ValueTransformationRuleResponse])
-def list_value_transformation_rules(db: Session = Depends(get_db)):
-    """List all value transformation rules."""
+def list_value_transformation_rules(
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db)
+):
     try:
-        rules = db.query(ValueTransformationRule).order_by(
+        query = db.query(ValueTransformationRule).order_by(
             ValueTransformationRule.ingestion_id.asc().nullsfirst(),
             ValueTransformationRule.field_name.asc(),
             ValueTransformationRule.order_priority.asc()
-        ).all()
+        )
+        rows, total = paginate_query(query, page, page_size)
         
         rule_responses = []
-        for rule in rules:
-            # Parse transformation_config from JSON string to dict
+        for rule in rows:
             try:
-                parsed_config = json.loads(rule.transformation_config)
+                json.loads(rule.transformation_config)
             except (json.JSONDecodeError, TypeError):
                 logger.warning("⚠️ Invalid JSON in transformation_config for rule %s", rule.id)
-                parsed_config = {}
             
             rule_responses.append(_rule_to_response(rule))
         
         return list_response(
             data=rule_responses,
-            total=len(rule_responses),
+            total=total, page=page, page_size=page_size,
             message="Value transformation rules retrieved successfully"
         )
     except Exception as e:

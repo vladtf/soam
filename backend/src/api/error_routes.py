@@ -4,11 +4,11 @@ Client error reporting API endpoints.
 import json
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from src.api.models import ClientErrorCreate, ClientErrorResponse, ApiResponse
-from src.api.response_utils import success_response
+from src.api.models import ClientErrorCreate, ClientErrorResponse, ApiResponse, ApiListResponse
+from src.api.response_utils import success_response, list_response, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.database import get_db
 from src.database.models import ClientError as ClientErrorModel
 from src.utils.logging import get_logger
@@ -40,12 +40,15 @@ async def create_error(payload: ClientErrorCreate, db: Session = Depends(get_db)
     return success_response({"id": db_err.id}, "Error report stored successfully")
 
 
-@router.get("/errors", response_model=ApiResponse)
+@router.get("/errors", response_model=ApiListResponse[ClientErrorResponse])
 @handle_api_errors("list client errors")
-async def list_errors(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """List recent client errors."""
-    q = db.query(ClientErrorModel).order_by(ClientErrorModel.id.desc()).offset(skip).limit(limit)
-    rows = q.all()
+async def list_errors(
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db)
+):
+    query = db.query(ClientErrorModel).order_by(ClientErrorModel.id.desc())
+    rows, total = paginate_query(query, page, page_size)
     
     def parse_extra(txt):
         try:
@@ -70,6 +73,6 @@ async def list_errors(skip: int = 0, limit: int = 100, db: Session = Depends(get
         for r in rows
     ]
     
-    return success_response(data=errors_data, message="Client errors retrieved successfully")
+    return list_response(errors_data, total=total, page=page, page_size=page_size, message="Client errors retrieved successfully")
 
 

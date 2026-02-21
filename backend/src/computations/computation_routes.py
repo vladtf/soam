@@ -2,11 +2,11 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from src.api.models import ComputationCreate, ComputationUpdate, ComputationResponse, ApiResponse, ApiListResponse
-from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.database.database import get_db
 from src.database.models import Device
 from src.api.dependencies import get_spark_manager, ConfigDep, MinioClientDep
@@ -144,12 +144,15 @@ async def get_schemas(config: ConfigDep, client: MinioClientDep, spark: SparkMan
 
 
 @router.get("/computations", response_model=ApiListResponse[ComputationResponse])
-def list_computations(db: Session = Depends(get_db)):
-    """List all computations."""
+def list_computations(
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db)
+):
     try:
         service = ComputationService(db)
-        computations = service.list_computations()
-        return list_response(computations, message="Computations retrieved successfully")
+        computations, total = service.list_computations(page=page, page_size=page_size)
+        return list_response(computations, total=total, page=page, page_size=page_size, message="Computations retrieved successfully")
     except Exception as e:
         logger.error("Error listing computations: %s", e)
         raise internal_server_error("Failed to retrieve computations", str(e))

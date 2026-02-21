@@ -2,11 +2,11 @@
 Device registration API endpoints.
 """
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from src.api.models import DeviceCreate, DeviceUpdate, DeviceResponse, ApiResponse, ApiListResponse
-from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, forbidden_error, internal_server_error
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, forbidden_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.database.database import get_db
 from src.database.models import Device, DataSensitivity, UserRole, User
 from src.auth.dependencies import get_current_user
@@ -34,11 +34,16 @@ def _can_register_sensitivity(user: User, sensitivity: DataSensitivity) -> bool:
 
 
 @router.get("/devices", response_model=ApiListResponse[DeviceResponse])
-def list_devices(db: Session = Depends(get_db)) -> ApiListResponse[DeviceResponse]:
+def list_devices(
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db)
+) -> ApiListResponse[DeviceResponse]:
     try:
-        rows: List[Device] = db.query(Device).order_by(Device.created_at.desc()).all()
+        query = db.query(Device).order_by(Device.created_at.desc())
+        rows, total = paginate_query(query, page, page_size)
         devices: List[dict] = [r.to_dict() for r in rows]
-        return list_response(devices, message="Devices retrieved successfully")
+        return list_response(devices, total=total, page=page, page_size=page_size, message="Devices retrieved successfully")
     except Exception as e:
         logger.error("Error listing devices: %s", e)
         raise internal_server_error("Failed to retrieve devices", str(e))

@@ -1,10 +1,10 @@
 """Service layer for computation operations."""
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from src.database.models import Computation, DataSensitivity
 from src.api.models import ComputationCreate, ComputationUpdate, ComputationResponse
-from src.api.response_utils import not_found_error, conflict_error, bad_request_error
+from src.api.response_utils import not_found_error, conflict_error, bad_request_error, paginate_query
 from src.computations.validation import validate_dataset, validate_username, validate_computation_definition
 from src.computations.executor import ComputationExecutor
 from src.computations.sensitivity import calculate_computation_sensitivity
@@ -22,10 +22,10 @@ class ComputationService:
         self.spark_manager = spark_manager
         self.executor = ComputationExecutor(spark_manager) if spark_manager else None
     
-    def list_computations(self) -> List[ComputationResponse]:
-        """Get all computations ordered by creation date."""
-        rows = self.db.query(Computation).order_by(Computation.created_at.desc()).all()
-        return [ComputationResponse(**row.to_dict()) for row in rows]
+    def list_computations(self, page: int = 1, page_size: int = 50) -> Tuple[List[ComputationResponse], int]:
+        query = self.db.query(Computation).order_by(Computation.created_at.desc())
+        rows, total = paginate_query(query, page, page_size)
+        return [ComputationResponse(**row.to_dict()) for row in rows], total
     
     def create_computation(self, payload: ComputationCreate) -> ComputationResponse:
         """Create a new computation."""

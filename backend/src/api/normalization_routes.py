@@ -1,7 +1,7 @@
 """
 Normalization rules CRUD endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from src.api.models import (
@@ -11,7 +11,7 @@ from src.api.models import (
     ApiResponse,
     ApiListResponse,
 )
-from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.database import get_db
 from src.database.models import NormalizationRule
 from src.utils.logging import get_logger
@@ -39,14 +39,19 @@ def _rule_to_response(r: NormalizationRule) -> NormalizationRuleResponse:
 
 
 @router.get("/normalization", response_model=ApiListResponse)
-def list_rules(db: Session = Depends(get_db)):
-    """List all normalization rules."""
+def list_rules(
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db)
+):
     try:
-        rules = db.query(NormalizationRule).order_by(NormalizationRule.id.asc()).all()
-        rule_responses = [_rule_to_response(r) for r in rules]
+        query = db.query(NormalizationRule).order_by(NormalizationRule.id.asc())
+        rows, total = paginate_query(query, page, page_size)
+        rule_responses = [_rule_to_response(r) for r in rows]
         return list_response(
             data=rule_responses,
-            message=f"Retrieved {len(rule_responses)} normalization rules"
+            total=total, page=page, page_size=page_size,
+            message=f"Retrieved {total} normalization rules"
         )
     except Exception as e:
         logger.error("❌ Error listing normalization rules: %s", e)

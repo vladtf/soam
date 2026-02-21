@@ -4,7 +4,7 @@ Building-related API endpoints.
 from fastapi import APIRouter, HTTPException, Query
 
 from src.api.models import BuildingLocation, BuildingCreateNeo4j, ApiResponse, ApiListResponse
-from src.api.response_utils import success_response, error_response, list_response, not_found_error, bad_request_error, internal_server_error
+from src.api.response_utils import success_response, error_response, list_response, not_found_error, bad_request_error, internal_server_error, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.api.dependencies import Neo4jManagerDep
 from src.utils.logging import get_logger
 
@@ -14,11 +14,17 @@ router = APIRouter(prefix="/api", tags=["buildings"])
 
 
 @router.get("/buildings", response_model=ApiListResponse[BuildingLocation])
-async def get_buildings(neo4j_manager: Neo4jManagerDep):
-    """Get all buildings from the database."""
+async def get_buildings(
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    neo4j_manager: Neo4jManagerDep = None
+):
     try:
-        buildings = neo4j_manager.get_buildings()
-        return list_response(buildings, message="Buildings retrieved successfully")
+        all_buildings = neo4j_manager.get_buildings()
+        total = len(all_buildings)
+        start = (page - 1) * page_size
+        paginated = all_buildings[start:start + page_size]
+        return list_response(paginated, total=total, page=page, page_size=page_size, message="Buildings retrieved successfully")
     except Exception as e:
         logger.error("❌ Error fetching buildings: %s", e)
         raise internal_server_error("Failed to retrieve buildings", str(e))
