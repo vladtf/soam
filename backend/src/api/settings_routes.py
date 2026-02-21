@@ -1,17 +1,17 @@
 """
 API routes for managing application settings.
 """
-import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from src.database.database import get_db
 from src.database.models import Setting, ValueTypeEnum
-from src.api.models import SettingCreate, SettingUpdate, SettingResponse, ApiResponse
-from src.api.response_utils import success_response
+from src.api.models import SettingCreate, SettingUpdate, SettingResponse, ApiResponse, ApiListResponse
+from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, conflict_error, internal_server_error
 from src.utils.settings_manager import settings_manager
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
@@ -25,7 +25,7 @@ def _get_value_type_enum(value_type_str: str) -> ValueTypeEnum:
         return ValueTypeEnum.STRING
 
 
-@router.get("/settings", response_model=List[SettingResponse])
+@router.get("/settings", response_model=ApiListResponse[SettingResponse])
 async def list_settings(
     category: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -37,16 +37,14 @@ async def list_settings(
             query = query.filter(Setting.category == category)
         
         settings = query.order_by(Setting.category, Setting.key).all()
-        return [SettingResponse.model_validate(setting.to_dict()) for setting in settings]
+        data = [SettingResponse.model_validate(setting.to_dict()) for setting in settings]
+        return list_response(data, message="Settings retrieved successfully")
     except Exception as e:
-        logger.error(f"Error listing settings: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list settings: {str(e)}"
-        )
+        logger.error("❌ Error listing settings: %s", e)
+        raise internal_server_error("Failed to list settings", str(e))
 
 
-@router.get("/settings/{key}", response_model=SettingResponse)
+@router.get("/settings/{key}", response_model=ApiResponse[SettingResponse])
 async def get_setting(
     key: str,
     db: Session = Depends(get_db)
@@ -55,23 +53,20 @@ async def get_setting(
     try:
         setting = db.query(Setting).filter(Setting.key == key).first()
         if not setting:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Setting with key '{key}' not found"
-            )
+            raise not_found_error(f"Setting with key '{key}' not found")
         
-        return SettingResponse.model_validate(setting.to_dict())
+        return success_response(
+            SettingResponse.model_validate(setting.to_dict()),
+            message="Setting retrieved successfully"
+        )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting setting '{key}': {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get setting: {str(e)}"
-        )
+        logger.error("❌ Error getting setting '%s': %s", key, e)
+        raise internal_server_error("Failed to get setting", str(e))
 
 
-@router.post("/settings", response_model=SettingResponse)
+@router.post("/settings", response_model=ApiResponse[SettingResponse])
 async def create_setting(
     setting_data: SettingCreate,
     db: Session = Depends(get_db)
@@ -81,10 +76,7 @@ async def create_setting(
         # Check if setting with this key already exists
         existing = db.query(Setting).filter(Setting.key == setting_data.key).first()
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Setting with key '{setting_data.key}' already exists"
-            )
+            raise conflict_error(f"Setting with key '{setting_data.key}' already exists")
         
         # Validate value type
         _validate_setting_value(setting_data.value, setting_data.value_type)
@@ -105,21 +97,21 @@ async def create_setting(
         # Clear settings cache to ensure fresh data
         settings_manager.clear_cache()
         
-        logger.info(f"Created setting '{setting.key}' with value '{setting.value}'")
-        return SettingResponse.model_validate(setting.to_dict())
+        logger.info("✅ Created setting '%s' with value '%s'", setting.key, setting.value)
+        return success_response(
+            SettingResponse.model_validate(setting.to_dict()),
+            message="Setting created successfully"
+        )
         
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creating setting: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create setting: {str(e)}"
-        )
+        logger.error("❌ Error creating setting: %s", e)
+        raise internal_server_error("Failed to create setting", str(e))
 
 
-@router.put("/settings/{key}", response_model=SettingResponse)
+@router.put("/settings/{key}", response_model=ApiResponse[SettingResponse])
 async def update_setting(
     key: str,
     setting_data: SettingUpdate,
@@ -129,10 +121,7 @@ async def update_setting(
     try:
         setting = db.query(Setting).filter(Setting.key == key).first()
         if not setting:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Setting with key '{key}' not found"
-            )
+            raise not_found_error(f"Setting with key '{key}' not found")
         
         # Validate value type
         value_type = setting_data.value_type or setting.value_type
@@ -156,18 +145,18 @@ async def update_setting(
         # Clear settings cache to ensure fresh data
         settings_manager.clear_cache()
         
-        logger.info(f"Updated setting '{setting.key}' to value '{setting.value}'")
-        return SettingResponse.model_validate(setting.to_dict())
+        logger.info("✅ Updated setting '%s' to value '%s'", setting.key, setting.value)
+        return success_response(
+            SettingResponse.model_validate(setting.to_dict()),
+            message="Setting updated successfully"
+        )
         
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating setting '{key}': {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update setting: {str(e)}"
-        )
+        logger.error("❌ Error updating setting '%s': %s", key, e)
+        raise internal_server_error("Failed to update setting", str(e))
 
 
 @router.delete("/settings/{key}", response_model=ApiResponse)
@@ -179,10 +168,7 @@ async def delete_setting(
     try:
         setting = db.query(Setting).filter(Setting.key == key).first()
         if not setting:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Setting with key '{key}' not found"
-            )
+            raise not_found_error(f"Setting with key '{key}' not found")
         
         db.delete(setting)
         db.commit()
@@ -190,18 +176,15 @@ async def delete_setting(
         # Clear settings cache to ensure fresh data
         settings_manager.clear_cache()
         
-        logger.info(f"Deleted setting '{key}'")
+        logger.info("✅ Deleted setting '%s'", key)
         return success_response(message=f"Setting '{key}' deleted successfully")
         
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error deleting setting '{key}': {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete setting: {str(e)}"
-        )
+        logger.error("❌ Error deleting setting '%s': %s", key, e)
+        raise internal_server_error("Failed to delete setting", str(e))
 
 
 @router.get("/settings/{key}/typed-value")
@@ -213,10 +196,7 @@ async def get_setting_typed_value(
     try:
         setting = db.query(Setting).filter(Setting.key == key).first()
         if not setting:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Setting with key '{key}' not found"
-            )
+            raise not_found_error(f"Setting with key '{key}' not found")
         
         return {
             "key": setting.key,
@@ -227,11 +207,8 @@ async def get_setting_typed_value(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting typed value for setting '{key}': {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get setting value: {str(e)}"
-        )
+        logger.error("❌ Error getting typed value for setting '%s': %s", key, e)
+        raise internal_server_error("Failed to get setting value", str(e))
 
 
 def _validate_setting_value(value, value_type: str) -> None:
@@ -257,10 +234,7 @@ def _validate_setting_value(value, value_type: str) -> None:
                 # Already a parsed object, ensure it's serializable
                 json.dumps(value)
     except (ValueError, TypeError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid value for type '{value_type}': {str(e)}"
-        )
+        raise bad_request_error(f"Invalid value for type '{value_type}': {str(e)}")
 
 
 def get_setting_value(db: Session, key: str, default_value=None, value_type: str = "string"):
@@ -274,7 +248,7 @@ def get_setting_value(db: Session, key: str, default_value=None, value_type: str
             return default_value
         return setting.get_typed_value()
     except Exception as e:
-        logger.warning(f"Error getting setting '{key}', using default: {e}")
+        logger.warning("⚠️ Error getting setting '%s', using default: %s", key, e)
         return default_value
 
 
@@ -301,7 +275,7 @@ def ensure_default_settings(db: Session):
         db.commit()
         # Clear settings cache after initializing defaults
         settings_manager.clear_cache()
-        logger.info("Default settings initialized")
+        logger.info("✅ Default settings initialized")
     except Exception as e:
         db.rollback()
-        logger.error(f"Error initializing default settings: {e}")
+        logger.error("❌ Error initializing default settings: %s", e)

@@ -1,7 +1,6 @@
 """
 Device registration API endpoints.
 """
-import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,8 +10,9 @@ from src.api.response_utils import success_response, list_response, not_found_er
 from src.database.database import get_db
 from src.database.models import Device, DataSensitivity, UserRole, User
 from src.auth.dependencies import get_current_user
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["devices"])
 
@@ -169,6 +169,8 @@ def delete_device(device_id: int, db: Session = Depends(get_db)) -> ApiResponse:
         db.delete(row)
         db.commit()
         return success_response({"message": "Device deleted"}, "Device deleted successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error deleting device: %s", e)
         db.rollback()
@@ -186,6 +188,8 @@ def toggle_device(device_id: int, db: Session = Depends(get_db)) -> ApiResponse[
         db.commit()
         db.refresh(row)
         return success_response(row.to_dict(), "Device toggled successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error toggling device: %s", e)
         db.rollback()

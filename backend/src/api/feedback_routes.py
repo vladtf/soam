@@ -32,7 +32,7 @@ async def create_feedback(
     db.commit()
     db.refresh(db_feedback)
     
-    logger.info(f"New feedback submitted by {feedback.email}")
+    logger.info("✅ New feedback submitted by %s", feedback.email)
     
     return success_response(
         {"id": db_feedback.id},
@@ -75,11 +75,14 @@ async def get_feedback(
     if not feedback:
         raise not_found_error("Feedback not found")
         
-    return FeedbackResponse(
-        id=feedback.id,
-        email=feedback.email,
-        message=feedback.message,
-        created_at=feedback.created_at.isoformat() if feedback.created_at else ""
+    return success_response(
+        FeedbackResponse(
+            id=feedback.id,
+            email=feedback.email,
+            message=feedback.message,
+            created_at=feedback.created_at.isoformat() if feedback.created_at else ""
+        ),
+        "Feedback retrieved successfully"
     )
 
 
@@ -93,12 +96,12 @@ async def delete_feedback(
     feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
     
     if not feedback:
-        raise HTTPException(status_code=404, detail="Feedback not found")
+        raise not_found_error("Feedback not found")
         
     db.delete(feedback)
     db.commit()
     
-    logger.info(f"Feedback {feedback_id} deleted")
+    logger.info("✅ Feedback %d deleted", feedback_id)
     
     return ApiResponse(
         status="success",

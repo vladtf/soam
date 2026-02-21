@@ -26,8 +26,8 @@ async def get_all_datasets() -> ApiResponse:
             message=f"Retrieved {len(datasets)} datasets"
         )
     except Exception as e:
-        logger.error("Error fetching datasets: %s", e)
-        return internal_server_error("Failed to fetch datasets", str(e))
+        logger.error("❌ Error fetching datasets: %s", e)
+        raise internal_server_error("Failed to fetch datasets", str(e))
 
 
 @router.get("/datasets/{ingestion_id}", response_model=ApiResponse)
@@ -45,8 +45,8 @@ async def get_dataset_schema(ingestion_id: str) -> ApiResponse:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error fetching schema for %s: %s", ingestion_id, e)
-        return internal_server_error(f"Failed to fetch schema for {ingestion_id}", str(e))
+        logger.error("❌ Error fetching schema for %s: %s", ingestion_id, e)
+        raise internal_server_error(f"Failed to fetch schema for {ingestion_id}", str(e))
 
 
 @router.get("/datasets/{ingestion_id}/evolution", response_model=ApiResponse)
@@ -59,8 +59,8 @@ async def get_schema_evolution(ingestion_id: str) -> ApiResponse:
             message=f"Retrieved {len(evolution)} schema evolution entries for {ingestion_id}"
         )
     except Exception as e:
-        logger.error("Error fetching schema evolution for %s: %s", ingestion_id, e)
-        return internal_server_error(f"Failed to fetch schema evolution for {ingestion_id}", str(e))
+        logger.error("❌ Error fetching schema evolution for %s: %s", ingestion_id, e)
+        raise internal_server_error(f"Failed to fetch schema evolution for {ingestion_id}", str(e))
 
 
 @router.get("/topics", response_model=ApiResponse)
@@ -73,8 +73,8 @@ async def get_topics_summary() -> ApiResponse:
             message="Retrieved topics summary"
         )
     except Exception as e:
-        logger.error("Error fetching topics summary: %s", e)
-        return internal_server_error("Failed to fetch topics summary", str(e))
+        logger.error("❌ Error fetching topics summary: %s", e)
+        raise internal_server_error("Failed to fetch topics summary", str(e))
 
 
 @router.get("/context", response_model=ApiResponse)
@@ -87,8 +87,8 @@ async def get_data_context() -> ApiResponse:
             message=f"Retrieved data context for {context.get('total_sources', 0)} sources"
         )
     except Exception as e:
-        logger.error("Error building data context: %s", e)
-        return internal_server_error("Failed to build data context", str(e))
+        logger.error("❌ Error building data context: %s", e)
+        raise internal_server_error("Failed to build data context", str(e))
 
 
 @router.get("/sources", response_model=ApiResponse) 
@@ -102,5 +102,5 @@ async def get_available_sources() -> ApiResponse:
             message=f"Retrieved {len(sources)} available sources"
         )
     except Exception as e:
-        logger.error("Error fetching available sources: %s", e)
-        return internal_server_error("Failed to fetch available sources", str(e))
+        logger.error("❌ Error fetching available sources: %s", e)
+        raise internal_server_error("Failed to fetch available sources", str(e))

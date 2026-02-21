@@ -3,9 +3,12 @@ from typing import Dict, Any, List
 from pydantic import BaseModel
 
 from src.api.dependencies import ConfigDep, MinioClientDep
+from src.api.models import ApiResponse
+from src.api.response_utils import success_response, internal_server_error
 from src.minio.minio_browser import MinioBrowser
+from src.utils.logging import get_logger
 
-
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/minio", tags=["minio"])
 
@@ -14,19 +17,21 @@ def _browser(config: ConfigDep, client: MinioClientDep) -> MinioBrowser:
     return MinioBrowser(client, config.minio_bucket)
 
 
-@router.get("/ls")
+@router.get("/ls", response_model=ApiResponse)
 def list_prefix(
     config: ConfigDep,
     client: MinioClientDep,
     prefix: str = Query(default="", description="Prefix to list"),
-) -> Dict[str, List[str]]:
+):
     try:
-        return _browser(config, client).list_prefixes(prefix=prefix)
+        data = _browser(config, client).list_prefixes(prefix=prefix)
+        return success_response(data, "Prefixes listed successfully")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ Error listing prefix '%s': %s", prefix, e)
+        raise internal_server_error("Failed to list prefix", str(e))
 
 
-@router.get("/find")
+@router.get("/find", response_model=ApiResponse)
 def list_recursive(
     config: ConfigDep,
     client: MinioClientDep,
@@ -38,7 +43,7 @@ def list_recursive(
     limit: int = Query(default=1000, description="Maximum number of files to return"),
     page: int = Query(default=1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(default=100, ge=1, le=500, description="Items per page"),
-) -> Dict[str, Any]:
+):
     try:
         all_files = _browser(config, client).list_recursive(prefix=prefix)
         
@@ -66,7 +71,7 @@ def list_recursive(
         end_idx = start_idx + page_size
         page_items = all_files[start_idx:end_idx]
             
-        return {
+        return success_response({
             "items": page_items,
             "pagination": {
                 "page": page,
@@ -76,25 +81,28 @@ def list_recursive(
                 "has_next": page < total_pages,
                 "has_prev": page > 1
             }
-        }
+        }, "Files listed successfully")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ Error listing files at '%s': %s", prefix, e)
+        raise internal_server_error("Failed to list files", str(e))
 
 
-@router.get("/preview")
+@router.get("/preview", response_model=ApiResponse)
 def preview_parquet(
     config: ConfigDep,
     client: MinioClientDep,
     key: str = Query(..., description="Object key of Parquet file"),
     limit: int = Query(50, ge=1, le=500, description="Number of rows to preview"),
-) -> Dict[str, Any]:
+):
     try:
-        return _browser(config, client).preview_parquet(key=key, limit=limit)
+        data = _browser(config, client).preview_parquet(key=key, limit=limit)
+        return success_response(data, "Parquet preview retrieved successfully")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ Error previewing parquet '%s': %s", key, e)
+        raise internal_server_error("Failed to preview parquet file", str(e))
 
 
-@router.get("/find-data-files")
+@router.get("/find-data-files", response_model=ApiResponse)
 def find_data_files(
     config: ConfigDep,
     client: MinioClientDep,
@@ -149,7 +157,7 @@ def find_data_files(
             else:
                 small_files.append(file_info)
         
-        return {
+        return success_response({
             "summary": {
                 "total_files": len(data_files),
                 "large_files": len(large_files),
@@ -161,49 +169,56 @@ def find_data_files(
                     "file_type": file_type
                 }
             },
-            "large_files": large_files[:20],  # Show top 20 large files
-            "medium_files": medium_files[:10],  # Show top 10 medium files
-            "small_files": small_files[:5] if small_files else []  # Show few small files
-        }
+            "large_files": large_files[:20],
+            "medium_files": medium_files[:10],
+            "small_files": small_files[:5] if small_files else []
+        }, "Data files found successfully")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ Error finding data files at '%s': %s", prefix, e)
+        raise internal_server_error("Failed to find data files", str(e))
 
 
 class DeleteKeysPayload(BaseModel):
     keys: List[str]
 
 
-@router.delete("/object")
+@router.delete("/object", response_model=ApiResponse)
 def delete_object(
     config: ConfigDep,
     client: MinioClientDep,
     key: str = Query(..., description="Single object key to delete"),
-) -> Dict[str, Any]:
+):
     try:
-        return _browser(config, client).delete_object(key)
+        data = _browser(config, client).delete_object(key)
+        return success_response(data, "Object deleted successfully")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ Error deleting object '%s': %s", key, e)
+        raise internal_server_error("Failed to delete object", str(e))
 
 
-@router.post("/delete")
+@router.post("/delete", response_model=ApiResponse)
 def delete_objects(
     config: ConfigDep,
     client: MinioClientDep,
     payload: DeleteKeysPayload,
-) -> Dict[str, Any]:
+):
     try:
-        return _browser(config, client).delete_objects(payload.keys)
+        data = _browser(config, client).delete_objects(payload.keys)
+        return success_response(data, "Objects deleted successfully")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ Error deleting %d objects: %s", len(payload.keys), e)
+        raise internal_server_error("Failed to delete objects", str(e))
 
 
-@router.delete("/prefix")
+@router.delete("/prefix", response_model=ApiResponse)
 def delete_prefix(
     config: ConfigDep,
     client: MinioClientDep,
     prefix: str = Query(..., description="Delete all objects under this prefix"),
-) -> Dict[str, Any]:
+):
     try:
-        return _browser(config, client).delete_prefix(prefix)
+        data = _browser(config, client).delete_prefix(prefix)
+        return success_response(data, "Prefix deleted successfully")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("❌ Error deleting prefix '%s': %s", prefix, e)
+        raise internal_server_error("Failed to delete prefix", str(e))

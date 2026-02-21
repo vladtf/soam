@@ -1,6 +1,5 @@
 """Routers for user-defined computations."""
 import asyncio
-import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,8 +17,9 @@ from src.computations.examples import EXAMPLE_DEFINITIONS, get_example_by_id, ge
 from src.computations.sources import detect_available_sources, infer_schemas
 from src.computations.service import ComputationService
 from src.computations.sensitivity import calculate_computation_sensitivity, SENSITIVITY_ORDER
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["computations"])
 

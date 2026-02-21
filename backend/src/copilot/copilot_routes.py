@@ -10,9 +10,9 @@ from src.computations.validation import validate_computation_definition
 from src.spark.spark_manager import SparkManager
 from minio import Minio
 import os
-import logging
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["copilot"])
 
@@ -58,7 +58,7 @@ async def generate_computation(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating computation: {e}")
+        logger.error("❌ Error generating computation: %s", e)
         raise internal_server_error("Failed to generate computation", str(e))
 
 @router.get("/copilot/context", response_model=ApiResponse)
@@ -84,8 +84,10 @@ async def get_copilot_context(
             data=context,
             message="Context retrieved successfully"
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error retrieving context: {e}")
+        logger.error("❌ Error retrieving context: %s", e)
         raise internal_server_error("Failed to retrieve context", str(e))
 
 @router.get("/copilot/health", response_model=ApiResponse)

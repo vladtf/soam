@@ -1,14 +1,14 @@
 """
 Building-related API endpoints.
 """
-import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from src.api.models import BuildingLocation, BuildingCreateNeo4j, ApiResponse, ApiListResponse
 from src.api.response_utils import success_response, error_response, list_response, not_found_error, bad_request_error, internal_server_error
 from src.api.dependencies import Neo4jManagerDep
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["buildings"])
 
@@ -20,7 +20,7 @@ async def get_buildings(neo4j_manager: Neo4jManagerDep):
         buildings = neo4j_manager.get_buildings()
         return list_response(buildings, message="Buildings retrieved successfully")
     except Exception as e:
-        logger.error(f"Error fetching buildings: {str(e)}")
+        logger.error("❌ Error fetching buildings: %s", e)
         raise internal_server_error("Failed to retrieve buildings", str(e))
 
 
@@ -31,14 +31,16 @@ async def add_building(building: BuildingCreateNeo4j, neo4j_manager: Neo4jManage
         building_data = building.dict()
         res = neo4j_manager.add_building(building_data)
         return success_response(res, "Building added successfully")
+    except HTTPException:
+        raise
     except ValueError as e:
-        logger.error(f"Invalid data in add_building: {str(e)}")
+        logger.error("❌ Invalid data in add_building: %s", e)
         raise bad_request_error(str(e))
     except ConnectionError as e:
-        logger.error(f"Database connection error in add_building: {str(e)}")
+        logger.error("❌ Database connection error in add_building: %s", e)
         raise internal_server_error("Database connection error", str(e))
     except Exception as e:
-        logger.error(f"Error adding building: {str(e)}")
+        logger.error("❌ Error adding building: %s", e)
         raise internal_server_error("Failed to add building", str(e))
 
 
@@ -53,12 +55,14 @@ async def delete_building(
     try:
         neo4j_manager.delete_building(name=name, lat=lat, lng=lng)
         return success_response(None, "Building deleted successfully")
+    except HTTPException:
+        raise
     except ValueError as e:
-        logger.error(f"Invalid data in delete_building: {str(e)}")
+        logger.error("❌ Invalid data in delete_building: %s", e)
         raise not_found_error(str(e))
     except ConnectionError as e:
-        logger.error(f"Database connection error in delete_building: {str(e)}")
+        logger.error("❌ Database connection error in delete_building: %s", e)
         raise internal_server_error("Database connection error", str(e))
     except Exception as e:
-        logger.error(f"Error deleting building: {str(e)}")
+        logger.error("❌ Error deleting building: %s", e)
         raise internal_server_error("Failed to delete building", str(e))

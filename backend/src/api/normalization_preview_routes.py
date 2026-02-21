@@ -2,7 +2,7 @@
 API routes for data normalization preview functionality.
 Provides endpoints to preview normalization results before applying them.
 """
-import logging
+
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -13,12 +13,21 @@ from src.services.normalization_preview import DataNormalizationPreview
 from src.minio.minio_browser import MinioBrowser
 from src.api.dependencies import get_minio_client, get_config, AppConfig
 from src.api.models import ApiResponse
-from src.api.response_utils import success_response
+from src.api.response_utils import success_response, internal_server_error
 from minio import Minio
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/normalization/preview", tags=["normalization-preview"])
+
+
+def _rules_to_dicts(rules: list) -> list[dict]:
+    """Convert CustomNormalizationRule list to dictionary format."""
+    return [
+        {"raw_key": rule.raw_key, "canonical_key": rule.canonical_key, "ingestion_id": rule.ingestion_id}
+        for rule in rules
+    ]
 
 
 class CustomNormalizationRule(BaseModel):
@@ -102,11 +111,8 @@ async def get_sample_data(
         )
         
     except Exception as e:
-        logger.error(f"Error getting sample data: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve sample data: {str(e)}"
-        )
+        logger.error("❌ Error getting sample data: %s", e)
+        raise internal_server_error("Failed to retrieve sample data", str(e))
 
 
 @router.post("/preview", response_model=ApiResponse)
@@ -141,16 +147,7 @@ async def preview_normalization(
             )
         
         # Convert custom rules to dictionary format
-        custom_rules_dict = None
-        if request.custom_rules:
-            custom_rules_dict = [
-                {
-                    "raw_key": rule.raw_key,
-                    "canonical_key": rule.canonical_key,
-                    "ingestion_id": rule.ingestion_id
-                }
-                for rule in request.custom_rules
-            ]
+        custom_rules_dict = _rules_to_dicts(request.custom_rules) if request.custom_rules else None
         
         # Preview normalization
         preview_result = preview_service.preview_normalization(
@@ -166,11 +163,8 @@ async def preview_normalization(
         )
         
     except Exception as e:
-        logger.error(f"Error previewing normalization: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to preview normalization: {str(e)}"
-        )
+        logger.error("❌ Error previewing normalization: %s", e)
+        raise internal_server_error("Failed to preview normalization", str(e))
 
 
 @router.post("/compare", response_model=ApiResponse)
@@ -200,23 +194,9 @@ async def compare_normalization_scenarios(
             )
         
         # Convert rules to dictionary format
-        scenario_a_rules = [
-            {
-                "raw_key": rule.raw_key,
-                "canonical_key": rule.canonical_key,
-                "ingestion_id": rule.ingestion_id
-            }
-            for rule in request.scenario_a_rules
-        ]
+        scenario_a_rules = _rules_to_dicts(request.scenario_a_rules)
         
-        scenario_b_rules = [
-            {
-                "raw_key": rule.raw_key,
-                "canonical_key": rule.canonical_key,
-                "ingestion_id": rule.ingestion_id
-            }
-            for rule in request.scenario_b_rules
-        ]
+        scenario_b_rules = _rules_to_dicts(request.scenario_b_rules)
         
         # Compare scenarios
         comparison_result = preview_service.compare_normalization_scenarios(
@@ -233,11 +213,8 @@ async def compare_normalization_scenarios(
         )
         
     except Exception as e:
-        logger.error(f"Error comparing normalization scenarios: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to compare normalization scenarios: {str(e)}"
-        )
+        logger.error("❌ Error comparing normalization scenarios: %s", e)
+        raise internal_server_error("Failed to compare normalization scenarios", str(e))
 
 
 @router.post("/validate", response_model=ApiResponse)
@@ -271,14 +248,7 @@ async def validate_normalization_rules(
             )
         
         # Convert rules to dictionary format
-        rules_dict = [
-            {
-                "raw_key": rule.raw_key,
-                "canonical_key": rule.canonical_key,
-                "ingestion_id": rule.ingestion_id
-            }
-            for rule in request.rules
-        ]
+        rules_dict = _rules_to_dicts(request.rules)
         
         # Validate rules
         validation_result = preview_service.validate_normalization_rules(
@@ -292,11 +262,8 @@ async def validate_normalization_rules(
         )
         
     except Exception as e:
-        logger.error(f"Error validating normalization rules: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate normalization rules: {str(e)}"
-        )
+        logger.error("❌ Error validating normalization rules: %s", e)
+        raise internal_server_error("Failed to validate normalization rules", str(e))
 
 
 @router.get("/ingestion-ids", response_model=ApiResponse)
@@ -330,8 +297,5 @@ async def get_available_ingestion_ids(
         )
         
     except Exception as e:
-        logger.error(f"Error getting available ingestion IDs: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get ingestion IDs: {str(e)}"
-        )
+        logger.error("❌ Error getting available ingestion IDs: %s", e)
+        raise internal_server_error("Failed to get ingestion IDs", str(e))

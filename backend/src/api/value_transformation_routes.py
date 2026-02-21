@@ -22,6 +22,62 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["value_transformation"])
 
 
+def _rule_to_response(rule: ValueTransformationRule) -> ValueTransformationRuleResponse:
+    """Convert a ValueTransformationRule ORM model to a ValueTransformationRuleResponse."""
+    return ValueTransformationRuleResponse(
+        id=rule.id,
+        ingestion_id=rule.ingestion_id,
+        field_name=rule.field_name,
+        transformation_type=rule.transformation_type,
+        transformation_config=rule.transformation_config,
+        order_priority=rule.order_priority,
+        enabled=rule.enabled,
+        applied_count=getattr(rule, "applied_count", 0),
+        last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
+        created_by=rule.created_by,
+        updated_by=rule.updated_by,
+        created_at=rule.created_at.isoformat() if rule.created_at else None,
+        updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
+    )
+
+
+def _validate_transformation_config(transformation_type: str, config: dict) -> None:
+    """Validate transformation config fields based on transformation type.
+    
+    Raises bad_request_error if validation fails.
+    """
+    valid_types = ["filter", "aggregate", "convert", "validate"]
+    if transformation_type not in valid_types:
+        raise bad_request_error(f"Invalid transformation type. Must be one of: {', '.join(valid_types)}")
+    
+    # Determine required fields based on type
+    required_fields_map = {
+        "filter": ["operator", "value"],
+        "aggregate": ["function", "window"],
+        "convert": ["operation"],
+        "validate": ["validation_rules"],
+    }
+    required_fields = required_fields_map.get(transformation_type, [])
+    
+    for field in required_fields:
+        if field not in config:
+            raise bad_request_error(f"Missing required config field '{field}' for transformation type '{transformation_type}'")
+    
+    # Special validation for convert type based on operation
+    if transformation_type == "convert":
+        operation = config.get("operation")
+        if operation == "type_conversion":
+            if "target_type" not in config:
+                raise bad_request_error("Missing required config field 'target_type' for convert operation 'type_conversion'")
+        elif operation == "mathematical":
+            if "math_operation" not in config:
+                raise bad_request_error("Missing required config field 'math_operation' for convert operation 'mathematical'")
+            if "operand" not in config and "operand_field" not in config:
+                raise bad_request_error("Missing required config field 'operand' or 'operand_field' for convert operation 'mathematical'")
+        else:
+            raise bad_request_error(f"Invalid convert operation '{operation}'. Must be 'type_conversion' or 'mathematical'")
+
+
 @router.get("/value-transformations", response_model=ApiListResponse[ValueTransformationRuleResponse])
 def list_value_transformation_rules(db: Session = Depends(get_db)):
     """List all value transformation rules."""
@@ -41,22 +97,7 @@ def list_value_transformation_rules(db: Session = Depends(get_db)):
                 logger.warning("⚠️ Invalid JSON in transformation_config for rule %s", rule.id)
                 parsed_config = {}
             
-            rule_response = ValueTransformationRuleResponse(
-                id=rule.id,
-                ingestion_id=rule.ingestion_id,
-                field_name=rule.field_name,
-                transformation_type=rule.transformation_type,
-                transformation_config=rule.transformation_config,  # Keep as string for API consistency
-                order_priority=rule.order_priority,
-                enabled=rule.enabled,
-                applied_count=getattr(rule, "applied_count", 0),
-                last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
-                created_by=rule.created_by,
-                updated_by=rule.updated_by,
-                created_at=rule.created_at.isoformat() if rule.created_at else None,
-                updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
-            )
-            rule_responses.append(rule_response)
+            rule_responses.append(_rule_to_response(rule))
         
         return list_response(
             data=rule_responses,
@@ -72,40 +113,8 @@ def list_value_transformation_rules(db: Session = Depends(get_db)):
 def create_value_transformation_rule(payload: ValueTransformationRuleCreate, db: Session = Depends(get_db)):
     """Create a new value transformation rule."""
     try:
-        # Validate transformation type
-        valid_types = ["filter", "aggregate", "convert", "validate"]
-        if payload.transformation_type not in valid_types:
-            raise bad_request_error(f"Invalid transformation type. Must be one of: {', '.join(valid_types)}")
-        
-        # Validate required config fields based on transformation type
-        if payload.transformation_type == "filter":
-            required_fields = ["operator", "value"]
-        elif payload.transformation_type == "aggregate":
-            required_fields = ["function", "window"]
-        elif payload.transformation_type == "convert":
-            # For convert, we need the 'operation' field first
-            required_fields = ["operation"]
-        elif payload.transformation_type == "validate":
-            required_fields = ["validation_rules"]
-        
-        # Basic required fields validation
-        for field in required_fields:
-            if field not in payload.transformation_config:
-                raise bad_request_error(f"Missing required config field '{field}' for transformation type '{payload.transformation_type}'")
-        
-        # Special validation for convert type based on operation
-        if payload.transformation_type == "convert":
-            operation = payload.transformation_config.get("operation")
-            if operation == "type_conversion":
-                if "target_type" not in payload.transformation_config:
-                    raise bad_request_error("Missing required config field 'target_type' for convert operation 'type_conversion'")
-            elif operation == "mathematical":
-                if "math_operation" not in payload.transformation_config:
-                    raise bad_request_error("Missing required config field 'math_operation' for convert operation 'mathematical'")
-                if "operand" not in payload.transformation_config and "operand_field" not in payload.transformation_config:
-                    raise bad_request_error("Missing required config field 'operand' or 'operand_field' for convert operation 'mathematical'")
-            else:
-                raise bad_request_error(f"Invalid convert operation '{operation}'. Must be 'type_conversion' or 'mathematical'")
+        # Validate transformation type and config
+        _validate_transformation_config(payload.transformation_type, payload.transformation_config)
         
         # Convert transformation_config dict to JSON string for database storage
         import json
@@ -127,23 +136,9 @@ def create_value_transformation_rule(payload: ValueTransformationRuleCreate, db:
         logger.info("✅ Value transformation rule created by '%s': %s -> %s (%s)", 
                    payload.created_by, rule.field_name, rule.transformation_type, rule.ingestion_id or "global")
         
-        rule_response = ValueTransformationRuleResponse(
-            id=rule.id,
-            ingestion_id=rule.ingestion_id,
-            field_name=rule.field_name,
-            transformation_type=rule.transformation_type,
-            transformation_config=rule.transformation_config,  # Use stored string for API consistency
-            order_priority=rule.order_priority,
-            enabled=rule.enabled,
-            applied_count=getattr(rule, "applied_count", 0),
-            last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
-            created_by=rule.created_by,
-            updated_by=rule.updated_by,
-            created_at=rule.created_at.isoformat() if rule.created_at else None,
-            updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
-        )
-        
-        return success_response(rule_response, "Value transformation rule created successfully")
+        return success_response(_rule_to_response(rule), "Value transformation rule created successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("❌ Error creating value transformation rule: %s", e)
         db.rollback()
@@ -170,37 +165,7 @@ def update_value_transformation_rule(rule_id: int, payload: ValueTransformationR
         if payload.transformation_config is not None:
             # Validate the new config if provided
             transformation_type = payload.transformation_type if payload.transformation_type is not None else rule.transformation_type
-            
-            # Validate required config fields based on transformation type
-            if transformation_type == "filter":
-                required_fields = ["operator", "value"]
-            elif transformation_type == "aggregate":
-                required_fields = ["function", "window"]
-            elif transformation_type == "convert":
-                required_fields = ["operation"]
-            elif transformation_type == "validate":
-                required_fields = ["validation_rules"]
-            else:
-                required_fields = []
-            
-            # Basic required fields validation
-            for field in required_fields:
-                if field not in payload.transformation_config:
-                    raise bad_request_error(f"Missing required config field '{field}' for transformation type '{transformation_type}'")
-            
-            # Special validation for convert type based on operation
-            if transformation_type == "convert":
-                operation = payload.transformation_config.get("operation")
-                if operation == "type_conversion":
-                    if "target_type" not in payload.transformation_config:
-                        raise bad_request_error("Missing required config field 'target_type' for convert operation 'type_conversion'")
-                elif operation == "mathematical":
-                    if "math_operation" not in payload.transformation_config:
-                        raise bad_request_error("Missing required config field 'math_operation' for convert operation 'mathematical'")
-                    if "operand" not in payload.transformation_config and "operand_field" not in payload.transformation_config:
-                        raise bad_request_error("Missing required config field 'operand' or 'operand_field' for convert operation 'mathematical'")
-                else:
-                    raise bad_request_error(f"Invalid convert operation '{operation}'. Must be 'type_conversion' or 'mathematical'")
+            _validate_transformation_config(transformation_type, payload.transformation_config)
             
             changes.append("transformation_config updated")
             rule.transformation_config = json.dumps(payload.transformation_config)
@@ -222,23 +187,9 @@ def update_value_transformation_rule(rule_id: int, payload: ValueTransformationR
             logger.info("✅ Value transformation rule %d updated by '%s': %s", 
                        rule_id, payload.updated_by, "; ".join(changes))
         
-        rule_response = ValueTransformationRuleResponse(
-            id=rule.id,
-            ingestion_id=rule.ingestion_id,
-            field_name=rule.field_name,
-            transformation_type=rule.transformation_type,
-            transformation_config=rule.transformation_config,  # Use stored string for API consistency
-            order_priority=rule.order_priority,
-            enabled=rule.enabled,
-            applied_count=getattr(rule, "applied_count", 0),
-            last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
-            created_by=rule.created_by,
-            updated_by=rule.updated_by,
-            created_at=rule.created_at.isoformat() if rule.created_at else None,
-            updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
-        )
-        
-        return success_response(rule_response, "Value transformation rule updated successfully")
+        return success_response(_rule_to_response(rule), "Value transformation rule updated successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("❌ Error updating value transformation rule: %s", e)
         db.rollback()
@@ -259,6 +210,8 @@ def delete_value_transformation_rule(rule_id: int, db: Session = Depends(get_db)
         
         logger.info("✅ Value transformation rule deleted: %s", rule_name)
         return success_response(None, "Value transformation rule deleted successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("❌ Error deleting value transformation rule: %s", e)
         db.rollback()
@@ -283,23 +236,9 @@ def toggle_value_transformation_rule(rule_id: int, db: Session = Depends(get_db)
         logger.info("✅ Value transformation rule %d toggled: %s -> %s (%s)", 
                    rule_id, old_state, rule.enabled, rule.field_name)
         
-        rule_response = ValueTransformationRuleResponse(
-            id=rule.id,
-            ingestion_id=rule.ingestion_id,
-            field_name=rule.field_name,
-            transformation_type=rule.transformation_type,
-            transformation_config=rule.transformation_config,
-            order_priority=rule.order_priority,
-            enabled=rule.enabled,
-            applied_count=getattr(rule, "applied_count", 0),
-            last_applied_at=rule.last_applied_at.isoformat() if getattr(rule, "last_applied_at", None) else None,
-            created_by=rule.created_by,
-            updated_by=rule.updated_by,
-            created_at=rule.created_at.isoformat() if rule.created_at else None,
-            updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
-        )
-        
-        return success_response(rule_response, f"Rule {'enabled' if rule.enabled else 'disabled'} successfully")
+        return success_response(_rule_to_response(rule), f"Rule {'enabled' if rule.enabled else 'disabled'} successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("❌ Error toggling value transformation rule: %s", e)
         db.rollback()
