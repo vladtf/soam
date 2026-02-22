@@ -26,9 +26,11 @@ applyTo: 'ingestor/**'
   - `data_sources.py` - Dynamic data source management API (uses `init_dependencies(registry, manager)` module-level initialization)
 
 ### Connector Architecture (`ingestor/src/connectors/`)
-- `base.py` - **CRITICAL**: Abstract base connector with standardized `DataMessage` format
-- `mqtt_connector.py` - MQTT broker integration with auto-reconnection
+- `base.py` - **CRITICAL**: Abstract base connector with standardized `DataMessage` format + `ConnectorRegistry` (auto-discovery)
+- `__init__.py` - Auto-discovers all `*_connector.py` modules and triggers `@ConnectorRegistry.register()` decorators
+- `mqtt_connector.py` - MQTT broker integration with shared subscriptions for horizontal scaling
 - `rest_api_connector.py` - REST API polling connector with configurable intervals
+- `coap_connector.py` - CoAP (RFC 7252) connector with observe (push) and poll modes for constrained IoT devices
 
 ### Services Layer (`ingestor/src/services/`)
 - `data_source_service.py` - **CRITICAL**: Registry and manager for pluggable data sources:
@@ -80,16 +82,29 @@ class BaseDataConnector(ABC):
     async def get_health(self) -> ConnectorHealthResponse: pass
 ```
 
+### Adding a New Connector (Zero-Touch Registration)
+```python
+# 1. Create ingestor/src/connectors/myprotocol_connector.py
+# 2. Decorate with @ConnectorRegistry.register("myprotocol")
+# 3. That's it — auto-discovery handles the rest (no other files to edit)
+
+from .base import BaseDataConnector, ConnectorRegistry
+
+@ConnectorRegistry.register("myprotocol")
+class MyProtocolConnector(BaseDataConnector):
+    # Implement: connect, disconnect, start_ingestion, stop_ingestion,
+    #           health_check, get_config_schema, get_display_info
+    ...
+```
+
 ### Data Source Management
 ```python
-# Dynamic registration in ingestor/src/services/data_source_service.py
+# ConnectorRegistry auto-populated by decorators (no hardcoded dict)
 class DataSourceRegistry:
     """Registry for pluggable connector types."""
-    CONNECTOR_TYPES = {
-        "mqtt": MQTTConnector,
-        "rest_api": RestApiConnector,
-        # Easily extensible for new connector types
-    }
+    @property
+    def CONNECTOR_TYPES(self):
+        return ConnectorRegistry.get_all()  # mqtt, rest_api, coap, ...
 
 class DataSourceManager:
     """Manages individual data source instances with lifecycle control."""

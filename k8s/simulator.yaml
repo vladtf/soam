@@ -38,9 +38,9 @@ kind: Deployment
 metadata:
   name: simulator-traffic
   annotations:
-    description: "Traffic sensor simulator with in-memory edge buffering for offline tolerance"
+    description: "Traffic sensor simulator - DISABLED (set replicas to 1 to enable)"
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: simulator-traffic
@@ -108,9 +108,9 @@ kind: Deployment
 metadata:
   name: simulator-smart-bin
   annotations:
-    description: "Smart bin sensor simulator with in-memory edge buffering for offline tolerance"
+    description: "Smart bin sensor simulator - DISABLED (set replicas to 1 to enable)"
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: simulator-smart-bin

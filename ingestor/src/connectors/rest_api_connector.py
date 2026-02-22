@@ -8,10 +8,11 @@ import json
 import backoff
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
-from .base import BaseDataConnector, DataMessage, ConnectorHealthResponse
+from .base import BaseDataConnector, DataMessage, ConnectorHealthResponse, ConnectorRegistry
 from ..utils.timestamp_utils import extract_timestamp
 
 
+@ConnectorRegistry.register("rest_api")
 class RestApiConnector(BaseDataConnector):
     """REST API data source connector with polling support."""
     

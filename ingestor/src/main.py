@@ -2,7 +2,6 @@
 FastAPI application with proper dependency injection for the SOAM ingestor.
 """
 import logging
-import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,8 +12,8 @@ from src.logging_config import setup_logging
 from src.middleware import RequestIdMiddleware
 from src.database.database import init_database
 from src.services.data_source_service import DataSourceRegistry, DataSourceManager
-from src.connectors.base import DataMessage
-from src.utils.timestamp_utils import ensure_datetime
+from src.services.data_handler import create_data_handler
+from src.services.auto_register import auto_register_default_sources
 from src import metrics as ingestor_metrics
 
 # Configure structured logging once
@@ -25,219 +24,75 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager for startup and shutdown events.
-    """
-    # Startup
+    """Application lifespan manager for startup and shutdown events."""
     logger.info("Starting SOAM Ingestor...")
-    
+
     # Initialize database
     logger.info("🗄️ Initializing database...")
     init_database()
-    
-    # Initialize dependencies manually (not through FastAPI DI in lifespan)
+
     try:
+        # ── Core dependencies ────────────────────────────────────
         config = get_config()
         minio_client = get_minio_client(config)
         state = get_ingestor_state(config)
         metadata_service = get_metadata_service()
-        
-        # Initialize data source system
+
+        # ── Data source system ───────────────────────────────────
         registry = DataSourceRegistry()
         registry.init_builtin_types()
-        
-        # Auto-register Local Simulators MQTT data source if it doesn't exist
-        try:
-            existing_sources = registry.get_data_sources(enabled_only=False)
-            local_mqtt_exists = any(
-                source.name == "Local Simulators MQTT" and source.type_name == "mqtt" 
-                for source in existing_sources
-            )
-            
-            if not local_mqtt_exists:
-                logger.info("🔧 Auto-registering Local Simulators MQTT data source...")
-                local_mqtt_config = {
-                    "broker": "mosquitto",
-                    "port": 1883,
-                    "topics": ["smartcity/sensors/#"]
-                }
-                
-                source_id = registry.create_data_source(
-                    name="Local Simulators MQTT",
-                    type_name="mqtt",
-                    config=local_mqtt_config,
-                    created_by="system_auto_register"
-                )
-                logger.info(f"✅ Auto-registered Local Simulators MQTT data source with ID: {source_id}")
-                
-                # Ensure it's enabled
-                try:
-                    from src.database.database import get_db
-                    from src.database.models import DataSource
-                    db = next(get_db())
-                    try:
-                        source = db.query(DataSource).filter(DataSource.id == source_id).first()
-                        if source:
-                            source.enabled = True
-                            db.commit()
-                            logger.info("✅ Auto-enabled Local Simulators MQTT data source")
-                    finally:
-                        db.close()
-                except Exception as enable_error:
-                    logger.warning(f"⚠️ Could not auto-enable Local Simulators MQTT: {enable_error}")
-                    
-            else:
-                logger.info("ℹ️ Local Simulators MQTT data source already exists")
-                
-        except Exception as e:
-            logger.error(f"⚠️ Failed to auto-register Local Simulators MQTT: {e}")
-            # Continue startup even if auto-registration fails
-        
-        # Initialize metrics
+        auto_register_default_sources(registry)
+
+        # ── Metrics & data handler ───────────────────────────────
         ingestor_metrics.init_metrics()
-        
-        # Create data handler function for connectors
-        def data_handler(message: DataMessage):
-            """Handle data from any connector type."""
-            import time
-            import json
-            start_time = time.time()
-            source_type = message.metadata.get('source_type', 'unknown')
-            
-            try:
-                # Process the standardized message
-                logger.debug(f"📊 Processing message from source: {message.source_id}")
-                
-                # Record message received
-                message_size = len(json.dumps(message.data).encode('utf-8'))
-                ingestor_metrics.record_message_received(source_type, message.source_id, message_size)
-                
-                # Ensure proper timestamp format
-                from datetime import datetime, timezone
-                
-                # Use the shared utility to ensure we have a datetime object
-                timestamp = ensure_datetime(message.timestamp if message.timestamp and message.timestamp != 'timestamp' else None)
-                
-                # Calculate delay between sensor timestamp and ingestion
-                ingestion_time = datetime.now(timezone.utc)
-                # If timestamp is naive (no timezone), assume UTC
-                if timestamp.tzinfo is None:
-                    timestamp = timestamp.replace(tzinfo=timezone.utc)
-                delay = (ingestion_time - timestamp).total_seconds()
-                ingestor_metrics.record_timestamp_delay(source_type, delay)
-                
-                # Convert DataMessage to the format expected by MinIO client
-                # The MinIO client expects 'ingestion_id' and 'timestamp' as top-level fields
-                payload = {
-                    **message.data,  # Original sensor data
-                    'ingestion_id': message.source_id,  # Required by MinIO client
-                    'timestamp': timestamp.isoformat(),  # Required by MinIO client in ISO format
-                    'source_type': message.metadata.get('source_type'),
-                    'ingestion_timestamp': ingestion_time.isoformat(),  # When ingestor received it
-                    # Add other useful metadata as top-level fields
-                    **{k: v for k, v in message.metadata.items() if k not in ['source_type']}
-                }
-                
-                # IMPORTANT: Add to partition buffer for legacy API compatibility
-                # The backend devices API relies on /api/partitions which reads from these buffers
-                state.get_partition_buffer(message.source_id).append(payload)
-                logger.debug(f"📋 Added to partition buffer: {message.source_id}")
-                
-                # Use the same MinIO client as legacy system
-                minio_client.add_row(payload)
-                logger.debug(f"📥 Data stored to MinIO from {message.source_id}")
-                
-                # Extract metadata if metadata service is available
-                if metadata_service:
-                    metadata_service.process_data(payload)
-                    logger.debug("🔍 Metadata extracted")
-                
-                # Record successful processing
-                ingestor_metrics.record_message_processed(source_type, message.source_id)
-                
-            except Exception as e:
-                logger.error(f"❌ Error processing data message from {message.source_id}: {e}")
-                ingestor_metrics.record_message_failed(source_type, message.source_id, type(e).__name__)
-        
-        manager = DataSourceManager(registry, data_handler)
-        
-        # Store in app state for shutdown access
+        handler = create_data_handler(minio_client, state, metadata_service)
+        manager = DataSourceManager(registry, handler)
+
+        # ── Store in app state ───────────────────────────────────
         app.state.config = config
         app.state.minio_client = minio_client
         app.state.ingestor_state = state
         app.state.metadata_service = metadata_service
         app.state.data_source_registry = registry
         app.state.data_source_manager = manager
-        
-        # Initialize data source API dependencies
         data_sources.init_dependencies(registry, manager)
-        
+
         logger.info("✅ All dependencies initialized successfully")
-        
-        # Start all enabled data sources
+
+        # ── Start connectors ─────────────────────────────────────
         await manager.start_all_enabled_sources()
-        
-        # Ensure Local Simulators MQTT is always started (if it exists and is enabled)
-        try:
-            sources = registry.get_data_sources(enabled_only=True)
-            local_mqtt_source = next(
-                (s for s in sources if s.name == "Local Simulators MQTT" and s.type_name == "mqtt"), 
-                None
-            )
-            
-            if local_mqtt_source:
-                # Check if it's already running
-                if local_mqtt_source.ingestion_id not in manager.active_connectors:
-                    logger.info("🚀 Starting Local Simulators MQTT data source...")
-                    await manager.start_source(local_mqtt_source)
-                else:
-                    logger.info("✅ Local Simulators MQTT is already running")
-            else:
-                logger.warning("⚠️ Local Simulators MQTT data source not found or not enabled")
-                
-        except Exception as e:
-            logger.error(f"❌ Error ensuring Local Simulators MQTT is started: {e}")
-        
         logger.info("🚀 SOAM Ingestor started successfully")
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to initialize dependencies: {e}")
         raise
-    
+
     yield
-    
-    # Shutdown
+
+    # ── Shutdown ─────────────────────────────────────────────────
     logger.info("🛑 Shutting down SOAM Ingestor...")
-    
     try:
-        # Shutdown data source manager
-        data_source_manager = getattr(app.state, 'data_source_manager', None)
-        if data_source_manager:
-            await data_source_manager.shutdown_all()
+        if mgr := getattr(app.state, "data_source_manager", None):
+            await mgr.shutdown_all()
             logger.info("✅ Data source manager shut down")
-        
-        # Stop MQTT client (legacy)
-        state = app.state.ingestor_state
-        metadata_service = app.state.metadata_service
-        
-        if state.mqtt_handler:
-            state.mqtt_handler.stop()
+
+        st = app.state.ingestor_state
+        if st.mqtt_handler:
+            st.mqtt_handler.stop()
             logger.info("✅ MQTT client stopped successfully")
-        
-        # Shutdown metadata service
-        if metadata_service:
-            metadata_service.shutdown()
+
+        ms = app.state.metadata_service
+        if ms:
+            ms.shutdown()
             logger.info("✅ Metadata service stopped successfully")
-            
-        # Flush any remaining MinIO data
-        minio_client = app.state.minio_client
-        if minio_client:
-            minio_client.close()
+
+        mc = app.state.minio_client
+        if mc:
+            mc.close()
             logger.info("✅ MinIO client closed successfully")
-            
     except Exception as e:
         logger.error(f"❌ Error during shutdown: {e}")
-    
+
     logger.info("🎯 Shutdown completed.")
 
 
@@ -283,10 +138,10 @@ async def root():
         "message": "SOAM Ingestor API - Modular Data Source Platform",
         "version": "1.0.0",
         "features": [
-            "Multi-source data ingestion (MQTT, REST API, etc.)",
+            "Multi-source data ingestion (MQTT, REST API, CoAP, etc.)",
             "Dynamic data source registration",
             "Real-time monitoring and health checks",
-            "Extensible connector architecture"
+            "Extensible connector architecture with auto-discovery"
         ],
         "endpoints": {
             "docs": "/docs",

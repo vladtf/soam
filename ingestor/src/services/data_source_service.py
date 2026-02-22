@@ -15,9 +15,7 @@ from sqlalchemy import func
 
 from ..database.database import get_db
 from ..database.models import DataSourceType, DataSource, DataSourceMetric
-from ..connectors.base import BaseDataConnector
-from ..connectors.mqtt_connector import MQTTConnector
-from ..connectors.rest_api_connector import RestApiConnector
+from ..connectors.base import BaseDataConnector, ConnectorRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +39,10 @@ class DataSourceInfo:
 class DataSourceRegistry:
     """Registry for managing data source types and instances using SQLAlchemy ORM."""
     
-    # Built-in connector types
-    CONNECTOR_TYPES = {
-        "mqtt": MQTTConnector,
-        "rest_api": RestApiConnector,
-        # Add more as they're implemented
-    }
+    @property
+    def CONNECTOR_TYPES(self) -> Dict[str, Any]:
+        """Dynamically resolved from ConnectorRegistry (auto-discovered)."""
+        return ConnectorRegistry.get_all()
     
     def __init__(self):
         self._initialized = False

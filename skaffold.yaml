@@ -21,6 +21,10 @@ build:
       context: rest-api-simulator
       docker:
         pullParent: false
+    - image: coap-simulator
+      context: coap-simulator
+      docker:
+        pullParent: false
     - image: frontend
       context: frontend
       docker:

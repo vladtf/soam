@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coap-simulator
+  annotations:
+    description: "CoAP sensor simulator exposing observable parking and noise sensor resources"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coap-simulator
+  template:
+    metadata:
+      labels:
+        app: coap-simulator
+    spec:
+      containers:
+        - name: coap-simulator
+          image: coap-simulator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: COAP_PORT
+              value: "5683"
+            - name: COAP_UPDATE_INTERVAL
+              value: "10"
+          ports:
+            - containerPort: 5683
+              protocol: UDP
+              name: coap
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coap-simulator
+  labels:
+    app: coap-simulator
+spec:
+  selector:
+    app: coap-simulator
+  ports:
+    - port: 5683
+      targetPort: 5683
+      protocol: UDP
+      name: coap
+  type: ClusterIP

@@ -1,13 +1,70 @@
 """
 Abstract base connector for all data source types.
 Provides standardized interface for data ingestion.
+
+To add a new connector:
+  1. Create a new file in this package (e.g., coap_connector.py)
+  2. Subclass BaseDataConnector
+  3. Decorate the class with @ConnectorRegistry.register("your_type_name")
+  4. Implement all abstract methods
+  That's it — auto-discovery handles the rest.
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, Type
 from dataclasses import dataclass
 from enum import Enum
 import asyncio
 import logging
+
+logger = logging.getLogger(__name__)
+
+
+class ConnectorRegistry:
+    """
+    Global registry for connector types.
+    
+    Connectors self-register via the @ConnectorRegistry.register("type_name") decorator.
+    All connector modules in this package are auto-imported by __init__.py,
+    so adding a new connector file is all that's needed.
+    """
+    _connectors: Dict[str, Type["BaseDataConnector"]] = {}
+
+    @classmethod
+    def register(cls, type_name: str):
+        """Decorator to register a connector type.
+        
+        Usage:
+            @ConnectorRegistry.register("mqtt")
+            class MQTTConnector(BaseDataConnector):
+                ...
+        """
+        def decorator(connector_class: Type["BaseDataConnector"]):
+            if type_name in cls._connectors:
+                logger.warning(f"⚠️ Overwriting existing connector registration: {type_name}")
+            cls._connectors[type_name] = connector_class
+            logger.debug(f"🔌 Registered connector type: {type_name} -> {connector_class.__name__}")
+            return connector_class
+        return decorator
+
+    @classmethod
+    def get_all(cls) -> Dict[str, Type["BaseDataConnector"]]:
+        """Return all registered connector types."""
+        return dict(cls._connectors)
+
+    @classmethod
+    def get(cls, type_name: str) -> Optional[Type["BaseDataConnector"]]:
+        """Get a connector class by type name."""
+        return cls._connectors.get(type_name)
+
+    @classmethod
+    def has(cls, type_name: str) -> bool:
+        """Check if a connector type is registered."""
+        return type_name in cls._connectors
+
+    @classmethod
+    def type_names(cls) -> list:
+        """Return all registered type names."""
+        return list(cls._connectors.keys())
 
 
 class ConnectorStatus(Enum):

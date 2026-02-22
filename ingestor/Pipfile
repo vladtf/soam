@@ -19,6 +19,7 @@ aiohttp = "*"
 sqlalchemy = "*"
 jsonschema = "*"
 backoff = "*"
+aiocoap = "*"
 
 [dev-packages]
 

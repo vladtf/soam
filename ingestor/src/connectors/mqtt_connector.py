@@ -14,7 +14,7 @@ import os
 from typing import Dict, Any
 import paho.mqtt.client as mqtt
 from datetime import datetime, timezone
-from .base import BaseDataConnector, DataMessage, ConnectorStatus, ConnectorHealthResponse
+from .base import BaseDataConnector, DataMessage, ConnectorStatus, ConnectorHealthResponse, ConnectorRegistry
 from ..utils.timestamp_utils import extract_timestamp
 
 # Default shared subscription group name for load balancing across ingestor pods
@@ -22,6 +22,7 @@ from ..utils.timestamp_utils import extract_timestamp
 DEFAULT_SHARED_GROUP = os.environ.get("MQTT_SHARED_GROUP", "ingestor-group")
 
 
+@ConnectorRegistry.register("mqtt")
 class MQTTConnector(BaseDataConnector):
     """
     MQTT data source connector with shared subscription support.
