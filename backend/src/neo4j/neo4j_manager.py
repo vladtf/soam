@@ -11,6 +11,31 @@ logger = logging.getLogger(__name__)
 _health_cache: TTLCache = TTLCache(maxsize=1, ttl=5.0)
 
 
+def _sanitize_value(value: Any) -> Any:
+    """Convert Neo4j-specific types to JSON-serializable Python types."""
+    # neo4j.time.DateTime / Date / Time / Duration
+    if hasattr(value, 'iso_format'):
+        return value.iso_format()
+    # neo4j.spatial.Point (has latitude/longitude or x/y)
+    if hasattr(value, 'latitude') and hasattr(value, 'longitude'):
+        return {"latitude": value.latitude, "longitude": value.longitude}
+    if hasattr(value, 'x') and hasattr(value, 'y'):
+        coords: Dict[str, Any] = {"x": value.x, "y": value.y}
+        if hasattr(value, 'z') and value.z is not None:
+            coords["z"] = value.z
+        return coords
+    if isinstance(value, dict):
+        return {k: _sanitize_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_value(v) for v in value]
+    return value
+
+
+def _sanitize_props(props: Dict[str, Any]) -> Dict[str, Any]:
+    """Sanitize all property values in a node/relationship properties dict."""
+    return {k: _sanitize_value(v) for k, v in props.items()} if props else {}
+
+
 class Neo4jManager:
     def __init__(self, uri: str, user: str, password: str) -> None:
         self.uri: str = uri
@@ -66,17 +91,15 @@ class Neo4jManager:
         return False
 
     def get_buildings(self) -> List[Dict[str, Any]]:
-        """Query Neo4j for all buildings with their address coordinates."""
+        """Query Neo4j for all buildings with their coordinates."""
         if not self.driver:
             logger.error("No database connection available")
             return []
         
-        # If a building is linked to multiple addresses, pick the first deterministically to avoid duplicates in UI
         query: str = """
-        MATCH (b:Building)-[:hasAddress]->(a:Address)
-        WITH b, a ORDER BY a.location.latitude, a.location.longitude
-        WITH b, head(collect(a)) AS a1
-        RETURN b.name AS name, a1.location.latitude AS lat, a1.location.longitude AS lng
+        MATCH (b:Building)
+        WHERE b.location IS NOT NULL
+        RETURN b.name AS name, b.location.latitude AS lat, b.location.longitude AS lng
         """
         try:
             with self.driver.session() as session:
@@ -96,9 +119,9 @@ class Neo4jManager:
             
         query = """
         MERGE (b:Building { name: $name })
-        SET b.description = $description
+        SET b.description = $description,
+            b.location = point({ latitude: $lat, longitude: $lng })
         MERGE (a:Address { street: $street, city: $city, country: $country })
-        SET a.location = point({ latitude: $lat, longitude: $lng })
         MERGE (b)-[:hasAddress]->(a)
         RETURN b, a
         """
@@ -156,7 +179,7 @@ class Neo4jManager:
             return
             
         clear_queries = [
-            "MATCH (n) WHERE n.name IN ['Metropolis', 'Corp EC', 'Corp ED', 'Centrul PRECIS'] OR n.sensorId = 'Sensor123' OR n.street = 'Splaiul Independenței, 313' DETACH DELETE n"
+            "MATCH (n) WHERE n.name IN ['Bucharest', 'Corp EC', 'Corp ED', 'Centrul PRECIS'] OR n.sensorId = 'Sensor123' OR n.street = 'Splaiul Independenței, 313' DETACH DELETE n"
         ]
         try:
             with self.driver.session() as session:
@@ -177,67 +200,54 @@ class Neo4jManager:
         self._clear_existing_data()
         
         queries = [
+            # City
             """
-            MERGE (sc:SmartCity { name: "Metropolis", description: "A smart city leveraging technology to improve quality of life." })
+            MERGE (sc:SmartCity { name: "Bucharest" })
+            SET sc.description = "The capital city of Romania, leveraging technology to improve quality of life."
+            """,
+            # Single shared address (MERGE on street+city+country only — NOT coordinates)
+            """
+            MERGE (a:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania" })
+            """,
+            # Buildings — each with its own lat/lng stored on the Building node
+            """
+            MERGE (b:Building { name: "Corp EC" })
+            SET b.description = "The central administrative building.",
+                b.location = point({latitude: 44.435907, longitude: 26.047295})
             """,
             """
-            MERGE (corp_ec:Building { name: "Corp EC", description: "The central administrative building." })
+            MERGE (b:Building { name: "Corp ED" })
+            SET b.description = "The central administrative building.",
+                b.location = point({latitude: 44.435751, longitude: 26.048120})
             """,
             """
-            MERGE (corp_ed:Building { name: "Corp ED", description: "The central administrative building." })
+            MERGE (b:Building { name: "Centrul PRECIS" })
+            SET b.description = "The central administrative building.",
+                b.location = point({latitude: 44.435013, longitude: 26.047758})
             """,
+            # Sensor
             """
-            MERGE (c_precis:Building { name: "Centrul PRECIS", description: "The central administrative building." })
+            MERGE (s:Sensor { sensorId: "Sensor123" })
+            SET s.measurementTime = datetime("2023-10-14T12:00:00"),
+                s.temperature = 22.5,
+                s.humidity = 45.0
             """,
+            # All buildings share the same Address
             """
-            MERGE (a_corp_ec:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania",
-                                         location: point({latitude: 44.435907, longitude: 26.047295}) })
+            MATCH (b:Building) WHERE b.name IN ["Corp EC", "Corp ED", "Centrul PRECIS"]
+            MATCH (a:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania" })
+            MERGE (b)-[:hasAddress]->(a)
             """,
+            # Link address to city
             """
-            MERGE (a_corp_ed:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania",
-                                         location: point({latitude: 44.435751, longitude: 26.048120}) })
+            MATCH (a:Address { city: "Bucharest" })
+            MATCH (sc:SmartCity { name: "Bucharest" })
+            MERGE (a)-[:locatedIn]->(sc)
             """,
+            # Sensor located in building (sensors attach to buildings, not cities)
             """
-            MERGE (a_c_precis:Address { street: "Splaiul Independenței, 313", city: "Bucharest", country: "Romania",
-                                         location: point({latitude: 44.435013, longitude: 26.047758}) })
-            """,
-            """
-            MERGE (s:Sensor { sensorId: "Sensor123", measurementTime: datetime("2023-10-14T12:00:00"),
-                               temperature: 22.5, humidity: 45.0 })
-            """,
-                        """
-                        MATCH (b:Building { name: "Corp EC" })
-                        MATCH (a:Address)
-                        WHERE a.street = "Splaiul Independenței, 313" AND a.city = "Bucharest" AND a.country = "Romania"
-                            AND a.location.latitude = 44.435907 AND a.location.longitude = 26.047295
-                        MERGE (b)-[:hasAddress]->(a)
-                        """,
-                        """
-                        MATCH (b:Building { name: "Corp ED" })
-                        MATCH (a:Address)
-                        WHERE a.street = "Splaiul Independenței, 313" AND a.city = "Bucharest" AND a.country = "Romania"
-                            AND a.location.latitude = 44.435751 AND a.location.longitude = 26.048120
-                        MERGE (b)-[:hasAddress]->(a)
-                        """,
-                        """
-                        MATCH (b:Building { name: "Centrul PRECIS" })
-                        MATCH (a:Address)
-                        WHERE a.street = "Splaiul Independenței, 313" AND a.city = "Bucharest" AND a.country = "Romania"
-                            AND a.location.latitude = 44.435013 AND a.location.longitude = 26.047758
-                        MERGE (b)-[:hasAddress]->(a)
-                        """,
-            """
-            MATCH (sc:SmartCity)
-            WHERE sc.name = "Metropolis"
-            MATCH (s:Sensor)
-            WHERE s.sensorId = "Sensor123"
-            MERGE (sc)-[:hasSensor]->(s)
-            """,
-            """
-            MATCH (s:Sensor)
-            WHERE s.sensorId = "Sensor123"
-            MATCH (b:Building)
-            WHERE b.name = "Corp EC"
+            MATCH (s:Sensor { sensorId: "Sensor123" })
+            MATCH (b:Building { name: "Corp EC" })
             MERGE (s)-[:locatedIn]->(b)
             """
         ]
@@ -272,3 +282,141 @@ class Neo4jManager:
             if record and record["test"] == 1:
                 return {"message": "Neo4j connection is working"}
             raise RuntimeError("Unexpected response from database")
+
+    # ── Knowledge-graph helpers (ontology live data) ─────────────
+
+    def get_graph(self) -> Dict[str, Any]:
+        """Return every node and relationship in the database as a graph payload."""
+        if not self.driver:
+            return {"nodes": [], "links": []}
+
+        query = """
+        MATCH (n)
+        OPTIONAL MATCH (n)-[r]->(m)
+        RETURN collect(DISTINCT {
+            id: elementId(n),
+            labels: labels(n),
+            props: properties(n)
+        }) AS raw_nodes,
+        collect(DISTINCT CASE WHEN r IS NOT NULL THEN {
+            source: elementId(n),
+            target: elementId(m),
+            type: type(r)
+        } END) AS raw_links
+        """
+        try:
+            with self.driver.session() as session:
+                record = session.run(query).single()
+                # Deduplicate nodes by elementId
+                seen_ids: set = set()
+                nodes: List[Dict[str, Any]] = []
+                for n in (record["raw_nodes"] or []):
+                    if n and n["id"] not in seen_ids:
+                        seen_ids.add(n["id"])
+                        n["props"] = _sanitize_props(n.get("props", {}))
+                        nodes.append(n)
+                links = [l for l in (record["raw_links"] or []) if l is not None]
+            return {"nodes": nodes, "links": links}
+        except Exception as e:
+            logger.error(f"❌ Error fetching graph: {e}")
+            return {"nodes": [], "links": []}
+
+    def create_city(self, name: str, description: str = "") -> Dict[str, Any]:
+        """Create a SmartCity node."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+        query = """
+        MERGE (c:SmartCity {name: $name})
+        SET c.description = $description
+        RETURN elementId(c) AS id, labels(c) AS labels, properties(c) AS props
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, name=name, description=description).single()
+            if not rec:
+                raise RuntimeError("Failed to create city")
+            return {"id": rec["id"], "labels": rec["labels"], "props": _sanitize_props(rec["props"])}
+
+    def link_building_to_city(self, building_name: str, city_name: str) -> Dict[str, Any]:
+        """Create (Building)-[:locatedIn]->(SmartCity) relationship."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+        query = """
+        MATCH (b:Building {name: $building_name})
+        MATCH (c:SmartCity {name: $city_name})
+        MERGE (b)-[r:locatedIn]->(c)
+        RETURN elementId(b) AS source, elementId(c) AS target, type(r) AS type
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, building_name=building_name, city_name=city_name).single()
+            if not rec:
+                raise ValueError("Building or city not found")
+            return {"source": rec["source"], "target": rec["target"], "type": rec["type"]}
+
+    def link_sensor_to_building(self, sensor_id: str, building_name: str) -> Dict[str, Any]:
+        """Create (Sensor)-[:locatedIn]->(Building) relationship."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+        query = """
+        MATCH (s:Sensor {sensorId: $sensor_id})
+        MATCH (b:Building {name: $building_name})
+        MERGE (s)-[r:locatedIn]->(b)
+        RETURN elementId(s) AS source, elementId(b) AS target, type(r) AS type
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, sensor_id=sensor_id, building_name=building_name).single()
+            if not rec:
+                raise ValueError("Sensor or building not found")
+            return {"source": rec["source"], "target": rec["target"], "type": rec["type"]}
+
+    def link_sensor_to_city(self, sensor_id: str, city_name: str) -> Dict[str, Any]:
+        """Create (SmartCity)-[:hasSensor]->(Sensor) relationship."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+        query = """
+        MATCH (s:Sensor {sensorId: $sensor_id})
+        MATCH (c:SmartCity {name: $city_name})
+        MERGE (c)-[r:hasSensor]->(s)
+        RETURN elementId(c) AS source, elementId(s) AS target, type(r) AS type
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, sensor_id=sensor_id, city_name=city_name).single()
+            if not rec:
+                raise ValueError("Sensor or city not found")
+            return {"source": rec["source"], "target": rec["target"], "type": rec["type"]}
+
+    def create_sensor_node(self, sensor_id: str) -> Dict[str, Any]:
+        """Create or merge a Sensor node in the graph."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+        query = """
+        MERGE (s:Sensor {sensorId: $sensor_id})
+        RETURN elementId(s) AS id, labels(s) AS labels, properties(s) AS props
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, sensor_id=sensor_id).single()
+            if not rec:
+                raise RuntimeError("Failed to create sensor node")
+            return {"id": rec["id"], "labels": rec["labels"], "props": _sanitize_props(rec["props"])}
+
+    def delete_relationship(self, source_id: str, target_id: str, rel_type: str) -> None:
+        """Delete a specific relationship between two nodes."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+        query = f"""
+        MATCH (a)-[r:{rel_type}]->(b)
+        WHERE elementId(a) = $source_id AND elementId(b) = $target_id
+        DELETE r
+        """
+        with self.driver.session() as session:
+            session.run(query, source_id=source_id, target_id=target_id)
+
+    def delete_node(self, node_id: str) -> None:
+        """Delete a node and all its relationships by elementId."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+        query = """
+        MATCH (n) WHERE elementId(n) = $node_id
+        DETACH DELETE n
+        """
+        with self.driver.session() as session:
+            session.run(query, node_id=node_id)

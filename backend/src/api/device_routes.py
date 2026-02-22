@@ -9,6 +9,9 @@ from src.api.models import DeviceCreate, DeviceUpdate, DeviceResponse, ApiRespon
 from src.api.response_utils import success_response, list_response, not_found_error, bad_request_error, forbidden_error, internal_server_error, paginate_query, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.database.database import get_db
 from src.database.models import Device, DataSensitivity, UserRole, User
+from src.api.dependencies import get_neo4j_manager
+from src.neo4j.neo4j_manager import Neo4jManager
+from src.neo4j.ontology_manager import OntologyManager
 from src.auth.dependencies import get_current_user
 from src.utils.logging import get_logger
 
@@ -53,7 +56,8 @@ def list_devices(
 async def register_device(
     payload: DeviceCreate, 
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    neo4j: Neo4jManager = Depends(get_neo4j_manager),
 ) -> ApiResponse[DeviceResponse]:
     try:
         # Parse and validate sensitivity level
@@ -96,6 +100,10 @@ async def register_device(
         db.refresh(row)
         logger.info("✅ Device registered by '%s' with sensitivity '%s': %s", 
                    current_user.username, sensitivity.value, row.ingestion_id)
+
+        # Register sensor in Neo4j ontology (hardcoded building for now)
+        OntologyManager(neo4j).register_sensor(row.ingestion_id)
+
         return success_response(row.to_dict(), "Device registered successfully")
     except HTTPException:
         raise

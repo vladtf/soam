@@ -21,6 +21,7 @@ from src.api import minio_routes
 from src.api import config_routes
 from src.api import settings_routes
 from src.neo4j import building_routes
+from src.neo4j import ontology_routes
 from src.computations import computation_routes
 from src.auth import routes as auth_routes
 from fastapi import FastAPI
@@ -199,6 +200,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(auth_routes.router)
     app.include_router(building_routes.router)
+    app.include_router(ontology_routes.router)
     app.include_router(spark_routes.router)
     app.include_router(health_routes.router)
     app.include_router(minio_routes.router)

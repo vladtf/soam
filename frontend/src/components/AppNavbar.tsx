@@ -111,10 +111,10 @@ const AppNavbar: React.FC = () => {
             <Nav.Link href="/pipeline">Data Pipeline</Nav.Link>
             <Nav.Link href="/data-sources">Data Sources</Nav.Link>
             <Nav.Link href="/minio">Data Browser</Nav.Link>
+            <Nav.Link href="/ontology">Ontology</Nav.Link>
             <NavDropdown title="More" id="nav-more">
               <NavDropdown.Item href="/metadata">Metadata</NavDropdown.Item>
               <NavDropdown.Item href="/map">Map</NavDropdown.Item>
-              <NavDropdown.Item href="/ontology">Ontology</NavDropdown.Item>
               <NavDropdown.Item href="/new-events">New Events</NavDropdown.Item>
               <NavDropdown.Divider />
               <NavDropdown.Item href="/settings">Settings</NavDropdown.Item>
