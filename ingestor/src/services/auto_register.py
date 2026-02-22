@@ -39,6 +39,20 @@ DEFAULT_DATA_SOURCES: List[Dict[str, Any]] = [
             "mode": "observe",
         },
     },
+    {
+        "name": "Smart City REST API Simulator",
+        "type_name": "rest_api",
+        "config": {
+            "url": "http://rest-api-simulator:8002/api/sensors/all",
+            "method": "GET",
+            "poll_interval": 30,
+            "data_path": "data",
+            "headers": {
+                "Accept": "application/json",
+                "User-Agent": "SOAM-REST-Simulator/1.0",
+            },
+        },
+    },
 ]
 
 
