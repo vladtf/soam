@@ -1,188 +1,247 @@
-# SOAM: An Ontology-Driven Middleware Platform for Integrating Heterogeneous Data in Smart Cities
+# SOAM — Smart City Ontology-Driven Middleware
 
+SOAM is a middleware platform for integrating heterogeneous IoT sensor data in smart cities. It ingests MQTT and REST sensor streams, normalizes data against an OWL ontology, processes it through a medallion data lake (Bronze → Silver → Gold), and serves real-time analytics dashboards.
+
+![Architecture](docs/assets/architecture_diagram.png)
 
 ## Table of Contents
 
-- [SOAM: An Ontology-Driven Middleware Platform for Integrating Heterogeneous Data in Smart Cities](#soam-an-ontology-driven-middleware-platform-for-integrating-heterogeneous-data-in-smart-cities)
+- [SOAM — Smart City Ontology-Driven Middleware](#soam--smart-city-ontology-driven-middleware)
   - [Table of Contents](#table-of-contents)
-  - [Documentation](#documentation)
-    - [Overview](#overview)
-    - [Project Structure](#project-structure)
-    - [Summary of Local Pages:](#summary-of-local-pages)
-    - [Architecture Diagram](#architecture-diagram)
-    - [Local Development](#local-development)
-      - [Pre-requisites](#pre-requisites)
-      - [Skaffold](#skaffold)
-    - [Azure Deployment (Production)](#azure-deployment-production)
-    - [GitHub Actions CI/CD](#github-actions-cicd)
+  - [Key Components](#key-components)
+  - [Tech Stack](#tech-stack)
+  - [Project Structure](#project-structure)
+  - [Prerequisites](#prerequisites)
+  - [Local Development](#local-development)
+    - [1. Start a local Docker registry](#1-start-a-local-docker-registry)
+    - [2. Install the Spark cluster via Helm](#2-install-the-spark-cluster-via-helm)
+    - [3. Start the development environment](#3-start-the-development-environment)
+    - [Running services outside the cluster (optional)](#running-services-outside-the-cluster-optional)
+  - [Running the Application](#running-the-application)
+  - [Service Endpoints](#service-endpoints)
+  - [Azure Deployment](#azure-deployment)
+  - [CI/CD](#cicd)
+  - [Additional Documentation](#additional-documentation)
 
-## Documentation
+## Key Components
 
-For detailed feature-specific documentation, see the `docs/` folder:
+| Component | Description |
+|-----------|-------------|
+| **Backend** | FastAPI service that orchestrates Spark jobs, manages devices/rules, and serves the REST API |
+| **Frontend** | React dashboard for browsing sensor data, configuring normalization rules, and viewing analytics |
+| **Ingestor** | Receives MQTT and REST sensor data, buffers it, and writes Parquet files to MinIO (bronze layer) |
+| **Spark** | Structured Streaming jobs that enrich bronze data into silver (normalized) and gold (aggregated) layers |
+| **MinIO** | S3-compatible object storage used as the data lake across all medallion layers |
+| **Neo4j** | Graph database storing the smart city ontology and semantic relationships |
+| **Simulator** | MQTT publisher that generates synthetic sensor data for development and testing |
+| **Monitoring** | Prometheus metrics collection and Grafana dashboards for pipeline observability |
 
-- **🤖 [AI Copilot Setup Guide](docs/copilot-setup.md)** - Azure OpenAI-powered computation generation
-- **☁️ [Azure Deployment Guide](docs/azure-deployment.md)** - Deploy to AKS with Terraform
-- **🚀 [GitHub Actions CI/CD](docs/github-actions-cicd.md)** - Automated deployment pipelines
-- **🧪 [Experimental Results Validation](docs/experimental-results-validation.md)** - Test procedures and evidence for dependability mechanisms
+## Tech Stack
 
+- **Backend:** Python 3.12, FastAPI, PySpark 3.5, SQLAlchemy, Delta Lake
+- **Frontend:** TypeScript, React 18, Vite, React-Bootstrap, Recharts
+- **Data:** MinIO (S3), Neo4j, SQLite, Delta Lake, Apache Spark
+- **Infrastructure:** Docker, Kubernetes, Skaffold, Helm (Spark chart)
+- **Monitoring:** Prometheus, Grafana, cAdvisor
+- **Cloud:** Azure AKS, Azure ACR, Terraform
 
-### Overview
-
-SOAM is a smart-city data platform that ingests heterogeneous sensor streams, normalizes data against an ontology, and provides analytics and observability. It includes:
-
-- Backend: FastAPI + PySpark + SQLAlchemy, with MinIO S3 integration, Neo4j, and structured logging
-- Frontend: React + Vite + React-Bootstrap, for browsing data, rules, and health
-- Streaming: MQTT ingestion, Spark batch/streaming jobs, Delta Lake storage on MinIO
-- Monitoring: Prometheus + Grafana, cAdvisor
-- Copilot: Azure OpenAI-powered computation generation using natural language
-- Kubernetes manifests and Terraform scripts for AKS deployment
-
-### Project Structure
+## Project Structure
 
 ```
 soam/
-├─ backend/                # FastAPI service with Spark helpers and DB models
-│  ├─ Dockerfile
-│  └─ src/
-│     ├─ api/              # FastAPI routers (health, minio, feedback, normalization)
-│     ├─ database/         # SQLAlchemy models and DB helpers
-│     ├─ logging_config.py # JSON logging configuration
-│     ├─ middleware.py     # Request ID middleware
-│     ├─ neo4j/            # Neo4j routes/integration
-│     ├─ spark/            # Spark utilities (cleaner, usage tracker, routes)
-│     └─ main.py           # FastAPI app entrypoint
-├─ frontend/               # React (Vite) app
-│  ├─ Dockerfile
-│  └─ src/
-│     ├─ api/              # API client for backend endpoints
-│     ├─ components/       # UI building blocks
-│     ├─ pages/            # Main pages (Dashboard, Normalization Rules, etc.)
-│     └─ context/          # React contexts (config, error)
-├─ ingestor/               # MQTT and REST API ingestion service
-├─ simulator/              # MQTT test publishers
-├─ rest-api-simulator/     # REST API data source with auto-registration
-├─ grafana/                # Grafana setup and dashboards
-├─ prometheus/             # Prometheus setup
-├─ k8s/                    # Kubernetes manifests for core services
-├─ spark/                  # Spark image and configs
-├─ skaffold.yaml           # Skaffold config (build + deploy)
-├─ terraform/              # Azure AKS deployment with Terraform
-└─ tests/                  # Test scripts/utilities
+├── backend/               # FastAPI + PySpark service
+│   └── src/
+│       ├── api/           # REST API routers
+│       ├── database/      # SQLAlchemy models and migrations
+│       ├── spark/         # Streaming, enrichment, and data access
+│       ├── services/      # Business logic and external clients
+│       └── main.py        # Application entrypoint
+├── frontend/              # React (Vite) dashboard
+│   └── src/
+│       ├── api/           # Backend API client layer
+│       ├── components/    # Reusable UI components
+│       ├── hooks/         # Custom data-fetching hooks
+│       ├── pages/         # Route-level page components
+│       └── context/       # React contexts (auth, config, error)
+├── ingestor/              # MQTT/REST ingestion service
+│   └── src/
+│       ├── connectors/    # Data source connectors (MQTT, REST)
+│       ├── storage/       # MinIO client with buffered writes
+│       └── services/      # Data handling and metadata extraction
+├── simulator/             # MQTT sensor data simulator
+├── rest-api-simulator/    # REST API data source simulator
+├── coap-simulator/        # CoAP protocol simulator
+├── spark/                 # Custom Spark Docker image
+├── k8s/                   # Kubernetes manifests
+├── terraform/             # Azure AKS infrastructure as code
+├── grafana/               # Grafana dashboards and provisioning
+├── prometheus/            # Prometheus configuration
+├── monitoring/            # Additional monitoring config
+├── scripts/               # Setup and utility scripts
+├── tests/                 # Integration and performance tests
+├── skaffold.yaml          # Local dev orchestration
+└── spark-values.yaml      # Helm values for Spark cluster
 ```
 
-### Summary of Local Pages:
+## Prerequisites
 
-- **[Frontend](http://localhost:3000):** Accessible at `http://localhost:3000`
-- **[Backend](http://localhost:8000):** Accessible at `http://localhost:8000`
-- **[Spark Master UI](http://localhost:8080):** Accessible at `http://localhost:8080`
-- **[MinIO S3 API](http://localhost:9000):** Accessible at `http://localhost:9000`
-- **[MinIO Web Console](http://localhost:9090):** Accessible at `http://localhost:9090`
-- **[Neo4j Web UI](http://localhost:7474):** Accessible at `http://localhost:7474`
-- **[Cadvisor Web UI](http://localhost:8089/metrics):** Accessible at `http://localhost:8089/metrics`
-- **[Prometheus Web UI](http://localhost:9091):** Accessible at `http://localhost:9091`
-- **[Grafana Web UI](http://localhost:3001):** Accessible at `http://localhost:3001`
+The following tools must be installed on your machine:
 
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Latest | Container runtime with Kubernetes enabled |
+| [Skaffold](https://skaffold.dev/docs/install/) | v2+ | Local Kubernetes development workflow |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Latest | Kubernetes CLI |
+| [Helm](https://helm.sh/docs/intro/install/) | v3+ | Spark cluster deployment |
+| [Python](https://www.python.org/downloads/) | 3.12 | Backend and ingestor local development |
+| [Node.js](https://nodejs.org/) | 18+ | Frontend local development |
+| [Pipenv](https://pipenv.pypa.io/) | Latest | Python dependency management |
 
-### Architecture Diagram
+**Enable Kubernetes** in Docker Desktop: Settings → Kubernetes → Enable Kubernetes.
 
-<div style="border: 2px solid black; padding: 10px; display: inline-block;">
-    <img src="docs/assets/architecture_diagram.png" alt="Architecture" width="100%"/>
-</div>
+## Local Development
 
-### Local Development
+### 1. Start a local Docker registry
 
-#### Pre-requisites
-
-- Start local registry for Skaffold:
+Skaffold pushes built images to a local registry instead of a remote one:
 
 ```powershell
-# Start a local Docker registry
 docker run -d -p 5000:5000 --name registry registry:2
-
-# Set Skaffold default repository
-skaffold config set default-repo localhost:5000/soam
 ```
 
-#### Skaffold
+### 2. Install the Spark cluster via Helm
 
-> [!NOTE]
-> Skaffold is used for local development with Kubernetes. Ensure you have a local K8s cluster running (e.g., Minikube or Docker Desktop).
+The Spark master and workers run as a Helm release (not managed by Skaffold):
 
-```bash
+```powershell
+helm install soam oci://registry-1.docker.io/bitnamicharts/spark --version 6.3.16 -f spark-values.yaml
+```
+
+### 3. Start the development environment
+
+Skaffold builds all Docker images, deploys Kubernetes manifests, and sets up port forwarding:
+
+```powershell
 skaffold dev --trigger=polling --watch-poll-interval=5000 --default-repo=localhost:5000/soam
 ```
 
-### Azure Deployment (Production)
+This command watches for file changes and automatically rebuilds/redeploys affected services.
 
-For deploying SOAM to Azure Kubernetes Service (AKS) using Terraform, see the **[Azure Deployment Guide](docs/azure-deployment.md)**.
+### Running services outside the cluster (optional)
 
-Quick start:
+For faster iteration on a single service, you can run it locally while the rest stays in Kubernetes:
+
 ```powershell
-az login
-cd terraform
+# Backend
+cd backend
+pipenv install
+pipenv shell
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Full deployment (infrastructure + images + Kubernetes resources)
-.\deploy.ps1 -Action deploy
+# Frontend
+cd frontend
+npm install
+npm run dev
 
-# Check deployment status
-.\deploy.ps1 -Action status
-
-# Port forward all services to localhost (interactive, Ctrl+C to stop)
-.\deploy.ps1 -Action port-forward
-
-# Tear down the deployment
-.\deploy.ps1 -Action destroy
+# Ingestor
+cd ingestor
+pipenv install
+pipenv shell
+python src/main.py
 ```
 
-Available deploy script actions:
+## Running the Application
+
+Once `skaffold dev` is running and all pods are healthy, the platform operates automatically:
+
+1. The **simulator** publishes synthetic MQTT sensor data.
+2. The **ingestor** receives messages, buffers them, and writes Parquet files to MinIO (bronze layer).
+3. The **backend** starts Spark Structured Streaming jobs that read bronze data, normalize it to silver, and aggregate it to gold.
+4. The **frontend** polls the backend API and displays real-time dashboards.
+
+Verify pods are running:
+
+```powershell
+kubectl get pods
+```
+
+## Service Endpoints
+
+Once port forwarding is active (handled by Skaffold), the following services are available:
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Frontend | http://localhost:3000 | Main dashboard UI |
+| Backend API | http://localhost:8000 | REST API (FastAPI docs at `/docs`) |
+| Ingestor API | http://localhost:8001 | Ingestion service API |
+| Spark Master | http://localhost:8080 | Spark cluster management UI |
+| MinIO Console | http://localhost:9090 | Object storage browser |
+| MinIO S3 API | http://localhost:9000 | S3-compatible API |
+| Neo4j Browser | http://localhost:7474 | Graph database UI |
+| Grafana | http://localhost:3001 | Monitoring dashboards |
+| Prometheus | http://localhost:9091 | Metrics query UI |
+
+## Azure Deployment
+
+SOAM can be deployed to Azure Kubernetes Service (AKS) using the provided Terraform configuration and deployment script. See the [Azure Deployment Guide](docs/azure-deployment.md) for full details.
+
+```powershell
+az login --tenant <your-tenant-id>
+cd terraform
+
+.\deploy.ps1 -Action deploy          # Full deployment
+.\deploy.ps1 -Action status          # Check status
+.\deploy.ps1 -Action port-forward    # Forward ports to localhost
+.\deploy.ps1 -Action destroy         # Tear down
+```
+
 | Action | Description |
 |--------|-------------|
-| `deploy` | Full deployment (Azure infra + images + K8s resources) |
-| `deploy -Step 1` | Deploy only Azure infrastructure (AKS + ACR) |
-| `deploy -Step 2` | Deploy only Kubernetes resources |
-| `deploy -SkipImages` | Deploy without rebuilding Docker images |
+| `deploy` | Full deployment (Azure infra + Docker images + K8s resources) |
+| `deploy -Step 1` | Azure infrastructure only (AKS + ACR) |
+| `deploy -Step 2` | Kubernetes resources only |
+| `deploy -SkipImages` | Deploy without rebuilding images |
 | `destroy` | Destroy all resources |
-| `destroy -Step 2` | Destroy only Kubernetes resources (keep Azure infra) |
+| `destroy -Step 2` | Destroy K8s resources only (keep Azure infra) |
 | `status` | Show deployment status and URLs |
 | `port-forward` | Forward all service ports to localhost |
 | `images-only` | Build and push Docker images only |
 
-### GitHub Actions CI/CD
+## CI/CD
 
-For automated deployments via GitHub Actions, see the **[GitHub Actions CI/CD Guide](docs/github-actions-cicd.md)**.
+GitHub Actions workflows automate deployment to AKS. See the [CI/CD Guide](docs/github-actions-cicd.md) for setup instructions.
 
-**Setup:**
-1. Create an Azure Service Principal:
-   ```bash
-   az login
-   SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-   az ad sp create-for-rbac \
-     --name "soam-github-actions" \
-     --role contributor \
-     --scopes /subscriptions/$SUBSCRIPTION_ID \
-     --sdk-auth
-   ```
-2. Add the JSON output as a GitHub secret named `AZURE_CREDENTIALS`:
-   - Go to **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+**Setup:** Create an Azure Service Principal and store the credentials as a GitHub secret named `AZURE_CREDENTIALS`:
 
-**Workflows:**
+```bash
+az login
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+az ad sp create-for-rbac \
+  --name "soam-github-actions" \
+  --role contributor \
+  --scopes /subscriptions/$SUBSCRIPTION_ID \
+  --sdk-auth
+```
+
+Add the JSON output at: **Settings → Secrets and variables → Actions → New repository secret**.
+
+**Available workflows:**
+
 | Workflow | Purpose |
 |----------|---------|
-| 1️⃣ Deploy Infrastructure | Create Azure resources (AKS + ACR) |
-| 2️⃣ Deploy Application | Build images + deploy K8s resources |
-| 3️⃣ Update Images | Rebuild specific images and restart pods |
-| 4️⃣ Cleanup | Destroy all resources |
+| Deploy Infrastructure | Create Azure resources (AKS + ACR) |
+| Deploy Application | Build images and deploy K8s resources |
+| Update Images | Rebuild specific images and restart pods |
+| Cleanup | Destroy all Azure resources |
 
-**Quick Commands:**
-```bash
-# Initial deployment (run in order)
-gh workflow run "1️⃣ Deploy Infrastructure"
-gh workflow run "2️⃣ Deploy Application"
+## Additional Documentation
 
-# Update specific services
-gh workflow run "3️⃣ Update Images" -f images=backend,frontend
-
-# Cleanup everything
-gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY
-```
+| Document | Description |
+|----------|-------------|
+| [Azure Deployment Guide](docs/azure-deployment.md) | Step-by-step AKS deployment with Terraform |
+| [AI Copilot Setup](docs/copilot-setup.md) | Azure OpenAI integration for natural-language computations |
+| [CI/CD Guide](docs/github-actions-cicd.md) | GitHub Actions workflow configuration |
+| [Dependability Criteria](docs/dependability-criteria.md) | System dependability requirements and design |
+| [Experimental Validation](docs/experimental-results-validation.md) | Test procedures and evidence for dependability mechanisms |
+| [Testing Guide](docs/testing-dependability-features.md) | How to test dependability features |
 
