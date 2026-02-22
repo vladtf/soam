@@ -234,6 +234,22 @@ Add the JSON output at: **Settings → Secrets and variables → Actions → New
 | Update Images | Rebuild specific images and restart pods |
 | Cleanup | Destroy all Azure resources |
 
+**Deploying via GitHub CLI:**
+
+```bash
+# 1. Deploy Azure infrastructure (AKS + ACR)
+gh workflow run "1️⃣ Deploy Infrastructure"
+
+# 2. Build images and deploy Kubernetes resources
+gh workflow run "2️⃣ Deploy Application"
+
+# Update specific service images (comma-separated)
+gh workflow run "3️⃣ Update Images" -f images=backend,frontend
+
+# Destroy all Azure resources (requires typing DESTROY to confirm)
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY
+```
+
 ## Additional Documentation
 
 | Document | Description |
