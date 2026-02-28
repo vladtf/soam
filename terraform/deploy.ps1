@@ -437,6 +437,7 @@ function Show-Status {
             $state = terraform show -json 2>$null | ConvertFrom-Json
             if ($state.values.root_module.resources.Count -gt 0) {
                 Write-Success "Deployed"
+                Write-Info "API Gateway: $(terraform output -raw api_gateway_url 2>$null)"
                 Write-Info "Frontend: $(terraform output -raw frontend_url 2>$null)"
                 Write-Info "Backend: $(terraform output -raw backend_url 2>$null)"
                 Write-Info "Ingestor: $(terraform output -raw ingestor_url 2>$null)"
@@ -475,6 +476,7 @@ function Start-PortForward {
     
     # Define services to forward
     $portForwards = @(
+        @{ Name = "API Gateway";     Service = "svc/api-gateway";      LocalPort = 4000;  RemotePort = 80 },
         @{ Name = "Frontend";        Service = "svc/frontend";         LocalPort = 3000;  RemotePort = 80 },
         @{ Name = "Backend";         Service = "svc/backend-external"; LocalPort = 8000;  RemotePort = 8000 },
         @{ Name = "Ingestor";        Service = "svc/ingestor";         LocalPort = 8001;  RemotePort = 8001 },

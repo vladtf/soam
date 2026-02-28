@@ -190,6 +190,7 @@ jobs:
         run: |
           # Get URLs from Terraform outputs
           FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "N/A")
+          API_GATEWAY_URL=$(terraform output -raw api_gateway_url 2>/dev/null || echo "N/A")
           BACKEND_URL=$(terraform output -raw backend_url 2>/dev/null || echo "N/A")
           BACKEND_DOCS_URL=$(terraform output -raw backend_docs_url 2>/dev/null || echo "N/A")
           INGESTOR_URL=$(terraform output -raw ingestor_url 2>/dev/null || echo "N/A")
@@ -202,6 +203,7 @@ jobs:
           echo "| Service | URL |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|-----|" >> $GITHUB_STEP_SUMMARY
           echo "| **Frontend** | $FRONTEND_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| **API Gateway** | $API_GATEWAY_URL |" >> $GITHUB_STEP_SUMMARY
           echo "| **Backend API** | $BACKEND_URL |" >> $GITHUB_STEP_SUMMARY
           echo "| **Backend Docs** | $BACKEND_DOCS_URL |" >> $GITHUB_STEP_SUMMARY
           echo "| **Ingestor** | $INGESTOR_URL |" >> $GITHUB_STEP_SUMMARY

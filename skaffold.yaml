@@ -69,6 +69,11 @@ deploy:
   #         - spark-values.yaml
 portForward:
   - resourceType: service
+    resourceName: api-gateway
+    namespace: default
+    port: 80
+    localPort: 4000
+  - resourceType: service
     resourceName: soam-spark-master-svc
     namespace: default
     port: 80

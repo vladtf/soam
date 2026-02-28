@@ -13,27 +13,27 @@ spec:
         app: frontend
     spec:
       initContainers:
-        # Wait for backend to be ready
-        - name: wait-for-backend
+        # Wait for API gateway to be ready
+        - name: wait-for-api-gateway
           image: busybox:1.35
           imagePullPolicy: IfNotPresent
           command: ['sh', '-c']
           args:
             - |
-              echo "Waiting for backend to be ready..."
-              until nc -z backend-external 8000; do
-                echo "Backend is not ready yet. Waiting 5 seconds..."
+              echo "Waiting for API gateway to be ready..."
+              until nc -z api-gateway 80; do
+                echo "API gateway is not ready yet. Waiting 5 seconds..."
                 sleep 5
               done
-              echo "Backend is ready!"
+              echo "API gateway is ready!"
               
-              # Also check if the backend health endpoint is responsive
-              echo "Checking backend health endpoint..."
-              until wget -q --spider http://backend-external:8000/api/health 2>/dev/null; do
-                echo "Backend health endpoint is not ready yet. Waiting 3 seconds..."
+              # Also check if the gateway health endpoint is responsive
+              echo "Checking API gateway health endpoint..."
+              until wget -q --spider http://api-gateway/health 2>/dev/null; do
+                echo "API gateway health endpoint is not ready yet. Waiting 3 seconds..."
                 sleep 3
               done
-              echo "Backend health endpoint is ready!"
+              echo "API gateway health endpoint is ready!"
       containers:
         - name: frontend
           image: frontend:latest
@@ -107,16 +107,6 @@ data:
             location ~* \.css$ {
                 add_header Content-Type "text/css";
             }
-        }
-
-        # Handle API requests - proxy to backend
-        location /api/ {
-            proxy_pass http://backend-external:8000;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $host;
         }
 
         # Handle Vite dev assets (for development) - return 404 instead of index.html

@@ -1175,6 +1175,246 @@ resource "kubernetes_service" "backend_nodeport" {
 }
 
 # =============================================================================
+# API Gateway (nginx load balancer for backend + ingestor)
+# =============================================================================
+
+resource "kubernetes_config_map" "api_gateway_config" {
+  metadata {
+    name      = "api-gateway-config"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+    labels = {
+      app  = "api-gateway"
+      type = "nginx-config"
+    }
+  }
+
+  data = {
+    "nginx.conf" = <<-EOT
+      # API Gateway — load-balanced reverse proxy for backend + ingestor
+
+      upstream backend_pool {
+          least_conn;
+          server backend-external:8000;
+          keepalive 32;
+      }
+
+      upstream ingestor_pool {
+          least_conn;
+          server ingestor:8001;
+          keepalive 16;
+      }
+
+      server {
+          listen 80;
+          server_name localhost;
+
+          access_log /var/log/nginx/access.log;
+          error_log /var/log/nginx/error.log warn;
+
+          add_header X-Content-Type-Options "nosniff" always;
+          add_header X-XSS-Protection "1; mode=block" always;
+
+          # Gateway health check
+          location = /health {
+              access_log off;
+              return 200 '{"status":"ok","service":"api-gateway"}';
+              add_header Content-Type application/json;
+          }
+
+          # Ingestor routes — /ingestor/api/... rewritten to /api/...
+          location /ingestor/ {
+              rewrite ^/ingestor/(.*) /$1 break;
+
+              proxy_pass http://ingestor_pool;
+              proxy_http_version 1.1;
+              proxy_set_header Connection "";
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Host $host;
+              proxy_set_header X-Request-ID $request_id;
+              proxy_set_header X-Gateway-Service "ingestor";
+
+              proxy_connect_timeout 30s;
+              proxy_send_timeout 60s;
+              proxy_read_timeout 60s;
+
+              proxy_buffering on;
+              proxy_buffer_size 16k;
+              proxy_buffers 4 32k;
+
+              proxy_next_upstream error timeout http_502 http_503;
+              proxy_next_upstream_tries 2;
+          }
+
+          # Backend API routes
+          location /api/ {
+              proxy_pass http://backend_pool;
+              proxy_http_version 1.1;
+              proxy_set_header Connection "";
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Host $host;
+              proxy_set_header X-Request-ID $request_id;
+              proxy_set_header X-Gateway-Service "backend";
+
+              proxy_connect_timeout 30s;
+              proxy_send_timeout 60s;
+              proxy_read_timeout 60s;
+
+              proxy_buffering on;
+              proxy_buffer_size 16k;
+              proxy_buffers 4 32k;
+
+              proxy_next_upstream error timeout http_502 http_503;
+              proxy_next_upstream_tries 2;
+          }
+
+          # Default 404
+          location / {
+              return 404 '{"error":"not found","service":"api-gateway","hint":"Use /api/ for backend or /ingestor/api/ for ingestor"}';
+              add_header Content-Type application/json;
+          }
+      }
+    EOT
+  }
+}
+
+resource "kubernetes_deployment" "api_gateway" {
+  metadata {
+    name      = "api-gateway"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+    labels = {
+      app = "api-gateway"
+    }
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "api-gateway"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "api-gateway"
+        }
+      }
+
+      spec {
+        init_container {
+          name              = "wait-for-backends"
+          image             = "busybox:1.35"
+          image_pull_policy = "IfNotPresent"
+          command           = ["sh", "-c"]
+          args = [
+            <<-EOT
+            echo "Waiting for backend to be ready..."
+            until nc -z backend-external 8000; do
+              echo "Backend is not ready yet. Waiting 5 seconds..."
+              sleep 5
+            done
+            echo "Backend is ready!"
+
+            echo "Waiting for ingestor to be ready..."
+            until nc -z ingestor 8001; do
+              echo "Ingestor is not ready yet. Waiting 5 seconds..."
+              sleep 5
+            done
+            echo "Ingestor is ready!"
+            EOT
+          ]
+        }
+
+        container {
+          name              = "nginx"
+          image             = "nginx:alpine"
+          image_pull_policy = "IfNotPresent"
+
+          port {
+            container_port = 80
+          }
+
+          resources {
+            requests = {
+              cpu    = "50m"
+              memory = "64Mi"
+            }
+            limits = {
+              cpu    = "200m"
+              memory = "128Mi"
+            }
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/health"
+              port = 80
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 10
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 80
+            }
+            initial_delay_seconds = 3
+            period_seconds        = 5
+          }
+
+          volume_mount {
+            name       = "gateway-config"
+            mount_path = "/etc/nginx/conf.d/default.conf"
+            sub_path   = "nginx.conf"
+          }
+        }
+
+        volume {
+          name = "gateway-config"
+          config_map {
+            name = kubernetes_config_map.api_gateway_config.metadata[0].name
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubernetes_service.backend_external,
+    kubernetes_service.ingestor
+  ]
+}
+
+resource "kubernetes_service" "api_gateway" {
+  metadata {
+    name      = "api-gateway"
+    namespace = kubernetes_namespace.soam.metadata[0].name
+  }
+
+  spec {
+    selector = {
+      app = "api-gateway"
+    }
+
+    port {
+      port        = 80
+      target_port = 80
+    }
+
+    type = "LoadBalancer"
+  }
+}
+
+# =============================================================================
 # Frontend Service
 # =============================================================================
 
@@ -1186,8 +1426,8 @@ resource "kubernetes_config_map" "frontend_config" {
 
   data = {
     "config.json" = jsonencode({
-      backendUrl  = "http://${kubernetes_service.backend_external.status[0].load_balancer[0].ingress[0].ip}:8000"
-      ingestorUrl = "http://${kubernetes_service.ingestor_external.status[0].load_balancer[0].ingress[0].ip}:8001"
+      backendUrl  = "http://${kubernetes_service.api_gateway.status[0].load_balancer[0].ingress[0].ip}"
+      ingestorUrl = "http://${kubernetes_service.api_gateway.status[0].load_balancer[0].ingress[0].ip}/ingestor"
       externalServices = {
         # Grafana is exposed via LoadBalancer when monitoring is enabled
         grafanaUrl     = var.deploy_monitoring ? "http://${kubernetes_service.grafana[0].status[0].load_balancer[0].ingress[0].ip}:3000" : ""
@@ -1203,8 +1443,7 @@ resource "kubernetes_config_map" "frontend_config" {
   }
 
   depends_on = [
-    kubernetes_service.backend_external,
-    kubernetes_service.ingestor_external
+    kubernetes_service.api_gateway
   ]
 }
 
@@ -1984,19 +2223,29 @@ output "frontend_url" {
   value       = "http://${kubernetes_service.frontend.status[0].load_balancer[0].ingress[0].ip}"
 }
 
+output "api_gateway_url" {
+  description = "URL to access the SOAM API Gateway (unified entry point for backend + ingestor)"
+  value       = "http://${kubernetes_service.api_gateway.status[0].load_balancer[0].ingress[0].ip}"
+}
+
 output "backend_url" {
-  description = "URL to access the SOAM backend API"
-  value       = "http://${kubernetes_service.backend_external.status[0].load_balancer[0].ingress[0].ip}:8000"
+  description = "URL to access the SOAM backend API (via API Gateway)"
+  value       = "http://${kubernetes_service.api_gateway.status[0].load_balancer[0].ingress[0].ip}/api"
 }
 
 output "backend_docs_url" {
   description = "URL to access the SOAM backend API documentation (Swagger UI)"
-  value       = "http://${kubernetes_service.backend_external.status[0].load_balancer[0].ingress[0].ip}:8000/docs"
+  value       = "http://${kubernetes_service.api_gateway.status[0].load_balancer[0].ingress[0].ip}/api/docs"
+}
+
+output "backend_direct_url" {
+  description = "URL to access the SOAM backend API directly (bypassing API Gateway)"
+  value       = "http://${kubernetes_service.backend_external.status[0].load_balancer[0].ingress[0].ip}:8000"
 }
 
 output "ingestor_url" {
-  description = "URL to access the SOAM ingestor service"
-  value       = "http://${kubernetes_service.ingestor_external.status[0].load_balancer[0].ingress[0].ip}:8001"
+  description = "URL to access the SOAM ingestor service (via API Gateway)"
+  value       = "http://${kubernetes_service.api_gateway.status[0].load_balancer[0].ingress[0].ip}/ingestor/api"
 }
 
 output "grafana_url" {
