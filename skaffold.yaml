@@ -71,7 +71,7 @@ portForward:
   - resourceType: service
     resourceName: api-gateway
     namespace: default
-    port: 80
+    port: 443
     localPort: 4000
   - resourceType: service
     resourceName: soam-spark-master-svc
@@ -81,7 +81,7 @@ portForward:
   - resourceType: service
     resourceName: frontend
     namespace: default
-    port: 3000
+    port: 443
     localPort: 3000
   - resourceType: service
     resourceName: backend-external

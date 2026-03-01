@@ -117,7 +117,25 @@ The Spark master and workers run as a Helm release (not managed by Skaffold):
 helm install soam oci://registry-1.docker.io/bitnamicharts/spark --version 6.3.16 -f spark-values.yaml
 ```
 
-### 3. Start the development environment
+### 3. Generate TLS certificates (HTTPS)
+
+The API Gateway and Frontend serve traffic over HTTPS locally. A one-time setup generates certificates and stores them as a Kubernetes secret:
+
+```powershell
+.\scripts\setup-local-tls.ps1
+```
+
+This uses [mkcert](https://github.com/FiloSottile/mkcert) to create locally-trusted certificates (no browser warnings). If `mkcert -install` hangs, use one of the fallback modes:
+
+```powershell
+# Skip CA install (browsers will show a one-time warning)
+.\scripts\setup-local-tls.ps1 -SkipCAInstall
+
+# Use openssl instead (bundled with Git for Windows)
+.\scripts\setup-local-tls.ps1 -UseOpenssl
+```
+
+### 4. Start the development environment
 
 Skaffold builds all Docker images, deploys Kubernetes manifests, and sets up port forwarding:
 
@@ -171,9 +189,10 @@ Once port forwarding is active (handled by Skaffold), the following services are
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| Frontend | http://localhost:3000 | Main dashboard UI |
-| Backend API | http://localhost:8000 | REST API (FastAPI docs at `/docs`) |
-| Ingestor API | http://localhost:8001 | Ingestion service API |
+| Frontend | https://localhost:3000 | Main dashboard UI |
+| API Gateway | https://localhost:4000 | Unified entry point for backend + ingestor |
+| Backend API | https://localhost:4000/api | REST API (docs at `/api/docs`) |
+| Ingestor API | https://localhost:4000/ingestor/api | Ingestion service API |
 | Spark Master | http://localhost:8080 | Spark cluster management UI |
 | MinIO Console | http://localhost:9090 | Object storage browser |
 | MinIO S3 API | http://localhost:9000 | S3-compatible API |

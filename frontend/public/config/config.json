@@ -1,6 +1,6 @@
 {
-    "backendUrl": "http://localhost:4000",
-    "ingestorUrl": "http://localhost:4000/ingestor",
+    "backendUrl": "https://localhost:4000",
+    "ingestorUrl": "https://localhost:4000/ingestor",
     "externalServices": {
       "grafanaUrl": "http://localhost:3001",
       "prometheusUrl": "http://localhost:9091",
