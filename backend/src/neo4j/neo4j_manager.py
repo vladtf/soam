@@ -420,3 +420,78 @@ class Neo4jManager:
         """
         with self.driver.session() as session:
             session.run(query, node_id=node_id)
+
+    # ── Read-only query execution ────────────────────────────────
+
+    _WRITE_KEYWORDS = {"CREATE", "MERGE", "SET", "DELETE", "REMOVE", "DROP", "DETACH"}
+
+    def execute_read_query(
+        self, query: str, params: dict | None = None, max_rows: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """Execute a read-only Cypher query with safety checks."""
+        if not self.driver:
+            raise ConnectionError("No database connection available")
+
+        # Block write operations at the string level as extra safety
+        upper = query.upper()
+        for kw in self._WRITE_KEYWORDS:
+            if kw in upper:
+                raise ValueError(f"Write operations not allowed in read queries (found: {kw})")
+
+        try:
+            with self.driver.session() as session:
+                def _run(tx):
+                    result = tx.run(query, **(params or {}))
+                    rows = []
+                    for record in result:
+                        row = {}
+                        for key in record.keys():
+                            row[key] = _sanitize_value(record[key])
+                        rows.append(row)
+                        if len(rows) >= max_rows:
+                            break
+                    return rows
+
+                return session.execute_read(_run)
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error("❌ Read query failed: %s", e)
+            raise RuntimeError(f"Query execution failed: {e}")
+
+    # ── Sensor context for enrichment ────────────────────────────
+
+    def get_sensor_context(self, sensor_id: str) -> Dict[str, Any]:
+        """Traverse the graph to get full context for a sensor by ingestion_id."""
+        if not self.driver:
+            return {}
+        query = """
+        MATCH (s:Sensor {sensorId: $sensor_id})
+        OPTIONAL MATCH (s)-[:locatedIn]->(b:Building)
+        OPTIONAL MATCH (b)-[:hasAddress]->(a:Address)
+        OPTIONAL MATCH (a)-[:locatedIn]->(sc:SmartCity)
+        RETURN
+            labels(s) AS sensor_labels,
+            b.name AS building,
+            a.street AS street,
+            a.city AS city,
+            a.country AS country,
+            sc.name AS smart_city
+        """
+        try:
+            with self.driver.session() as session:
+                rec = session.run(query, sensor_id=sensor_id).single()
+                if not rec:
+                    return {}
+                labels = [l for l in (rec["sensor_labels"] or []) if l != "Sensor"]
+                return {
+                    "sensor_type": labels[0] if labels else "Sensor",
+                    "building": rec["building"],
+                    "street": rec["street"],
+                    "city": rec["city"],
+                    "country": rec["country"],
+                    "smart_city": rec["smart_city"],
+                }
+        except Exception as e:
+            logger.warning("⚠️ Failed to get sensor context for '%s': %s", sensor_id, e)
+            return {}

@@ -83,6 +83,9 @@ def shutdown_dependencies() -> None:
 # FastAPI dependency getters
 # ------------------------------------------------------------------ #
 
+from src.neo4j.ontology_service import OntologyService
+
+
 def get_config() -> AppConfig:
     assert _config is not None, "Dependencies not initialized — call init_dependencies() during startup"
     return _config
@@ -103,8 +106,14 @@ def get_minio_client() -> Minio:
     return _minio_client
 
 
+def get_ontology() -> OntologyService:
+    from src.neo4j.ontology_service import get_ontology_service
+    return get_ontology_service()
+
+
 # Type aliases for dependency injection
 SparkManagerDep = Annotated[SparkManager, Depends(get_spark_manager)]
 Neo4jManagerDep = Annotated[Neo4jManager, Depends(get_neo4j_manager)]
 ConfigDep = Annotated[AppConfig, Depends(get_config)]
 MinioClientDep = Annotated[Minio, Depends(get_minio_client)]
+OntologyServiceDep = Annotated[OntologyService, Depends(get_ontology)]

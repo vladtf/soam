@@ -3,10 +3,11 @@ Ontology / knowledge-graph API endpoints.
 
 Exposes the live Neo4j graph (cities, buildings, sensors and their
 relationships) and allows creating nodes + linking them together.
+Also provides a read-only Cypher query interface and schema introspection.
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 from src.api.models import ApiResponse
 from src.api.response_utils import (
@@ -14,7 +15,7 @@ from src.api.response_utils import (
     bad_request_error,
     internal_server_error,
 )
-from src.api.dependencies import Neo4jManagerDep
+from src.api.dependencies import Neo4jManagerDep, OntologyServiceDep
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -47,6 +48,18 @@ class DeleteRelationshipRequest(BaseModel):
 
 class DeleteNodeRequest(BaseModel):
     node_id: str = Field(..., description="Element ID of the node to delete")
+
+
+class OntologyQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000, description="Cypher query (read-only)")
+    params: dict = Field(default_factory=dict, description="Query parameters")
+
+
+class QueryTemplate(BaseModel):
+    name: str
+    description: str
+    query: str
+    params: List[str] = Field(default_factory=list, description="Parameter names used in query")
 
 
 # ── Endpoints ────────────────────────────────────────────────────
@@ -143,3 +156,108 @@ async def delete_node(body: DeleteNodeRequest, neo4j: Neo4jManagerDep):
     except Exception as e:
         logger.error(f"❌ Error deleting node: {e}")
         raise internal_server_error("Failed to delete node", str(e))
+
+
+# ── Ontology schema ──────────────────────────────────────────────
+
+@router.get("/schema", response_model=ApiResponse)
+async def get_ontology_schema(ontology: OntologyServiceDep):
+    """Return the parsed OWL schema (classes, properties, domains, ranges)."""
+    try:
+        schema = ontology.get_full_schema()
+        return success_response(schema, "Ontology schema retrieved successfully")
+    except Exception as e:
+        logger.error("❌ Error fetching ontology schema: %s", e)
+        raise internal_server_error("Failed to fetch ontology schema", str(e))
+
+
+# ── Query templates ──────────────────────────────────────────────
+
+_QUERY_TEMPLATES = [
+    QueryTemplate(
+        name="All Sensors",
+        description="List every sensor in the graph",
+        query="MATCH (s:Sensor) RETURN s.sensorId AS sensorId, labels(s) AS types",
+        params=[],
+    ),
+    QueryTemplate(
+        name="All Buildings",
+        description="List every building with its address",
+        query="MATCH (b:Building) OPTIONAL MATCH (b)-[:hasAddress]->(a:Address) RETURN b.name AS building, a.street AS street, a.city AS city, a.country AS country",
+        params=[],
+    ),
+    QueryTemplate(
+        name="Sensors in Building",
+        description="Find sensors located in a specific building",
+        query="MATCH (s:Sensor)-[:locatedIn]->(b:Building {name: $building}) RETURN s.sensorId AS sensor, b.name AS building",
+        params=["building"],
+    ),
+    QueryTemplate(
+        name="Sensor Context",
+        description="Get the full location chain for a sensor",
+        query=(
+            "MATCH (s:Sensor {sensorId: $sensorId})"
+            "-[:locatedIn]->(b:Building)"
+            "-[:hasAddress]->(a:Address)"
+            "-[:locatedIn]->(sc:SmartCity) "
+            "RETURN s.sensorId AS sensor, b.name AS building, "
+            "a.street AS street, a.city AS city, sc.name AS smartCity"
+        ),
+        params=["sensorId"],
+    ),
+    QueryTemplate(
+        name="City Overview",
+        description="All buildings and sensors in a city",
+        query=(
+            "MATCH (sc:SmartCity {name: $city})<-[:locatedIn]-(a:Address)"
+            "<-[:hasAddress]-(b:Building)<-[:locatedIn]-(s:Sensor) "
+            "RETURN sc.name AS city, b.name AS building, collect(s.sensorId) AS sensors"
+        ),
+        params=["city"],
+    ),
+    QueryTemplate(
+        name="Buildings Without Sensors",
+        description="Find buildings with no sensors installed",
+        query="MATCH (b:Building) WHERE NOT (b)<-[:locatedIn]-(:Sensor) RETURN b.name AS building",
+        params=[],
+    ),
+    QueryTemplate(
+        name="Relationship Summary",
+        description="Count relationships grouped by type",
+        query="MATCH ()-[r]->() RETURN type(r) AS relType, count(r) AS count ORDER BY count DESC",
+        params=[],
+    ),
+    QueryTemplate(
+        name="Node Statistics",
+        description="Count nodes grouped by label",
+        query="MATCH (n) UNWIND labels(n) AS label RETURN label, count(*) AS count ORDER BY count DESC",
+        params=[],
+    ),
+]
+
+
+@router.get("/query/templates", response_model=ApiResponse)
+async def get_query_templates():
+    """Return available query templates with descriptions."""
+    return success_response(
+        [t.model_dump() for t in _QUERY_TEMPLATES],
+        "Query templates retrieved successfully",
+    )
+
+
+@router.post("/query", response_model=ApiResponse)
+async def execute_query(body: OntologyQueryRequest, neo4j: Neo4jManagerDep):
+    """Execute a read-only Cypher query against the knowledge graph."""
+    try:
+        results = neo4j.execute_read_query(body.query, body.params)
+        return success_response(
+            {"rows": results, "count": len(results)},
+            f"Query returned {len(results)} rows",
+        )
+    except ValueError as e:
+        raise bad_request_error(str(e))
+    except ConnectionError as e:
+        raise internal_server_error("Database connection unavailable", str(e))
+    except Exception as e:
+        logger.error("❌ Query execution error: %s", e)
+        raise internal_server_error("Query execution failed", str(e))

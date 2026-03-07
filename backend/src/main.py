@@ -24,6 +24,7 @@ from src.neo4j import building_routes
 from src.neo4j import ontology_routes
 from src.computations import computation_routes
 from src.auth import routes as auth_routes
+from src.api import alert_routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -152,6 +153,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("❌ Failed to initialize dependencies: %s", e)
         raise
 
+    # Register alert checkers
+    try:
+        from src.services.alert_service import alert_service
+        from src.services.alert_checkers import register_all_alert_checkers
+        register_all_alert_checkers(alert_service)
+    except Exception as e:
+        logger.warning("⚠️ Could not register alert checkers: %s", e)
+
     yield
 
     # Shutdown
@@ -216,6 +225,7 @@ def create_app() -> FastAPI:
     app.include_router(config_routes.router)
     app.include_router(settings_routes.router)
     app.include_router(schema_routes.router)
+    app.include_router(alert_routes.router)
 
     return app
 

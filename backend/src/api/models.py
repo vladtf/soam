@@ -125,6 +125,9 @@ class DeviceCreate(BaseModel):
     sensitivity: str = Field(default="internal", description="Data sensitivity level: public, internal, confidential, restricted")
     data_retention_days: int = Field(default=90, ge=1, le=3650, description="Data retention period in days")
     created_by: str = Field(..., description="User who created this device")
+    sensor_type: Optional[str] = Field(default=None, description="OWL sensor class (e.g., TemperatureSensor, HumiditySensor)")
+    building_name: Optional[str] = Field(default=None, description="Building to place sensor in")
+    city_name: Optional[str] = Field(default=None, description="City the building belongs to")
 
 class DeviceUpdate(BaseModel):
     name: Optional[str] = None

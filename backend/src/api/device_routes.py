@@ -101,8 +101,18 @@ async def register_device(
         logger.info("✅ Device registered by '%s' with sensitivity '%s': %s", 
                    current_user.username, sensitivity.value, row.ingestion_id)
 
-        # Register sensor in Neo4j ontology (hardcoded building for now)
-        OntologyManager(neo4j).register_sensor(row.ingestion_id)
+        # Register sensor in Neo4j ontology
+        try:
+            from src.neo4j.ontology_service import get_ontology_service
+            ontology = get_ontology_service()
+        except Exception:
+            ontology = None
+        OntologyManager(neo4j, ontology).register_sensor(
+            sensor_id=row.ingestion_id,
+            sensor_type=payload.sensor_type,
+            building=payload.building_name,
+            city=payload.city_name,
+        )
 
         return success_response(row.to_dict(), "Device registered successfully")
     except HTTPException:
