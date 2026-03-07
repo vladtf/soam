@@ -22,7 +22,15 @@ import DataSourcesPage from './pages/DataSourcesPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import DebugFloatingButton from './components/DebugFloatingButton';
 import LoginPage from './pages/LoginPage';
+import { AlertProvider } from './context/AlertContext';
+import { useUnlinkedDeviceAlerts } from './hooks/useUnlinkedDeviceAlerts';
 import './utils/devTools'; // Initialize dev tools
+
+/** Mounts decoupled alert sources. */
+const AlertSources: React.FC = () => {
+  useUnlinkedDeviceAlerts();
+  return null;
+};
 
 function App() {
 
@@ -31,8 +39,10 @@ function App() {
       <ThemeProvider>
         <ConfigProvider>
           <AuthProvider>
+            <AlertProvider>
         <BrowserRouter>
           <Suspense fallback={<div>Loading...</div>}>
+            <AlertSources />
             <div className="App">
               <AppNavbar />
               <Routes>
@@ -55,6 +65,7 @@ function App() {
             </div>
           </Suspense>
         </BrowserRouter>
+            </AlertProvider>
           </AuthProvider>
         </ConfigProvider>
       </ThemeProvider>

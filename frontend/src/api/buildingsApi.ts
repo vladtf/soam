@@ -120,3 +120,61 @@ export const addConnection = (config: unknown): Promise<unknown> => {
     body: JSON.stringify(config),
   });
 };
+
+// ── Ontology Schema API ─────────────────────────────────────────
+
+export interface OntologyClassProperty {
+  uri: string;
+  label: string;
+  range: string | null;
+  type: 'data' | 'object';
+  python_type: string | null;
+}
+
+export interface OntologyClass {
+  uri: string;
+  label: string;
+  comment: string;
+  subClassOf: string | null;
+  properties: OntologyClassProperty[];
+}
+
+export interface OntologySchema {
+  classes: OntologyClass[];
+}
+
+export const fetchOntologySchema = (): Promise<OntologySchema> => {
+  const { backendUrl } = getConfig();
+  return doFetch<OntologySchema>(`${backendUrl}/api/ontology/schema`);
+};
+
+// ── Ontology Query API ──────────────────────────────────────────
+
+export interface QueryTemplate {
+  name: string;
+  description: string;
+  query: string;
+  params: string[];
+}
+
+export interface QueryResult {
+  rows: Record<string, unknown>[];
+  count: number;
+}
+
+export const fetchQueryTemplates = (): Promise<QueryTemplate[]> => {
+  const { backendUrl } = getConfig();
+  return doFetch<QueryTemplate[]>(`${backendUrl}/api/ontology/query/templates`);
+};
+
+export const executeOntologyQuery = (
+  query: string,
+  params: Record<string, unknown> = {}
+): Promise<QueryResult> => {
+  const { backendUrl } = getConfig();
+  return doFetch<QueryResult>(`${backendUrl}/api/ontology/query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, params }),
+  });
+};

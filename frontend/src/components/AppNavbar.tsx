@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useError } from '../context/ErrorContext';
+import { useAlerts } from '../context/AlertContext';
 import { getConfig } from '../config';
 import { isErrorReportingEnabled, setErrorReportingEnabled } from '../errors';
 import UserSwitcher from './UserSwitcher';
+import { FaBell } from 'react-icons/fa';
 
 const AppNavbar: React.FC = () => {
   const { theme, mode, toggleMode } = useTheme();
@@ -58,6 +60,7 @@ const AppNavbar: React.FC = () => {
   
   const initials = useMemo(() => (user?.username ? user.username.trim().slice(0, 2).toUpperCase() : ''), [user]);
   const { openCenter } = useError();
+  const { alerts, dismissAlert } = useAlerts();
   const [errorReporting, setErrorReporting] = useState<boolean>(false);
 
   // Initialize error reporting flag from storage
@@ -127,6 +130,64 @@ const AppNavbar: React.FC = () => {
               {envLabel && <Badge bg="light" text="dark" className="me-2">{envLabel}</Badge>}
             </div>
             <UserSwitcher />
+            {/* Alert bell */}
+            <Dropdown align="end">
+              <Dropdown.Toggle
+                size="sm"
+                variant={isDark ? 'outline-light' : 'outline-dark'}
+                aria-label="Notifications"
+                title="Notifications"
+                className="position-relative"
+              >
+                <FaBell />
+                {alerts.length > 0 && (
+                  <Badge
+                    bg="warning"
+                    text="dark"
+                    pill
+                    className="position-absolute top-0 start-100 translate-middle"
+                    style={{ fontSize: '0.6rem' }}
+                  >
+                    {alerts.length}
+                  </Badge>
+                )}
+              </Dropdown.Toggle>
+              <Dropdown.Menu style={{ minWidth: '320px', maxHeight: '400px', overflow: 'auto' }}>
+                {alerts.length === 0 ? (
+                  <Dropdown.ItemText className="text-muted text-center">
+                    No notifications
+                  </Dropdown.ItemText>
+                ) : (
+                  alerts.map((alert) => (
+                    <Dropdown.Item
+                      key={alert.id}
+                      className="d-flex align-items-start gap-2 py-2"
+                      style={{ whiteSpace: 'normal' }}
+                      as="div"
+                    >
+                      <Badge bg={alert.variant} className="mt-1 flex-shrink-0">
+                        {alert.variant === 'warning' ? '⚠' : alert.variant === 'danger' ? '✕' : 'ℹ'}
+                      </Badge>
+                      <div className="flex-grow-1">
+                        <div style={{ fontSize: '0.85rem' }}>{alert.message}</div>
+                        {alert.link && (
+                          <a href={alert.link} className="small">{alert.linkText || 'View'}</a>
+                        )}
+                      </div>
+                      {alert.dismissible !== false && (
+                        <button
+                          type="button"
+                          className="btn-close btn-close-sm flex-shrink-0"
+                          style={{ fontSize: '0.5rem' }}
+                          onClick={(e) => { e.stopPropagation(); dismissAlert(alert.id); }}
+                          aria-label="Dismiss"
+                        />
+                      )}
+                    </Dropdown.Item>
+                  ))
+                )}
+              </Dropdown.Menu>
+            </Dropdown>
             <Button size="sm" variant={isDark ? 'outline-light' : 'outline-dark'} onClick={openCenter} aria-label="Open Errors" title="Errors">!</Button>
             <Button
               size="sm"

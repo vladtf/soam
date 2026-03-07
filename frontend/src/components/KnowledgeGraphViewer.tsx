@@ -32,10 +32,14 @@ interface D3Link extends d3.SimulationLinkDatum<D3Node> {
 
 /* colour palette per node label */
 const NODE_COLORS: Record<string, string> = {
-  SmartCity: '#6366f1',  // indigo
-  Building: '#10b981',   // emerald
-  Sensor: '#f59e0b',     // amber
-  Address: '#8b5cf6',    // violet
+  SmartCity: '#6366f1',          // indigo
+  Building: '#10b981',           // emerald
+  Sensor: '#f59e0b',             // amber
+  Address: '#8b5cf6',            // violet
+  TemperatureSensor: '#ef4444',  // red
+  HumiditySensor: '#3b82f6',     // blue
+  PressureSensor: '#14b8a6',     // teal
+  MultiSensor: '#f97316',        // orange
 };
 const DEFAULT_COLOR = '#6b7280';
 

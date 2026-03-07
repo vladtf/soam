@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Container, Row, Col, Tabs, Tab } from 'react-bootstrap';
 import OntologyViewer from '../components/OntologyViewer';
 import KnowledgeGraphViewer from '../components/KnowledgeGraphViewer';
+import OntologyQueryEditor from '../components/OntologyQueryEditor';
 
 const OntologyPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('knowledge-graph');
@@ -20,6 +21,9 @@ const OntologyPage: React.FC = () => {
             </Tab>
             <Tab eventKey="schema" title="📐 Ontology Schema (OWL)">
               <OntologyViewer />
+            </Tab>
+            <Tab eventKey="query" title="🔍 Query Explorer">
+              <OntologyQueryEditor />
             </Tab>
           </Tabs>
         </Col>
