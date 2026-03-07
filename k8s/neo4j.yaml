@@ -12,6 +12,17 @@ spec:
       labels:
         app: neo4j
     spec:
+      initContainers:
+        - name: copy-ontology
+          image: busybox:1.35
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', 'cp /ontology-src/ontology.owl /import/ontology.owl']
+          volumeMounts:
+            - name: ontology-src
+              mountPath: /ontology-src
+              readOnly: true
+            - name: neo4j-import
+              mountPath: /import
       containers:
         - name: neo4j
           image: neo4j:5.17.0
@@ -33,6 +44,15 @@ spec:
               value: '["apoc", "graph-data-science", "n10s"]'
             - name: NEO4J_server_config_strict__validation_enabled
               value: "false"
+          volumeMounts:
+            - name: neo4j-import
+              mountPath: /var/lib/neo4j/import
+      volumes:
+        - name: ontology-src
+          configMap:
+            name: ontology-owl
+        - name: neo4j-import
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
