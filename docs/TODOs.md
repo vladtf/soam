@@ -204,6 +204,7 @@ strict-origin-when-cross-origin
 To replace the dsl used to build new computations with a more user-friendly interface in the frontend. It would be good to have something to check the syntax and to provide suggestions to the user while writing the computation.
 
 
+
 ## Completed
 
 [completed] I want to implement CI/CD pipelines for the entire infrastructure, including azure AKS deployment, using github actions. Can you help me to build the necessary scripts and workflows to automate the deployment process? I want it to include multiple stages such as image building, deployment to AKS, etc. Also it should allow me to easily rollback to previous versions in case of issues. The only concern is that the images caches won't be used properly in github actions, can you help me to optimize that?
@@ -244,3 +245,5 @@ To replace the dsl used to build new computations with a more user-friendly inte
 [completed] I want to understand how spark checkpoints work in the current implementation. Can you help me to explain how the checkpoints are created, stored, and used for recovery in case of failures? I want to ensure that the checkpointing mechanism is robust and can handle various failure scenarios effectively. I want to understand why there are no checkpoints for the enrichment stream. Also, I want to understand how to troubleshoot issues related to checkpointing and what best practices should be followed to optimize the checkpointing process. Also, I want to understand whether it's a good idea to implement a custom checkpointing mechanism for better control over the recovery process.
 
 [completed] Can you help me to refactor the AuthContext.tx? It's too big and has too many responsibilities. I want to split it into smaller components with single responsibility.
+
+[completed] Update the skafold to check if the tls setup is already done before starting the infrastructure, to avoid inbestigating issues related to tls every time the infrastructure is restarted. Also, add a command to the skaffold to setup tls, so that it can be easily done when needed.
