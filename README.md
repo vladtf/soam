@@ -119,21 +119,13 @@ helm install soam oci://registry-1.docker.io/bitnamicharts/spark --version 6.3.1
 
 ### 3. Generate TLS certificates (HTTPS)
 
-The API Gateway and Frontend serve traffic over HTTPS locally. A one-time setup generates certificates and stores them as a Kubernetes secret:
+The API Gateway and Frontend serve traffic over HTTPS locally. A one-time setup generates self-signed certificates via openssl and stores them as a Kubernetes secret:
 
 ```powershell
 .\scripts\setup-local-tls.ps1
 ```
 
-This uses [mkcert](https://github.com/FiloSottile/mkcert) to create locally-trusted certificates (no browser warnings). If `mkcert -install` hangs, use one of the fallback modes:
-
-```powershell
-# Skip CA install (browsers will show a one-time warning)
-.\scripts\setup-local-tls.ps1 -SkipCAInstall
-
-# Use openssl instead (bundled with Git for Windows)
-.\scripts\setup-local-tls.ps1 -UseOpenssl
-```
+Browsers will show a security warning — click "Advanced" → "Proceed" to continue.
 
 ### 4. Start the development environment
 

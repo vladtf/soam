@@ -57,9 +57,12 @@ deploy:
     hooks:
       before:
         - host:
-            # command: ["pwsh", "-c", "./utils/cleanup-images.ps1; ./utils/cleanup-minio.ps1"]
             command: ["pwsh", "-c", "./utils/cleanup-images.ps1"]
+        - host:
+            # Ensure TLS secret exists before deploying — api-gateway and frontend need it
+            command: ["pwsh", "-c", "if (-not (kubectl get secret api-gateway-tls -o name 2>$null)) { Write-Host '❌ TLS secret missing. Run: .\\scripts\\setup-local-tls.ps1' -ForegroundColor Red; exit 1 } else { Write-Host '✅ TLS secret exists' -ForegroundColor Green }"]
   # install manually: helm install soam oci://registry-1.docker.io/bitnamicharts/spark --version 6.3.16 -f spark-values.yaml
+  # manual installation allows the system to not re-install the helmn chart every time the infrastructure is started, which is useful for development.
   # helm:
   #   releases:
   #     - name: soam
@@ -125,3 +128,13 @@ portForward:
     namespace: default
     port: 9090
     localPort: 9091
+profiles:
+  - name: setup-tls
+    build:
+      artifacts: []
+    deploy:
+      kubectl:
+        hooks:
+          before:
+            - host:
+                command: ["pwsh", "-File", "./scripts/setup-local-tls.ps1"]
