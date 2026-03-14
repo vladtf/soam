@@ -195,7 +195,7 @@ function Build-AndPushImages {
         @{ Name = "ingestor"; Path = "ingestor"; K8sType = "deployment"; K8sName = "ingestor" },
         @{ Name = "mosquitto"; Path = "mosquitto"; K8sType = "deployment"; K8sName = "mosquitto" },
         @{ Name = "spark"; Path = "spark"; K8sType = "none"; K8sName = "" },
-        @{ Name = "simulator"; Path = "simulator"; K8sType = "deployment"; K8sName = "simulator" },
+        @{ Name = "simulator"; Path = "simulator"; K8sType = "deployment"; K8sName = "simulator-temperature" },
         @{ Name = "prometheus"; Path = "prometheus"; K8sType = "deployment"; K8sName = "prometheus" },
         @{ Name = "grafana"; Path = "grafana"; K8sType = "deployment"; K8sName = "grafana" }
     )

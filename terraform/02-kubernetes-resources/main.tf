@@ -1540,10 +1540,10 @@ resource "kubernetes_deployment" "simulator" {
   count = var.deploy_simulator ? 1 : 0
 
   metadata {
-    name      = "simulator"
+    name      = "simulator-temperature"
     namespace = kubernetes_namespace.soam.metadata[0].name
     labels = {
-      app = "simulator"
+      app = "simulator-temperature"
     }
   }
 
@@ -1552,14 +1552,14 @@ resource "kubernetes_deployment" "simulator" {
 
     selector {
       match_labels = {
-        app = "simulator"
+        app = "simulator-temperature"
       }
     }
 
     template {
       metadata {
         labels = {
-          app = "simulator"
+          app = "simulator-temperature"
         }
       }
 
@@ -1571,6 +1571,16 @@ resource "kubernetes_deployment" "simulator" {
           env {
             name  = "MQTT_BROKER"
             value = "mosquitto"
+          }
+
+          env {
+            name  = "SIMULATOR_TYPE"
+            value = "temperature"
+          }
+
+          env {
+            name  = "EDGE_BUFFER_SIZE"
+            value = "1000"
           }
 
           resources {
