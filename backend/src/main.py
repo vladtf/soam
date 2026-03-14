@@ -157,14 +157,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         from src.services.alert_service import alert_service
         from src.services.alert_checkers import register_all_alert_checkers
+        from src.services.ontology_alert_checker import register_ontology_alert_checker
         register_all_alert_checkers(alert_service)
+        register_ontology_alert_checker(alert_service)
     except Exception as e:
         logger.warning("⚠️ Could not register alert checkers: %s", e)
+
+    # Start enrichment watchdog (background thread)
+    enrichment_watchdog = None
+    try:
+        from src.services.enrichment_watchdog import EnrichmentWatchdog
+        from src.api.dependencies import get_spark_manager
+        spark_mgr = get_spark_manager()
+        enrichment_watchdog = EnrichmentWatchdog(spark_mgr.streaming_manager)
+        enrichment_watchdog.start()
+    except Exception as e:
+        logger.warning("⚠️ Could not start enrichment watchdog: %s", e)
 
     yield
 
     # Shutdown
     logger.info("🛑 Shutting down SOAM Smart City Backend...")
+
+    if enrichment_watchdog:
+        enrichment_watchdog.stop()
 
     try:
         shutdown_dependencies()

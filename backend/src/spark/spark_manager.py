@@ -184,15 +184,12 @@ class SparkManager:
             }
 
     def get_streaming_average_temperature(self, minutes: int = 30) -> List[Dict[str, Any]]:
-        self.streaming_manager.ensure_streams_running()
         return self.data_access.get_streaming_average_temperature(minutes)
 
     def get_temperature_alerts(self, since_minutes: int = 60) -> List[Dict[str, Any]]:
-        self.streaming_manager.ensure_streams_running()
         return self.data_access.get_temperature_alerts(since_minutes)
 
     def get_enrichment_summary(self, minutes: int = 10) -> Dict[str, Any]:
-        self.streaming_manager.ensure_streams_running()
         return self.data_access.get_enrichment_summary(minutes)
 
     def test_spark_basic_computation(self) -> Dict[str, Any]:
