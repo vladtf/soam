@@ -84,7 +84,7 @@ portForward:
   - resourceType: service
     resourceName: frontend
     namespace: default
-    port: 443
+    port: 3000
     localPort: 3000
   - resourceType: service
     resourceName: backend-external
