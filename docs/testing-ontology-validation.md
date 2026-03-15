@@ -17,8 +17,8 @@ This document provides a step-by-step procedure to verify that sensor data with 
 
 1. Sensor data is ingested via MQTT → stored in MinIO (Bronze layer)
 2. Spark enrichment reads Bronze data and writes to Silver (Enriched) layer
-3. During enrichment, `OntologyFieldValidator.validate_batch()` extracts all field names from `sensor_data` and compares them against DatatypeProperties defined in the ontology (`ontology.owl`)
-4. Fields not in the ontology are accumulated in-memory and surfaced as alerts via the `/api/alerts` endpoint
+3. When a user calls `GET /api/alerts`, the `ontology_alert_checker` fetches all known field names from the ingestor metadata, applies normalization rules, and compares them against DatatypeProperties defined in the ontology (`ontology.owl`)
+4. Fields not in the ontology are returned as alerts in the API response and displayed in the frontend dashboard
 
 ### Known Ontology Fields
 
@@ -158,7 +158,7 @@ The backend runs an **enrichment watchdog** background thread that:
 Wait ~90 seconds, then check the backend logs for the schema evolution message:
 
 ```powershell
-kubectl logs statefulset/backend --tail=200 2>$null | Where-Object { $_ -match "Schema evolution|watchdog" }
+kubectl logs statefulset/backend --tail=500 2>$null | Where-Object { $_ -match "Schema evolution|Active schema fields" }
 ```
 
 **Expected log:**
@@ -189,15 +189,17 @@ kubectl exec -it minio-0 -- sh -c "mc alias set local http://localhost:9000 mini
 
 ---
 
-### Step 5 — Verify Warning in Backend Logs
+### Step 5 — Verify Ontology Check in Backend Logs
+
+The ontology check runs on-demand when the alerts API is called (Step 6). After calling the alerts endpoint, check the logs:
 
 ```powershell
-kubectl logs statefulset/backend --tail=200 | Select-String "Ontology validation|radiation|wind_speed"
+kubectl logs statefulset/backend --tail=200 | Select-String "Ontology check|ontology_alert_checker"
 ```
 
 **Expected log output:**
 ```
-⚠️ Ontology validation: 2 field(s) not in ontology: ['radiation', 'wind_speed']
+🔍 Ontology check: N unrecognized field(s) out of M sensor fields: ['radiation', 'wind_speed', ...]
 ```
 
 ---
@@ -265,9 +267,10 @@ Write-Host "Background publisher stopped"
 
 | File | Purpose |
 | ---- | ------- |
-| `backend/src/spark/enrichment/ontology_validator.py` | Field validation logic during enrichment |
-| `backend/src/services/ontology_alert_checker.py` | Surfaces unknown fields as alerts via AlertService |
-| `backend/src/neo4j/ontology_service.py` | Parses OWL ontology, provides known field names |
-| `backend/src/api/alert_routes.py` | `/api/alerts` endpoint |
+| `backend/src/services/ontology_alert_checker.py` | Compares ingestor fields against ontology, surfaces unknown fields as alerts |
+| `backend/src/neo4j/ontology_service.py` | Parses OWL ontology, provides known field names via `get_canonical_property_names()` |
+| `backend/src/api/alert_routes.py` | `/api/alerts` endpoint that triggers all alert checkers |
+| `backend/src/services/alert_service.py` | Alert registry — collects results from all registered checkers |
+| `backend/src/spark/enrichment/cleaner.py` | Normalization rules applied before ontology comparison |
 | `k8s/ontology-configmap.yaml` | OWL ontology definition (ConfigMap) |
 | `k8s/backend.yaml` | Backend deployment with ontology volume mount |
