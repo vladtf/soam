@@ -22,6 +22,9 @@ applyTo: '{backend/src/spark/**,ingestor/src/**}'
 - **Silver**: Normalized data with consistent schema and cleansed values
 - **Gold**: Aggregated insights, alerts, and derived analytics
 - **Schema Evolution**: Automatic detection tracked in `MetadataStorage.schema_evolution` table
+  - **Watchdog** (`enrichment_watchdog.py`): Compares ingestor fields vs `EnrichmentManager._active_schema_fields` every 60s; restarts enrichment stream on new fields
+  - **Backfill gap**: Data processed before a watchdog restart is NOT re-enriched with new fields (checkpoint tracks committed files). Use `POST /api/config/enrichment/reset` to clear checkpoints + Silver data and reprocess from Bronze.
+  - **Admin endpoints**: `POST /api/config/enrichment/restart` (restart stream with latest schema), `POST /api/config/enrichment/reset` (full pipeline reset — deletes checkpoint + Silver, reprocesses Bronze)
 - **Partition Strategy**: Time-based partitioning enables efficient time-range queries
 - **Flexible Schema**: Enrichment reads all numeric/timestamp as StringType for cross-source compatibility
 

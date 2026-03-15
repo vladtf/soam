@@ -205,7 +205,7 @@ kubectl logs statefulset/backend --tail=200 | Select-String "Ontology validation
 ### Step 6 — Verify Alerts API
 
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:8000/api/alerts" -Headers $headers | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "http://localhost:8000/api/alerts" -Headers $headers | Select-Object -ExpandProperty data | Where-Object { $_.message -match "radiation|wind_speed" } | ConvertTo-Json -Depth 3
 ```
 
 **Expected response** (should include alerts for each unknown field):

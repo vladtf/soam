@@ -61,7 +61,7 @@ applyTo: 'backend/**'
   - Errors (all return `HTTPException`, must `raise`): `bad_request_error()`, `not_found_error()`, `forbidden_error()`, `conflict_error()`, `internal_server_error()`
   - Exception converters: `handle_http_exception(e)`, `handle_generic_exception(e, context)`
 - Core API routers:
-  - `config_routes.py` - System configuration endpoints
+  - `config_routes.py` - System configuration endpoints, enrichment stream management (restart, reset with checkpoint cleanup — admin only)
   - `dashboard_tiles_routes.py` - User-defined dashboard tiles with time series support
   - `device_routes.py` - Device/sensor management with Neo4j integration
   - `error_routes.py` - Client error tracking and analytics
@@ -125,7 +125,7 @@ applyTo: 'backend/**'
   - `master_client.py` - Spark master client for cluster communication
   - `config.py` - Spark configuration settings
   - `enrichment/` - Data enrichment pipeline:
-    - `enrichment_manager.py` - Main orchestrator: fetch schema from ingestor → create raw stream → transform to union schema → add metadata → write via BatchProcessor. Uses flexible schema strategy (all numeric/timestamp fields read as StringType for cross-source compatibility). Thread-safe with `_enrich_query_lock`.
+    - `enrichment_manager.py` - Main orchestrator: fetch schema from ingestor → create raw stream → transform to union schema → add metadata → write via BatchProcessor. Uses flexible schema strategy (all numeric/timestamp fields read as StringType for cross-source compatibility). Thread-safe with `_enrich_query_lock`. Tracks `_active_schema_fields` (frozenset) for watchdog schema evolution detection.
     - `batch_processor.py` - 5-step pipeline with `@profile_step` decorator on each step: get_allowed_ids → should_process → filter_dataframe → apply_transformations → write_delta. Delta write with `mergeSchema("true")`, partitioned by `ingestion_id`.
     - `union_schema.py` - Dynamic schema handling for multi-source data
     - `device_filter.py` - Device-based data filtering

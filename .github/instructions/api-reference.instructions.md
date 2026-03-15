@@ -142,6 +142,8 @@ applyTo: '{backend/src/api/**,frontend/src/api/**,ingestor/src/api/**}'
 | GET | `/api/config/schema` | Get current schema configuration |
 | GET | `/api/config` | Get comprehensive system configuration |
 | GET | `/api/config/features` | Get feature flags and capabilities |
+| POST | `/api/config/enrichment/restart` | Restart enrichment stream with latest schema (admin only) |
+| POST | `/api/config/enrichment/reset` | Reset enrichment pipeline: clear checkpoints + Silver data, reprocess from Bronze (admin only) |
 
 ### Settings (`/api/settings`)
 | Method | Endpoint | Description |

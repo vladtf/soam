@@ -203,6 +203,9 @@ strict-origin-when-cross-origin
 
 To replace the dsl used to build new computations with a more user-friendly interface in the frontend. It would be good to have something to check the syntax and to provide suggestions to the user while writing the computation.
 
+I want to make sure that the files displayed in the data browser are always sorted by the creation time, with the most recent files appearing at the top. This will help users to easily find and access the latest data files without having to scroll through older files.
+
+When a new field is being reported it is ignored because the enrichment stream is not restarted. I want to implement a mechanism to automatically detect when new fields are being reported and to restart the enrichment stream to take into account these new fields. This mechanism should be efficient and should not cause unnecessary restarts of the enrichment stream.
 
 
 ## Completed

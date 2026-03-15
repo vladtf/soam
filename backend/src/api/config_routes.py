@@ -4,15 +4,16 @@ from src.api.response_utils import success_response, internal_server_error
 """
 Configuration API routes for runtime settings.
 """
-from typing import Dict, Any
-from fastapi import APIRouter
+from typing import Dict, Any, List
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.spark.config import SparkConfig
 from src.utils.logging import get_logger
 from src.utils.api_utils import handle_api_errors
+from src.auth.dependencies import require_admin
 
-from .dependencies import SparkManagerDep
+from .dependencies import SparkManagerDep, MinioClientDep, ConfigDep
 
 logger = get_logger(__name__)
 
@@ -147,3 +148,96 @@ async def get_feature_flags() -> Dict[str, Any]:
             "description": "Support for diverse sensor types without schema changes"
         }
     }
+
+
+@router.post("/config/enrichment/restart", response_model=ApiResponse, dependencies=[Depends(require_admin)])
+@handle_api_errors("restart enrichment stream")
+async def restart_enrichment_stream(spark_manager: SparkManagerDep) -> ApiResponse:
+    """Restart the enrichment stream (admin only).
+
+    Stops the current enrichment stream and starts a new one with the
+    latest schema from the ingestor. Useful after schema evolution or
+    checkpoint cleanup.
+    """
+    sm = spark_manager.streaming_manager
+    if not sm or not sm.enrichment_manager:
+        raise internal_server_error("Streaming manager not initialized")
+
+    em = sm.enrichment_manager
+    was_active = em.is_enrichment_active()
+
+    em.stop_enrichment_stream()
+    em.ingestor_client._schema_cache = None
+    em.start_enrichment_stream()
+
+    return success_response(
+        data={
+            "was_active": was_active,
+            "is_active": em.is_enrichment_active(),
+            "active_schema_fields": sorted(em._active_schema_fields) if em._active_schema_fields else [],
+        },
+        message="Enrichment stream restarted successfully",
+    )
+
+
+@router.post("/config/enrichment/reset", response_model=ApiResponse, dependencies=[Depends(require_admin)])
+@handle_api_errors("reset enrichment pipeline")
+async def reset_enrichment_pipeline(
+    spark_manager: SparkManagerDep,
+    config: ConfigDep,
+    client: MinioClientDep,
+) -> ApiResponse:
+    """Reset the enrichment pipeline by clearing checkpoints and Silver data (admin only).
+
+    Stops the enrichment stream, deletes the enrichment checkpoint and
+    Silver Delta table from MinIO, then restarts the stream so it
+    reprocesses all Bronze data from scratch.
+    """
+    from minio.deleteobjects import DeleteObject
+
+    sm = spark_manager.streaming_manager
+    if not sm or not sm.enrichment_manager:
+        raise internal_server_error("Streaming manager not initialized")
+
+    em = sm.enrichment_manager
+
+    # 1. Stop the enrichment stream
+    em.stop_enrichment_stream()
+    logger.info("🛑 Enrichment stream stopped for reset")
+
+    bucket = config.minio_bucket
+    deleted_counts: Dict[str, int] = {}
+
+    # 2. Delete enrichment checkpoint
+    ckpt_prefix = f"{SparkConfig.ENRICH_STREAM_CHECKPOINT}/"
+    ckpt_objs = list(client.list_objects(bucket, prefix=ckpt_prefix, recursive=True))
+    if ckpt_objs:
+        errors = list(client.remove_objects(bucket, [DeleteObject(o.object_name) for o in ckpt_objs]))
+        deleted_counts["checkpoint_files"] = len(ckpt_objs) - len(errors)
+        logger.info("🗑️ Deleted %d enrichment checkpoint files", deleted_counts["checkpoint_files"])
+    else:
+        deleted_counts["checkpoint_files"] = 0
+
+    # 3. Delete Silver/enriched Delta table
+    silver_prefix = f"{SparkConfig.ENRICHED_PATH}/"
+    silver_objs = list(client.list_objects(bucket, prefix=silver_prefix, recursive=True))
+    if silver_objs:
+        errors = list(client.remove_objects(bucket, [DeleteObject(o.object_name) for o in silver_objs]))
+        deleted_counts["enriched_files"] = len(silver_objs) - len(errors)
+        logger.info("🗑️ Deleted %d Silver/enriched files", deleted_counts["enriched_files"])
+    else:
+        deleted_counts["enriched_files"] = 0
+
+    # 4. Restart the enrichment stream
+    em.ingestor_client._schema_cache = None
+    em.start_enrichment_stream()
+    logger.info("✅ Enrichment stream restarted after reset")
+
+    return success_response(
+        data={
+            "deleted": deleted_counts,
+            "is_active": em.is_enrichment_active(),
+            "active_schema_fields": sorted(em._active_schema_fields) if em._active_schema_fields else [],
+        },
+        message="Enrichment pipeline reset — reprocessing all Bronze data",
+    )
