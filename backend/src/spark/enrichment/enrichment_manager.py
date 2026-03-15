@@ -44,6 +44,7 @@ class EnrichmentManager:
         self._enrich_query_lock = threading.Lock()
         self._qm = StreamingQueryManager(self.spark)
         self.ingestor_client: IngestorSchemaClient = IngestorSchemaClient()
+        self._active_schema_fields: Optional[frozenset] = None
 
     def _get_query_by_name(self, name: str) -> Optional[StreamingQuery]:
         """Return active StreamingQuery by name if present."""
@@ -366,7 +367,8 @@ class EnrichmentManager:
         try:
             # Get streaming schema - this will fail fast if no data is available
             schema: StructType = self._get_streaming_schema()
-            logger.info(f"Successfully inferred schema with {len(schema.fields)} fields")
+            self._active_schema_fields = frozenset(f.name for f in schema.fields)
+            logger.info(f"✅ Active schema fields ({len(self._active_schema_fields)}): {sorted(self._active_schema_fields)}")
             
         except Exception as e:
             logger.error(f"Cannot start enrichment stream - schema inference failed: {e}")
@@ -444,8 +446,9 @@ class EnrichmentManager:
         except Exception as e:
             logger.error(f"Error stopping enrichment stream: {e}")
 
-        # Reset query
+        # Reset query and schema fields
         self.enrich_query = None
+        self._active_schema_fields = None
 
     def is_enrichment_active(self) -> bool:
         """Check if enrichment stream is currently active.

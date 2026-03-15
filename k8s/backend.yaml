@@ -102,12 +102,19 @@ spec:
               mountPath: /tmp/spark-events
             - name: backend-db
               mountPath: /app/data
+            - name: ontology-owl
+              mountPath: /app/ontology.owl
+              subPath: ontology.owl
+              readOnly: true
       volumes:
         - name: spark-events
           emptyDir: {}
         - name: backend-db
           persistentVolumeClaim:
             claimName: backend-db-pvc
+        - name: ontology-owl
+          configMap:
+            name: ontology-owl
 ---
 apiVersion: v1
 kind: Service
