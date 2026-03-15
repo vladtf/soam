@@ -40,6 +40,10 @@ class UnionSchemaTransformer:
         sensor_data_map = UnionSchemaTransformer._create_sensor_data_map(df, ingestion_id_col)
         normalized_data_map = UnionSchemaTransformer._create_normalized_data_map(df, ingestion_id_col, schema)
         
+        # Filter out null values so each record only contains fields with actual data
+        sensor_data_map = F.map_filter(sensor_data_map, lambda k, v: v.isNotNull())
+        normalized_data_map = F.map_filter(normalized_data_map, lambda k, v: v.isNotNull())
+        
         # Build union schema DataFrame
         # Handle ingestion_id column carefully to avoid duplicate column warnings
         if ingestion_id_col == "ingestion_id":
@@ -259,9 +263,28 @@ class UnionSchemaTransformer:
                 numeric_value
             ])
 
-        # Rebuild maps with normalized keys
-        new_sensor_data = F.create_map(*sensor_data_cols) if sensor_data_cols else df.sensor_data
-        new_normalized_data = F.create_map(*normalized_data_cols) if normalized_data_cols else df.normalized_data
+        # Rebuild maps with normalized keys, preserving unmapped keys from the original maps
+        # Collect all raw keys covered by normalization rules so we can exclude them
+        all_rule_keys: set = set()
+        for raw_keys in canonical_to_raw_keys.values():
+            all_rule_keys.update(raw_keys)
+        for canonical_key in canonical_to_raw_keys:
+            all_rule_keys.add(canonical_key)
+
+        # Start with the original map, then overlay rule-based entries
+        # map_concat merges maps; if keys overlap, the second map wins
+        if sensor_data_cols:
+            rule_sensor_map = F.create_map(*sensor_data_cols)
+            # Keep original entries not covered by rules, then overlay rule results
+            new_sensor_data = F.map_concat(df.sensor_data, rule_sensor_map)
+        else:
+            new_sensor_data = df.sensor_data
+
+        if normalized_data_cols:
+            rule_normalized_map = F.create_map(*normalized_data_cols)
+            new_normalized_data = F.map_concat(df.normalized_data, rule_normalized_map)
+        else:
+            new_normalized_data = df.normalized_data
 
         return df.select(
             "ingestion_id",

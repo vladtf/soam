@@ -189,9 +189,9 @@ async def reset_enrichment_pipeline(
 ) -> ApiResponse:
     """Reset the enrichment pipeline by clearing checkpoints and Silver data (admin only).
 
-    Stops the enrichment stream, deletes the enrichment checkpoint and
-    Silver Delta table from MinIO, then restarts the stream so it
-    reprocesses all Bronze data from scratch.
+    Stops all streaming queries (enrichment + Gold), deletes their
+    checkpoints and output data from MinIO, then restarts everything
+    so the pipeline reprocesses all Bronze data from scratch.
     """
     from minio.deleteobjects import DeleteObject
 
@@ -201,37 +201,42 @@ async def reset_enrichment_pipeline(
 
     em = sm.enrichment_manager
 
-    # 1. Stop the enrichment stream
+    # 1. Stop all streams (Gold reads from Silver, so must stop first)
+    sm._qm.stop_gracefully(sm.AVG_QUERY_NAME, timeout_seconds=5)
+    sm._qm.stop_gracefully(sm.ALERT_QUERY_NAME, timeout_seconds=5)
+    sm.avg_query = None
+    sm.alert_query = None
     em.stop_enrichment_stream()
-    logger.info("🛑 Enrichment stream stopped for reset")
+    logger.info("🛑 All streams stopped for pipeline reset")
 
     bucket = config.minio_bucket
     deleted_counts: Dict[str, int] = {}
 
-    # 2. Delete enrichment checkpoint
-    ckpt_prefix = f"{SparkConfig.ENRICH_STREAM_CHECKPOINT}/"
-    ckpt_objs = list(client.list_objects(bucket, prefix=ckpt_prefix, recursive=True))
-    if ckpt_objs:
-        errors = list(client.remove_objects(bucket, [DeleteObject(o.object_name) for o in ckpt_objs]))
-        deleted_counts["checkpoint_files"] = len(ckpt_objs) - len(errors)
-        logger.info("🗑️ Deleted %d enrichment checkpoint files", deleted_counts["checkpoint_files"])
-    else:
-        deleted_counts["checkpoint_files"] = 0
+    # 2. Delete all checkpoints and data
+    prefixes_to_delete = {
+        "enrichment_checkpoint": f"{SparkConfig.ENRICH_STREAM_CHECKPOINT}/",
+        "gold_temp_avg_checkpoint": f"{SparkConfig.GOLD_TEMP_AVG_CHECKPOINT}_union/",
+        "gold_alert_checkpoint": f"{SparkConfig.GOLD_ALERT_CHECKPOINT}_union/",
+        "enriched_data": f"{SparkConfig.ENRICHED_PATH}/",
+        "gold_temp_avg_data": f"{SparkConfig.GOLD_TEMP_AVG_PATH}/",
+        "gold_alerts_data": f"{SparkConfig.GOLD_ALERTS_PATH}/",
+    }
 
-    # 3. Delete Silver/enriched Delta table
-    silver_prefix = f"{SparkConfig.ENRICHED_PATH}/"
-    silver_objs = list(client.list_objects(bucket, prefix=silver_prefix, recursive=True))
-    if silver_objs:
-        errors = list(client.remove_objects(bucket, [DeleteObject(o.object_name) for o in silver_objs]))
-        deleted_counts["enriched_files"] = len(silver_objs) - len(errors)
-        logger.info("🗑️ Deleted %d Silver/enriched files", deleted_counts["enriched_files"])
-    else:
-        deleted_counts["enriched_files"] = 0
+    for label, prefix in prefixes_to_delete.items():
+        objs = list(client.list_objects(bucket, prefix=prefix, recursive=True))
+        if objs:
+            errors = list(client.remove_objects(bucket, [DeleteObject(o.object_name) for o in objs]))
+            deleted_counts[label] = len(objs) - len(errors)
+            logger.info("🗑️ Deleted %d files from %s", deleted_counts[label], prefix)
+        else:
+            deleted_counts[label] = 0
 
-    # 4. Restart the enrichment stream
+    # 3. Restart all streams
     em.ingestor_client._schema_cache = None
     em.start_enrichment_stream()
     logger.info("✅ Enrichment stream restarted after reset")
+
+    # Gold streams will be restarted by the watchdog once Silver data is available
 
     return success_response(
         data={
@@ -239,5 +244,5 @@ async def reset_enrichment_pipeline(
             "is_active": em.is_enrichment_active(),
             "active_schema_fields": sorted(em._active_schema_fields) if em._active_schema_fields else [],
         },
-        message="Enrichment pipeline reset — reprocessing all Bronze data",
+        message="Full pipeline reset — reprocessing all Bronze data. Gold streams will auto-start when Silver data is available.",
     )
