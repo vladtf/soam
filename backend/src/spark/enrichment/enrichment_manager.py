@@ -248,38 +248,6 @@ class EnrichmentManager:
 
         return raw_stream
 
-    def _create_flexible_schema(self, resolved_schema: StructType) -> StructType:
-        """Create a flexible schema that can accommodate type variations.
-        
-        Since data comes from multiple sources (MQTT, REST API) with potentially different
-        types for the same fields (int vs double, timestamp vs string), we read all
-        potentially problematic fields as StringType for maximum compatibility.
-        
-        Type conversion is handled later in the normalization/transformation phase.
-        
-        Args:
-            resolved_schema: The schema with resolved type conflicts
-            
-        Returns:
-            Flexible schema that can read files with different types
-        """
-        flexible_fields = []
-        
-        for field in resolved_schema.fields:
-            # Convert all numeric and timestamp fields to StringType for maximum flexibility
-            # This handles: int vs double, timestamp vs string, long vs int, etc.
-            if isinstance(field.dataType, (IntegerType, LongType, DoubleType, FloatType, TimestampType)):
-                flexible_field = StructField(field.name, StringType(), nullable=True)
-                flexible_fields.append(flexible_field)
-                logger.debug(f"🔄 Converted field '{field.name}': {field.dataType} -> StringType")
-            else:
-                flexible_fields.append(field)
-
-        
-        flexible_schema = StructType(flexible_fields)
-        logger.info(f"✅ Created flexible schema with {len(flexible_fields)} fields (all numeric/timestamp as String)")
-        return flexible_schema
-
     def _transform_to_union_schema(self, raw_stream: DataFrame, schema: StructType) -> DataFrame:
         """Transform raw stream to union schema with normalization.
         
