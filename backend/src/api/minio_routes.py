@@ -38,7 +38,7 @@ def list_recursive(
     prefix: str = Query(default="", description="Prefix to list recursively"),
     min_size: int = Query(default=0, description="Minimum file size in bytes"),
     max_size: int = Query(default=None, description="Maximum file size in bytes"),
-    sort_by: str = Query(default="name", description="Sort by: name or size"),
+    sort_by: str = Query(default="date", description="Sort by: name, size, or date"),
     sort_order: str = Query(default="asc", regex="^(asc|desc)$", description="Sort order: asc or desc"),
     limit: int = Query(default=1000, description="Maximum number of files to return"),
     page: int = Query(default=1, ge=1, description="Page number (1-based)"),
@@ -57,6 +57,8 @@ def list_recursive(
         reverse = sort_order == "desc"
         if sort_by == "size":
             all_files.sort(key=lambda x: x["size"], reverse=reverse)
+        elif sort_by == "date":
+            all_files.sort(key=lambda x: x.get("last_modified") or "", reverse=reverse)
         else:  # sort by name (default)
             all_files.sort(key=lambda x: x["key"], reverse=reverse)
         

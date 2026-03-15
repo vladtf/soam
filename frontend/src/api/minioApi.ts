@@ -9,6 +9,7 @@ export interface MinioListResponse {
 export interface MinioObjectInfo {
   key: string;
   size: number;
+  last_modified?: string;
 }
 
 export interface MinioPaginatedResponse {
@@ -51,6 +52,7 @@ export const minioFind = (options: MinioFindOptions = {}): Promise<MinioPaginate
   const url = new URL(`${backendUrl}/api/minio/find`);
   if (options.prefix) url.searchParams.set('prefix', options.prefix);
   if (options.sortBy) url.searchParams.set('sort_by', options.sortBy);
+  if (options.sortOrder) url.searchParams.set('sort_order', options.sortOrder);
   if (options.minSize !== undefined && options.minSize > 0) url.searchParams.set('min_size', options.minSize.toString());
   if (options.maxSize !== undefined) url.searchParams.set('max_size', options.maxSize.toString());
   if (options.limit !== undefined) url.searchParams.set('limit', options.limit.toString());

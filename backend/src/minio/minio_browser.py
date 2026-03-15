@@ -24,11 +24,15 @@ class MinioBrowser:
         return {"prefixes": prefixes, "files": files}
 
     def list_recursive(self, prefix: str = "") -> List[Dict[str, Any]]:
-        """List all objects recursively under a prefix, returning key and size."""
+        """List all objects recursively under a prefix, returning key, size, and last_modified."""
         results: List[Dict[str, Any]] = []
         for obj in self.client.list_objects(self.bucket, prefix=prefix, recursive=True):
             if not obj.is_dir:
-                results.append({"key": obj.object_name, "size": obj.size})
+                results.append({
+                    "key": obj.object_name,
+                    "size": obj.size,
+                    "last_modified": obj.last_modified.isoformat() if obj.last_modified else None,
+                })
         return results
 
     def preview_parquet(self, key: str, limit: int = 50) -> Dict[str, Any]:

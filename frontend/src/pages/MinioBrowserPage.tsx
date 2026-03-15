@@ -26,7 +26,7 @@ const MinioBrowserPage: React.FC = () => {
   
   // File info, sorting, and server-side pagination
   const [fileInfos, setFileInfos] = useState<MinioObjectInfo[]>([]);
-  const [sortBy, setSortBy] = useState<"name" | "size">("size");
+  const [sortBy, setSortBy] = useState<"name" | "size" | "date">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showOnlyNonEmpty, setShowOnlyNonEmpty] = useState<boolean>(false);
   const [minFileSize, setMinFileSize] = useState<number>(500);
@@ -61,6 +61,7 @@ const MinioBrowserPage: React.FC = () => {
       const options: MinioFindOptions = {
         prefix: targetPrefix,
         sortBy,
+        sortOrder,
         minSize: showOnlyNonEmpty ? minFileSize : 0,
         page,
         pageSize
@@ -92,6 +93,7 @@ const MinioBrowserPage: React.FC = () => {
           const options: MinioFindOptions = {
             prefix: targetPrefix,
             sortBy,
+            sortOrder,
             minSize: showOnlyNonEmpty ? minFileSize : 0,
             page,
             pageSize
@@ -534,15 +536,16 @@ const MinioBrowserPage: React.FC = () => {
                 </Row>
                 <Row className="g-2 mt-1">
                   <Col sm={6}>
-                    <Form.Select size="sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as "name" | "size")}>
+                    <Form.Select size="sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as "name" | "size" | "date")}>
+                      <option value="date">Sort by date</option>
                       <option value="name">Sort by name</option>
                       <option value="size">Sort by size</option>
                     </Form.Select>
                   </Col>
                   <Col sm={6}>
                     <Form.Select size="sm" value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}>
-                      <option value="asc">{sortBy === "size" ? "Smallest first" : "A-Z"}</option>
-                      <option value="desc">{sortBy === "size" ? "Largest first" : "Z-A"}</option>
+                      <option value="desc">{sortBy === "size" ? "Largest first" : sortBy === "date" ? "Newest first" : "Z-A"}</option>
+                      <option value="asc">{sortBy === "size" ? "Smallest first" : sortBy === "date" ? "Oldest first" : "A-Z"}</option>
                     </Form.Select>
                   </Col>
                 </Row>
