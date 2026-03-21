@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mqtt-perf-test
+  namespace: soam
+spec:
+  parallelism: 2
+  completions: 2
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: mqtt-perf-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: perf-test
+          image: soamregistry.azurecr.io/simulator:latest
+          command:
+            - python
+            - /scripts/perf_test_mqtt.py
+            - --broker
+            - mosquitto
+            - --rate
+            - "1500"
+            - --duration
+            - "300"
+            - --threads
+            - "10"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: test-script
+              mountPath: /scripts
+      volumes:
+        - name: test-script
+          configMap:
+            name: perf-test-script

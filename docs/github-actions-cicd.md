@@ -210,6 +210,9 @@ kubectl get pods -n soam
 
 # Check logs
 kubectl logs -f deployment/backend -n soam
+
+# Set default namespace
+kubectl config set-context --current --namespace=soam
 ```
 
 ### Image Push Failures
