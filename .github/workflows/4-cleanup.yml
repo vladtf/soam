@@ -80,7 +80,7 @@ jobs:
           ACR_NAME=$(az acr list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[0].loginServer" -o tsv 2>/dev/null || echo "dummy.azurecr.io")
           
           # Get credentials from Step 1 Terraform state
-          cd ${{ env.TF_STEP1_DIR }}
+          cd $GITHUB_WORKSPACE/${{ env.TF_STEP1_DIR }}
           terraform init \
             -backend-config="resource_group_name=soam-tfstate-rg" \
             -backend-config="storage_account_name=$STORAGE_NAME" \
