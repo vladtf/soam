@@ -25,7 +25,7 @@ on:
       aks_vm_size:
         description: 'VM size for AKS nodes'
         required: false
-        default: 'Standard_DS3_v2'
+        default: 'Standard_DS2_v2'
         type: string
 
 env:

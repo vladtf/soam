@@ -79,17 +79,26 @@ jobs:
           # Get ACR name from resource group
           ACR_NAME=$(az acr list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[0].loginServer" -o tsv 2>/dev/null || echo "dummy.azurecr.io")
           
-          # Get AKS cluster info for terraform variables
-          AKS_FQDN=$(az aks show --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }} --query "fqdn" -o tsv 2>/dev/null || echo "")
-          AKS_HOST="${AKS_FQDN:+https://$AKS_FQDN:443}"
-          AKS_HOST="${AKS_HOST:-https://dummy}"
+          # Get credentials from Step 1 Terraform state
+          cd ${{ env.TF_STEP1_DIR }}
+          terraform init \
+            -backend-config="resource_group_name=soam-tfstate-rg" \
+            -backend-config="storage_account_name=$STORAGE_NAME" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=01-infrastructure.tfstate" 2>/dev/null || true
           
-          # Destroy with required variables (use dummy values if cluster doesn't exist)
+          AKS_HOST=$(terraform output -raw aks_host 2>/dev/null || echo "https://dummy")
+          AKS_CLIENT_CERT=$(terraform output -raw aks_client_certificate 2>/dev/null || echo "")
+          AKS_CLIENT_KEY=$(terraform output -raw aks_client_key 2>/dev/null || echo "")
+          AKS_CA_CERT=$(terraform output -raw aks_cluster_ca_certificate 2>/dev/null || echo "")
+          cd $GITHUB_WORKSPACE/${{ env.TF_STEP2_DIR }}
+          
+          # Destroy with actual credentials from infrastructure state
           terraform destroy -auto-approve -input=false \
             -var="aks_host=${AKS_HOST}" \
-            -var="aks_client_certificate=" \
-            -var="aks_client_key=" \
-            -var="aks_cluster_ca_certificate=" \
+            -var="aks_client_certificate=${AKS_CLIENT_CERT}" \
+            -var="aks_client_key=${AKS_CLIENT_KEY}" \
+            -var="aks_cluster_ca_certificate=${AKS_CA_CERT}" \
             -var="acr_login_server=${ACR_NAME:-dummy.azurecr.io}" \
             || true
       
