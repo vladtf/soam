@@ -24,6 +24,7 @@ on:
           - infrastructure-only
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AZURE_RESOURCE_GROUP: soam-rg
   AKS_CLUSTER_NAME: soam-aks-cluster
   KUBERNETES_NAMESPACE: soam
@@ -47,7 +48,7 @@ jobs:
     needs: validate
     if: github.event.inputs.delete_step == 'all' || github.event.inputs.delete_step == 'kubernetes-only'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Azure Login
         uses: azure/login@v2
@@ -55,7 +56,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
       
       - name: Terraform Destroy (Step 2)
         working-directory: ${{ env.TF_STEP2_DIR }}
@@ -119,7 +120,7 @@ jobs:
     needs: [validate, destroy-kubernetes]
     if: always() && github.event.inputs.delete_step == 'all' || github.event.inputs.delete_step == 'infrastructure-only'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Azure Login
         uses: azure/login@v2
@@ -127,7 +128,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
       
       - name: Get Subscription ID
         id: sub

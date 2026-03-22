@@ -24,6 +24,7 @@ on:
         type: string
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AZURE_RESOURCE_GROUP: soam-rg
   TF_DIR: terraform/01-azure-infrastructure
 
@@ -36,7 +37,7 @@ jobs:
       acr_name: ${{ steps.outputs.outputs.acr_name }}
       aks_cluster_name: ${{ steps.outputs.outputs.aks_cluster_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Azure Login
         uses: azure/login@v2
@@ -44,7 +45,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
       

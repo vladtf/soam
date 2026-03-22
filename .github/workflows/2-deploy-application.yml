@@ -18,6 +18,7 @@ on:
         type: boolean
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AZURE_RESOURCE_GROUP: soam-rg
   AKS_CLUSTER_NAME: soam-aks-cluster
   KUBERNETES_NAMESPACE: soam
@@ -39,7 +40,7 @@ jobs:
       aks_client_cert: ${{ steps.info.outputs.aks_client_cert }}
       aks_client_key: ${{ steps.info.outputs.aks_client_key }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Azure Login
         uses: azure/login@v2
@@ -47,7 +48,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
       
@@ -85,7 +86,7 @@ jobs:
       matrix:
         image: [backend, frontend, ingestor, spark, simulator, rest-api-simulator, mosquitto, grafana, prometheus]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Check if directory exists
         id: check
@@ -98,7 +99,7 @@ jobs:
       
       - name: Set up Docker Buildx
         if: steps.check.outputs.exists == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       
       - name: Azure Login
         if: steps.check.outputs.exists == 'true'
@@ -112,7 +113,7 @@ jobs:
       
       - name: Build and push
         if: steps.check.outputs.exists == 'true'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image }}
           push: true
@@ -131,7 +132,7 @@ jobs:
     needs: [get-infra, build-images]
     if: always() && (needs.build-images.result == 'success' || needs.build-images.result == 'skipped')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Azure Login
         uses: azure/login@v2
@@ -139,7 +140,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
       
       - name: Create tfvars
         working-directory: ${{ env.TF_STEP2_DIR }}
