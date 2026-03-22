@@ -22,6 +22,11 @@ on:
         required: false
         default: '3'
         type: string
+      aks_vm_size:
+        description: 'VM size for AKS nodes'
+        required: false
+        default: 'Standard_DS3_v2'
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -104,6 +109,7 @@ jobs:
                 -var="subscription_id=${{ steps.sub.outputs.subscription_id }}" \
                 -var="location=${{ github.event.inputs.location }}" \
                 -var="aks_node_count=${{ github.event.inputs.aks_node_count }}" \
+                -var="aks_vm_size=${{ github.event.inputs.aks_vm_size }}" \
                 azurerm_resource_group.rg \
                 /subscriptions/${{ steps.sub.outputs.subscription_id }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}
             else
@@ -120,6 +126,7 @@ jobs:
             -var="subscription_id=${{ steps.sub.outputs.subscription_id }}" \
             -var="location=${{ github.event.inputs.location }}" \
             -var="aks_node_count=${{ github.event.inputs.aks_node_count }}" \
+            -var="aks_vm_size=${{ github.event.inputs.aks_vm_size }}" \
             -out=tfplan
       
       - name: Terraform Apply
