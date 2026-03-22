@@ -79,11 +79,13 @@ jobs:
           ACR_NAME=$(az acr list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[0].loginServer" -o tsv 2>/dev/null || echo "dummy.azurecr.io")
           
           # Get AKS cluster info for terraform variables
-          AKS_HOST=$(az aks show --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }} --query "fqdn" -o tsv 2>/dev/null || echo "https://dummy")
+          AKS_FQDN=$(az aks show --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }} --query "fqdn" -o tsv 2>/dev/null || echo "")
+          AKS_HOST="${AKS_FQDN:+https://$AKS_FQDN:443}"
+          AKS_HOST="${AKS_HOST:-https://dummy}"
           
           # Destroy with required variables (use dummy values if cluster doesn't exist)
           terraform destroy -auto-approve -input=false \
-            -var="aks_host=${AKS_HOST:-https://dummy}" \
+            -var="aks_host=${AKS_HOST}" \
             -var="aks_client_certificate=" \
             -var="aks_client_key=" \
             -var="aks_cluster_ca_certificate=" \
