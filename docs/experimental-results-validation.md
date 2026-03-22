@@ -584,7 +584,7 @@ The dashboard shows three latency metrics with p50, p95, and p99 percentiles:
 | **Mechanism** | Ingestion Pipeline  |
 | **Metric**    | Messages per second |
 | **Target**    | > 1000 msg/s        |
-| **Result**    | ✅ ~30,000 msg/s     |
+| **Result**    | ✅ ~8,000 msg/s      |
 
 #### Test Procedure
 
@@ -719,7 +719,9 @@ The throughput metrics are also available in the Grafana Pipeline Metrics dashbo
 [st-scd2j] 📊 Stats: 124,661 msgs | Rate: 5001.0/5000 msg/s (100%) ✅ | Avg: 4980.6 msg/s | Errors: 0
 ```
 
-All 6 pods sustained ~5000 msg/s each with 0 errors, achieving a combined throughput of **~30,000 msg/s**.
+All 6 pods sustained ~5000 msg/s each with 0 errors, achieving a combined **send rate** of **~30,000 msg/s**.
+
+> **Important:** The ~30,000 msg/s figure represents the **MQTT publish (send) rate**, not the actual end-to-end processed throughput. Grafana monitoring showed that the ingestor pods' **total received/processed rate topped at approximately ~8,000 msg/s**, even when the send rate was significantly higher. This indicates a bottleneck between MQTT delivery and ingestor processing (likely Mosquitto broker throughput, MQTT shared subscription fan-out, or ingestor per-message processing overhead).
 
 However, after ~2.5 minutes at sustained 30k msg/s, some client pods began experiencing CPU throttling, causing intermittent rate drops to 83–86% of target:
 
@@ -737,8 +739,8 @@ The rate drops had 0 errors and the average rate remained above 4850 msg/s per p
 
 | Metric                  | Value (Normal Load) | Value (High Throughput Test)          |
 | ----------------------- | ------------------- | ------------------------------------- |
-| Total Messages Received | ~1-2 msg/s          | ~30,000+ msg/s (fan-out across pods)  |
-| Per-Pod Rate            | ~1-2 msg/s          | ~5000-6000 msg/s per ingestor pod     |
+| Total Messages Received | ~1-2 msg/s          | ~8,000 msg/s (across all pods)        |
+| Per-Pod Rate            | ~1-2 msg/s          | ~1600-2000 msg/s per ingestor pod     |
 | Processing Success Rate | 100%                | ~100%                                 |
 | Active Ingestor Pods    | 1                   | 5 (auto-scaled to max)                |
 
@@ -771,11 +773,11 @@ The rate drops had 0 errors and the average rate remained above 4850 msg/s per p
 | R2  | Retention Policies | Functional          | Operational | Verified   | ✅      |
 | R3  | Data Labeling      | Functional          | Operational | Verified   | ✅      |
 | P1  | End-to-End Latency | Sensor → Gold (p95) | < 5 min     | ~5-8 min   | ✅      |
-| P2  | Ingestion          | Throughput          | > 1000 msg/s | ~30,000 msg/s | ✅      |
+| P2  | Ingestion          | Throughput          | > 1000 msg/s | ~8,000 msg/s  | ✅      |
 
 **Notes:**
 - P1: Latency improved significantly after batch processor optimizations (removed unnecessary Spark actions, optimized shuffle partitions). The ~5-8 minute latency includes the 5-minute aggregation window for gold layer metrics.
-- P2: Normal throughput is ~1-2 msg/s with 4 sensor simulators. Using distributed in-cluster test clients (6 pods × 5000 msg/s), the system sustained ~30,000 msg/s with 0 errors. The bottleneck was client-side cluster CPU, not the ingestion pipeline, higher throughput is achievable with additional test nodes.
+- P2: Normal throughput is ~1-2 msg/s with 4 sensor simulators. Using distributed in-cluster test clients (6 pods × 5000 msg/s), the system was tested with a **send rate of ~30,000 msg/s**, but the actual **processed throughput topped at ~8,000 msg/s** as observed in Grafana. The gap between send and receive rates indicates a bottleneck at the MQTT broker or ingestor processing layer, not the test clients. The ~8,000 msg/s figure is the true end-to-end ingestion throughput.
 
 ---
 
