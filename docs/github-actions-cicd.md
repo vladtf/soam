@@ -209,7 +209,7 @@ az aks get-credentials --resource-group soam-rg --name soam-aks-cluster
 kubectl get pods -n soam
 
 # Check logs
-kubectl logs -f deployment/backend -n soam
+kubectl logs -f statefulset/backend -n soam
 
 # Set default namespace
 kubectl config set-context --current --namespace=soam
