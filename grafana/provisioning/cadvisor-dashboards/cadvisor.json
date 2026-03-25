@@ -197,7 +197,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_system_seconds_total[1m]))",
+          "expr": "sum(rate(container_cpu_system_seconds_total[5m]))",
           "hide": true,
           "intervalFactor": 2,
           "legendFormat": "a",
@@ -205,7 +205,7 @@
           "step": 120
         },
         {
-          "expr": "sum(rate(container_cpu_system_seconds_total{name=~\".+\"}[1m]))",
+          "expr": "sum(rate(container_cpu_system_seconds_total{name=~\".+\"}[5m]))",
           "hide": true,
           "interval": "",
           "intervalFactor": 2,
@@ -214,7 +214,7 @@
           "step": 10
         },
         {
-          "expr": "sum(rate(container_cpu_system_seconds_total{id=\"/\"}[1m]))",
+          "expr": "sum(rate(container_cpu_system_seconds_total{id=\"/\"}[5m]))",
           "hide": true,
           "interval": "",
           "intervalFactor": 2,
@@ -234,7 +234,7 @@
           "step": 4
         },
         {
-          "expr": "sum(rate(container_cpu_system_seconds_total{name=~\".+\"}[1m])) + sum(rate(container_cpu_system_seconds_total{id=\"/\"}[1m])) + sum(rate(process_cpu_seconds_total[1m]))",
+          "expr": "sum(rate(container_cpu_system_seconds_total{name=~\".+\"}[5m])) + sum(rate(container_cpu_system_seconds_total{id=\"/\"}[5m])) + sum(rate(process_cpu_seconds_total[5m]))",
           "hide": true,
           "intervalFactor": 2,
           "legendFormat": "",

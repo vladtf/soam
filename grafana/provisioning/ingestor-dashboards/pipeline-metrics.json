@@ -35,7 +35,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_messages_received_total[1m]))",
+          "expr": "sum(rate(ingestor_messages_received_total[5m]))",
           "legendFormat": "Total Received",
           "refId": "A"
         }
@@ -58,7 +58,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "rate(ingestor_messages_received_total[1m])",
+          "expr": "rate(ingestor_messages_received_total[5m])",
           "legendFormat": "{{pod}} - {{source_type}}",
           "refId": "A"
         }
@@ -81,7 +81,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_messages_processed_total[1m]))",
+          "expr": "sum(rate(ingestor_messages_processed_total[5m]))",
           "legendFormat": "Total Processed",
           "refId": "A"
         }
@@ -104,7 +104,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "100 * sum(rate(ingestor_messages_processed_total[1m])) / sum(rate(ingestor_messages_received_total[1m]))",
+          "expr": "100 * sum(rate(ingestor_messages_processed_total[5m])) / sum(rate(ingestor_messages_received_total[5m]))",
           "refId": "A"
         }
       ],
@@ -162,7 +162,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_bytes_received_total[1m]))",
+          "expr": "sum(rate(ingestor_bytes_received_total[5m]))",
           "legendFormat": "Bytes/sec",
           "refId": "A"
         }
@@ -182,7 +182,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(ingestor_files_written_total[1m]))",
+          "expr": "sum(rate(ingestor_files_written_total[5m]))",
           "legendFormat": "Files/sec",
           "refId": "A"
         }
@@ -208,17 +208,17 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(spark_batch_processing_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(spark_batch_processing_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(spark_batch_processing_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(spark_batch_processing_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(spark_batch_processing_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(spark_batch_processing_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -246,17 +246,17 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(pipeline_sensor_to_enrichment_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -279,17 +279,17 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(pipeline_sensor_to_gold_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -312,17 +312,17 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(pipeline_enrichment_to_gold_latency_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -345,12 +345,12 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(ingestor_timestamp_delay_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(ingestor_timestamp_delay_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(ingestor_timestamp_delay_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(ingestor_timestamp_delay_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         }
@@ -379,7 +379,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(enrichment_records_processed_total[1m]))",
+          "expr": "sum(rate(enrichment_records_processed_total[5m]))",
           "legendFormat": "Records/sec",
           "refId": "A"
         }
@@ -399,12 +399,12 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(spark_batches_processed_total{status=\"success\"}[1m]))",
+          "expr": "sum(rate(spark_batches_processed_total{status=\"success\"}[5m]))",
           "legendFormat": "Success",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(spark_batches_processed_total{status=\"failed\"}[1m]))",
+          "expr": "sum(rate(spark_batches_processed_total{status=\"failed\"}[5m]))",
           "legendFormat": "Failed",
           "refId": "B"
         }
@@ -462,7 +462,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum by (raw_key) (rate(normalization_rule_applied_total[1m]))",
+          "expr": "sum by (raw_key) (rate(normalization_rule_applied_total[5m]))",
           "legendFormat": "{{raw_key}}",
           "refId": "A"
         }
@@ -526,7 +526,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum by (error_type) (rate(ingestor_messages_failed_total[1m]))",
+          "expr": "sum by (error_type) (rate(ingestor_messages_failed_total[5m]))",
           "legendFormat": "{{error_type}}",
           "refId": "A"
         }
@@ -549,7 +549,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum by (status) (rate(computation_executions_total[1m]))",
+          "expr": "sum by (status) (rate(computation_executions_total[5m]))",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
