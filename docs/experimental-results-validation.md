@@ -617,6 +617,16 @@ The script automatically calculates the number of threads needed based on a cons
    python tests/perf_test_mqtt.py --rate 3000 --duration 6000
    ```
 
+   or run from k8s cluster:
+
+   ```powershell
+   # Copy script to simulator container and run
+   $TEMP_POD_ID = kubectl get pods -l app=simulator-temperature -o jsonpath="{.items[0].metadata.name}"
+   kubectl cp tests/perf_test_mqtt.py "${TEMP_POD_ID}:/tmp/perf_test_mqtt.py"
+   kubectl exec -it $TEMP_POD_ID -- python /tmp/perf_test_mqtt.py --rate 1000 --duration 600
+   ```
+
+
 3. **Distributed In-Cluster Test (Recommended for High Throughput)**:
 
    Use the `tests/perf/run-perf-test.ps1` script to deploy multiple parallel test pods directly in AKS. This eliminates local network overhead and scales horizontally:
