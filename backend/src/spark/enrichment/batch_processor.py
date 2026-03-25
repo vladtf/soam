@@ -58,13 +58,14 @@ class BatchProcessor:
             filtered_df = self._apply_transformations(filtered_df)
 
             # Step 5: Write to Delta (SPARK ACTION - main write operation)
-            self._write_to_delta(filtered_df)
+            record_count = self._write_to_delta(filtered_df)
 
-            logger.info("Union enrichment: wrote data to enriched")
+            logger.info("Union enrichment: wrote %d records to enriched", record_count)
             
             # Record metrics for successful batch processing
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=True)
+            backend_metrics.record_enrichment_records("all", record_count)
             
             # Record batch processing time as sensor-to-enrichment latency estimate
             # This represents the time from batch trigger to write completion
@@ -104,17 +105,23 @@ class BatchProcessor:
             return filtered_df
 
     @profile_step(MODULE, "5_write_delta")
-    def _write_to_delta(self, filtered_df: DataFrame) -> None:
+    def _write_to_delta(self, filtered_df: DataFrame) -> int:
         """Write filtered dataframe to Delta storage.
         
         Args:
             filtered_df: Filtered DataFrame to write
+            
+        Returns:
+            Number of records written
         """
         # Add enrichment_timestamp to track when data was processed by Spark
         enriched_df = filtered_df.withColumn(
             "enrichment_timestamp",
             F.current_timestamp()
         )
+        
+        # Cache to avoid recomputation for count after write
+        enriched_df.cache()
         
         (
             enriched_df.write
@@ -125,3 +132,7 @@ class BatchProcessor:
             .partitionBy("ingestion_id")
             .save()
         )
+        
+        record_count = enriched_df.count()
+        enriched_df.unpersist()
+        return record_count
