@@ -62,7 +62,7 @@ $manifest = $manifest -replace '"1500"', "`"$Rate`""
 $manifest = $manifest -replace '"120"', "`"$Duration`""
 $manifest = $manifest -replace '"10"', "`"$Threads`""
 
-$manifest | kubectl apply -f -
+$manifest | kubectl apply -n $Namespace -f -
 if ($LASTEXITCODE -ne 0) { Write-Host "Failed to create Job" -ForegroundColor Red; exit 1 }
 
 # Step 4: Wait for pods to start

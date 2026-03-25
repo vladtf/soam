@@ -2,7 +2,6 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: mqtt-perf-test
-  namespace: soam
 spec:
   parallelism: 2
   completions: 2
