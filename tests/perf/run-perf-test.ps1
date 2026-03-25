@@ -16,12 +16,12 @@ param(
     [int]$Pods = 2,
     [int]$Rate = 1500,
     [int]$Duration = 300,
-    [int]$Threads = 10
+    [int]$Threads = 10,
+    [string]$Namespace = "soam"
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$Namespace = "soam"
 $JobName = "mqtt-perf-test"
 $ConfigMapName = "perf-test-script"
 $ScriptPath = "$PSScriptRoot\..\..\tests\perf_test_mqtt.py"
