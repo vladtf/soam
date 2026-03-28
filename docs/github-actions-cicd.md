@@ -6,16 +6,25 @@ CI/CD for SOAM uses four **manual** GitHub Actions workflows that deploy to Azur
 
 ## Table of Contents
 
-- [Quick Reference](#quick-reference)
-- [Deployment Flow](#deployment-flow)
-- [Workflows](#workflows)
-  - [1️⃣ Deploy Infrastructure](#1️⃣-deploy-infrastructure)
-  - [2️⃣ Deploy Application](#2️⃣-deploy-application)
-  - [3️⃣ Update Images](#3️⃣-update-images)
-  - [4️⃣ Cleanup (Destroy All)](#4️⃣-cleanup-destroy-all)
-- [Initial Setup (One-Time)](#initial-setup-one-time)
-- [Docker Caching](#docker-caching)
-- [Troubleshooting](#troubleshooting)
+- [GitHub Actions CI/CD Pipeline](#github-actions-cicd-pipeline)
+  - [Table of Contents](#table-of-contents)
+  - [Quick Reference](#quick-reference)
+  - [Deployment Flow](#deployment-flow)
+  - [Workflows](#workflows)
+    - [1️⃣ Deploy Infrastructure](#1️⃣-deploy-infrastructure)
+    - [2️⃣ Deploy Application](#2️⃣-deploy-application)
+    - [3️⃣ Update Images](#3️⃣-update-images)
+    - [4️⃣ Cleanup (Destroy All)](#4️⃣-cleanup-destroy-all)
+  - [Initial Setup (One-Time)](#initial-setup-one-time)
+    - [Step 1: Create Azure Service Principal](#step-1-create-azure-service-principal)
+    - [Step 2: Configure GitHub Secret](#step-2-configure-github-secret)
+  - [Docker Caching](#docker-caching)
+  - [Troubleshooting](#troubleshooting)
+    - [Check Deployment Status](#check-deployment-status)
+    - ["Resource already exists" Error](#resource-already-exists-error)
+    - [Image Push Failures](#image-push-failures)
+    - [Terraform State Lock](#terraform-state-lock)
+    - [Terraform State Storage](#terraform-state-storage)
 
 ---
 
