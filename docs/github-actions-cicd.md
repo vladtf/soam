@@ -36,7 +36,7 @@ gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
 gh workflow run "2️⃣ Deploy Application"; gh run watch
 
 # Deploy with custom infrastructure parameters
-gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_E2s_v3 -f aks_node_count=4; gh run watch
+gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_D4s_v5 -f aks_node_count=4; gh run watch
 
 # Update specific services (no infra changes needed)
 gh workflow run "3️⃣ Update Images" -f images=backend,ingestor; gh run watch
@@ -78,7 +78,7 @@ Creates the foundational Azure resources using Terraform.
 gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
 
 # With custom VM size
-gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_E2s_v3; gh run watch
+gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_D4s_v5 -f aks_node_count=4; gh run watch
 ```
 
 ---
