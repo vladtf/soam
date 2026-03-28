@@ -1,46 +1,147 @@
-# GitHub Actions CI/CD Pipeline Setup
+# GitHub Actions CI/CD Pipeline
 
-This document describes how to set up and use the GitHub Actions CI/CD pipelines for SOAM.
+CI/CD for SOAM uses four **manual** GitHub Actions workflows that deploy to Azure (AKS + ACR) via Terraform.
 
-## Overview
+---
 
-The CI/CD pipeline consists of four manual workflows:
+## Table of Contents
 
-| Workflow | Purpose |
-|----------|---------|
-| **1️⃣ Deploy Infrastructure** | Create Azure resources (AKS + ACR) via Terraform |
-| **2️⃣ Deploy Application** | Build images + deploy K8s resources via Terraform |
-| **3️⃣ Update Images** | Rebuild specific images and restart pods |
-| **4️⃣ Cleanup (Destroy All)** | Delete all Azure resources |
+- [Quick Reference](#quick-reference)
+- [Deployment Flow](#deployment-flow)
+- [Workflows](#workflows)
+  - [1️⃣ Deploy Infrastructure](#1️⃣-deploy-infrastructure)
+  - [2️⃣ Deploy Application](#2️⃣-deploy-application)
+  - [3️⃣ Update Images](#3️⃣-update-images)
+  - [4️⃣ Cleanup (Destroy All)](#4️⃣-cleanup-destroy-all)
+- [Initial Setup (One-Time)](#initial-setup-one-time)
+- [Docker Caching](#docker-caching)
+- [Troubleshooting](#troubleshooting)
 
-## Prerequisites
+---
 
-### 1. Create Azure Service Principal
+## Quick Reference
 
-You can use the setup script or create manually:
+```powershell
+# Full deployment from scratch (run in order)
+gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
+gh workflow run "2️⃣ Deploy Application"; gh run watch
 
-**Option A: Use Setup Script (Recommended)**
+# Deploy with custom infrastructure parameters
+gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_E2s_v3 -f aks_node_count=4; gh run watch
+
+# Update specific services (no infra changes needed)
+gh workflow run "3️⃣ Update Images" -f images=backend,ingestor; gh run watch
+
+# Tear down everything
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY; gh run watch
+```
+
+---
+
+## Deployment Flow
+
+Run the workflows in this order for a fresh deployment:
+
+```
+1️⃣ Deploy Infrastructure  ──►  2️⃣ Deploy Application  ──►  3️⃣ Update Images (as needed)
+   (AKS + ACR)                   (Build + K8s deploy)         (Rebuild specific pods)
+```
+
+After the initial setup, use **3️⃣ Update Images** to push changes without redeploying infrastructure.
+
+---
+
+## Workflows
+
+### 1️⃣ Deploy Infrastructure
+
+Creates the foundational Azure resources using Terraform.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `location` | West Europe | Azure region |
+| `aks_node_count` | 3 | Number of AKS nodes |
+| `aks_vm_size` | Standard_B2s | AKS node VM size |
+
+**Creates:** Resource Group (`soam-rg`) · Container Registry (ACR) · Kubernetes Service (AKS)
+
+```powershell
+gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
+
+# With custom VM size
+gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_E2s_v3; gh run watch
+```
+
+---
+
+### 2️⃣ Deploy Application
+
+Builds all Docker images, pushes to ACR, and deploys Kubernetes resources.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `skip_image_build` | false | Skip building images, use existing |
+
+**Steps:** Get infra info from Terraform → Build & push images to ACR → Deploy K8s resources
+
+```powershell
+gh workflow run "2️⃣ Deploy Application"; gh run watch
+```
+
+---
+
+### 3️⃣ Update Images
+
+Rebuilds specific images and optionally restarts the corresponding pods.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `images` | backend,frontend,ingestor | Comma-separated list of images to rebuild |
+| `restart_pods` | true | Restart pods after push |
+
+**Available images:** `backend` · `frontend` · `ingestor` · `spark` · `simulator` · `rest-api-simulator` · `mosquitto` · `grafana` · `prometheus`
+
+```powershell
+gh workflow run "3️⃣ Update Images" -f images=backend,frontend -f restart_pods=true; gh run watch
+```
+
+---
+
+### 4️⃣ Cleanup (Destroy All)
+
+> ⚠️ **DANGER**: Destroys all Azure resources. This cannot be undone.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `confirm` | *(required)* | Must type `DESTROY` to proceed |
+| `delete_step` | all | What to delete: `all`, `kubernetes-only`, `infrastructure-only` |
+
+```powershell
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY -f delete_step=all; gh run watch
+```
+
+---
+
+## Initial Setup (One-Time)
+
+Before running any workflow, you need an Azure Service Principal and a GitHub secret.
+
+### Step 1: Create Azure Service Principal
+
+**Option A: Setup Script (Recommended)**
+
 ```powershell
 .\scripts\setup-github-actions.ps1 -GitHubRepo "vladtf/soam"
 ```
 
-This script will:
-- Create an Azure Service Principal
-- Output the JSON credentials for GitHub
-- Optionally set the secret automatically (if GitHub CLI is installed)
+This creates the service principal and optionally sets the GitHub secret automatically.
 
-**Option B: Create Manually**
-
-Create a service principal for GitHub Actions to authenticate with Azure:
+**Option B: Manual**
 
 ```bash
-# Login to Azure
 az login
-
-# Get your subscription ID
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 
-# Create service principal with Contributor role on subscription level
 az ad sp create-for-rbac \
   --name "soam-github-actions" \
   --role contributor \
@@ -48,220 +149,95 @@ az ad sp create-for-rbac \
   --sdk-auth
 ```
 
-Save the JSON output - you'll need it for the `AZURE_CREDENTIALS` secret.
+Save the JSON output for the next step.
+
+### Step 2: Configure GitHub Secret
+
+Go to **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
+
+| Secret Name | Value |
+|-------------|-------|
+| `AZURE_CREDENTIALS` | Service principal JSON from Step 1 |
 
 > [!TIP]
-> To check existing secrets via GitHub CLI:
-> ```bash
-> gh secret list
-> ```
+> Verify secrets: `gh secret list`
 
-### 2. Configure GitHub Secrets
-
-Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
-
-| Secret Name | Description |
-|-------------|-------------|
-| `AZURE_CREDENTIALS` | Service principal JSON from step above |
-
-## Workflows
-
-### 1️⃣ Deploy Infrastructure
-
-Creates the foundational Azure resources using Terraform Step 1.
-
-**Parameters:**
-- `location`: Azure region (default: West Europe)
-- `aks_node_count`: Number of AKS nodes (default: 3)
-
-**What it creates:**
-- Azure Resource Group (`soam-rg`)
-- Azure Container Registry (ACR)
-- Azure Kubernetes Service (AKS)
-
-```powershell
-gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
-```
-
-### 2️⃣ Deploy Application
-
-Builds all Docker images, pushes to ACR, and deploys Kubernetes resources.
-
-**Parameters:**
-- `skip_image_build`: Skip building images, use existing (default: false)
-
-**What it does:**
-1. Gets infrastructure info from Terraform Step 1
-2. Builds and pushes all service images to ACR
-3. Deploys all Kubernetes resources via Terraform Step 2
-
-```powershell
-gh workflow run "2️⃣ Deploy Application"; gh run watch
-```
-
-### 3️⃣ Update Images
-
-Rebuilds specific images and optionally restarts the corresponding pods.
-
-**Parameters:**
-- `images`: Comma-separated list of images (default: backend,frontend,ingestor)
-- `restart_pods`: Restart pods after push (default: true)
-
-**Available images:**
-- `backend`, `frontend`, `ingestor`
-- `spark`, `simulator`, `rest-api-simulator`
-- `mosquitto`, `grafana`, `prometheus`
-
-```powershell
-gh workflow run "3️⃣ Update Images" -f images=backend,frontend -f restart_pods=true; gh run watch
-```
-
-### 4️⃣ Cleanup (Destroy All)
-
-⚠️ **DANGER**: Destroys all Azure resources!
-
-**Parameters:**
-- `confirm`: Must type "DESTROY" to proceed
-- `delete_step`: What to delete (all, kubernetes-only, infrastructure-only)
-
-```powershell
-gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY -f delete_step=all; gh run watch
-```
-
-## Deployment Flow
-
-```
-┌─────────────────────────────────────┐
-│  1️⃣ Deploy Infrastructure           │
-│  (Creates AKS + ACR)                │
-└─────────────────┬───────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────┐
-│  2️⃣ Deploy Application              │
-│  (Builds images + K8s resources)   │
-└─────────────────┬───────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────┐
-│  3️⃣ Update Images (as needed)       │
-│  (Rebuild + restart specific pods) │
-└─────────────────────────────────────┘
-```
+---
 
 ## Docker Caching
 
-Images use ACR registry caching for faster builds:
+All image builds use ACR registry caching for faster rebuilds:
 
 ```yaml
 cache-from: type=registry,ref=acr.azurecr.io/image:buildcache
 cache-to: type=registry,ref=acr.azurecr.io/image:buildcache,mode=max
 ```
 
-**Benefits:**
-- Shared across all workflow runs
-- Persists indefinitely in ACR
-- Significantly faster rebuilds
+Caches are shared across workflow runs and persist indefinitely in ACR.
+
+---
 
 ## Troubleshooting
-
-### "Resource already exists" Error
-
-If you see an error like:
-```
-Error: A resource with the ID "..." already exists - to be managed via Terraform this resource needs to be imported into the State.
-```
-
-This happens when Azure resources exist but Terraform doesn't know about them (state mismatch). Solutions:
-
-**Option A: Delete existing resources (recommended for fresh start)**
-```bash
-# Delete the resource group and all contents
-az group delete --name soam-rg --yes --no-wait
-
-# Wait for deletion to complete
-az group wait --name soam-rg --deleted
-
-# Then re-run the workflow
-```
-
-**Option B: Import existing resources into state**
-
-This is complex and requires running Terraform locally. See [Terraform Import](https://developer.hashicorp.com/terraform/cli/import) documentation.
-
-### Terraform State
-
-The workflows use Azure Storage to persist Terraform state:
-- **Resource Group:** `soam-tfstate-rg`
-- **Storage Account:** `soamtfstate<subscription-id-prefix>`
-- **Container:** `tfstate`
-- **State files:** `01-infrastructure.tfstate`, `02-kubernetes.tfstate`
-
-This ensures state persists across workflow runs and multiple team members can deploy.
 
 ### Check Deployment Status
 
 ```bash
-# Get AKS credentials
 az aks get-credentials --resource-group soam-rg --name soam-aks-cluster
-
-# Check pods
-kubectl get pods -n soam
-
-# Check logs
-kubectl logs -f statefulset/backend -n soam
-
-# Set default namespace
 kubectl config set-context --current --namespace=soam
+kubectl get pods -n soam
+kubectl logs -f statefulset/backend -n soam
 ```
+
+### "Resource already exists" Error
+
+Azure resources exist but Terraform state doesn't track them. Fix by deleting and recreating:
+
+```bash
+az group delete --name soam-rg --yes --no-wait
+az group wait --name soam-rg --deleted
+# Then re-run the Deploy Infrastructure workflow
+```
+
+Alternatively, [import resources into Terraform state](https://developer.hashicorp.com/terraform/cli/import) (advanced).
 
 ### Image Push Failures
 
 ```bash
-# Check ACR permissions
 az aks check-acr --name soam-aks-cluster --resource-group soam-rg --acr <acr-name>.azurecr.io
 ```
 
-### Terraform State Issues
+### Terraform State Lock
 
-If Terraform state gets corrupted, you may need to:
-1. Delete state files in the GitHub runner (they're ephemeral anyway)
-2. Import existing resources or destroy and recreate
+If a workflow fails mid-run, the state blob may stay locked:
 
-### Terraform State Lock Issues
-
-If a workflow fails while holding the state lock, you'll see an error like:
 ```
 Error: Error acquiring the state lock
 Error message: state blob is already locked
 ```
 
-The workflows now **automatically release the lock on failure**, but if you need to manually unlock:
+Locks are **auto-released on failure**, but to manually unlock:
 
 ```powershell
-# Login to Azure
 az login --tenant a0867c7c-7aeb-44cb-96ed-32fa642ebe73
 
-# Break the lease on the locked state file (replace filename as needed)
-# For kubernetes state:
+# Unlock kubernetes state
 az storage blob lease break --blob-name "02-kubernetes.tfstate" --container-name "tfstate" --account-name "soamtfstate60344ef8" --auth-mode key
 
-# For infrastructure state:
+# Unlock infrastructure state
 az storage blob lease break --blob-name "01-infrastructure.tfstate" --container-name "tfstate" --account-name "soamtfstate60344ef8" --auth-mode key
 ```
 
 > **Note:** Replace `soamtfstate60344ef8` with your actual storage account name (first 8 chars of subscription ID).
 
-## Quick Reference
+### Terraform State Storage
 
-```powershell
-# Deploy everything from scratch
-gh workflow run "1️⃣ Deploy Infrastructure"; gh run watch
-gh workflow run "2️⃣ Deploy Application"; gh run watch
+State is persisted in Azure Storage so it survives across workflow runs:
 
-# Update specific services
-gh workflow run "3️⃣ Update Images" -f images=backend,ingestor; gh run watch
+| Resource | Value |
+|----------|-------|
+| Resource Group | `soam-tfstate-rg` |
+| Storage Account | `soamtfstate<subscription-id-prefix>` |
+| Container | `tfstate` |
+| State files | `01-infrastructure.tfstate`, `02-kubernetes.tfstate` |
 
-# Destroy everything
-gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY; gh run watch
-```
+If state gets corrupted, delete the state files (runners are ephemeral) and either import existing resources or destroy and recreate.
