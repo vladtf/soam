@@ -248,24 +248,7 @@ resource "kubernetes_persistent_volume_claim" "backend_db" {
   wait_until_bound = false # Don't wait - storage class uses WaitForFirstConsumer
 }
 
-resource "kubernetes_persistent_volume_claim" "ingestor_db" {
-  metadata {
-    name      = "ingestor-db-pvc"
-    namespace = kubernetes_namespace.soam.metadata[0].name
-  }
 
-  spec {
-    access_modes = ["ReadWriteOnce"]
-    resources {
-      requests = {
-        storage = "1Gi"
-      }
-    }
-    storage_class_name = "managed-premium"
-  }
-
-  wait_until_bound = false # Don't wait - storage class uses WaitForFirstConsumer
-}
 
 # =============================================================================
 # Mosquitto MQTT Broker
@@ -820,9 +803,7 @@ resource "kubernetes_deployment" "ingestor" {
 
         volume {
           name = "ingestor-db"
-          persistent_volume_claim {
-            claim_name = kubernetes_persistent_volume_claim.ingestor_db.metadata[0].name
-          }
+          empty_dir {}
         }
       }
     }

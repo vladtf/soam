@@ -51,8 +51,7 @@ spec:
               value: minio123
       volumes:
         - name: ingestor-db
-          persistentVolumeClaim:
-            claimName: ingestor-db-pvc
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
