@@ -34,7 +34,7 @@ class SparkConfig:
     # Enrichment stream trigger - more frequent for lower latency
     ENRICH_STREAM_TRIGGER = "10 seconds"
     # Increased files per trigger for higher throughput under load
-    MAX_FILES_PER_TRIGGER = 100
+    MAX_FILES_PER_TRIGGER = 500
     # Watermark delay - using ingest_ts (processing time) instead of event_time
     # so this only needs to handle normal processing delays, not restart scenarios
     WATERMARK_DELAY = "2 minutes"

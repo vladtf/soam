@@ -15,7 +15,7 @@
 param(
     [int]$Pods = 2,
     [int]$Rate = 1500,
-    [int]$Duration = 300,
+    [int]$Duration = 3000,
     [int]$Threads = 10,
     [string]$Namespace = "soam"
 )
@@ -59,7 +59,7 @@ $manifest = Get-Content $JobManifest -Raw
 $manifest = $manifest -replace 'parallelism: 2', "parallelism: $Pods"
 $manifest = $manifest -replace 'completions: 2', "completions: $Pods"
 $manifest = $manifest -replace '"1500"', "`"$Rate`""
-$manifest = $manifest -replace '"120"', "`"$Duration`""
+$manifest = $manifest -replace '"300"', "`"$Duration`""
 $manifest = $manifest -replace '"10"', "`"$Threads`""
 
 $manifest | kubectl apply -n $Namespace -f -
