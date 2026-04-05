@@ -65,43 +65,14 @@ class BatchProcessor:
 
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=True)
-            backend_metrics.record_sensor_to_enrichment_latency(batch_time)
-            
+            backend_metrics.record_enrichment_records("all", filtered_df.count())
             logger.info("✅ Union enrichment batch %s written in %.1fs", batch_id, batch_time)
-
-            # Collect record count metrics in background (doesn't block next batch)
-            spark = filtered_df.sparkSession
-            self._collect_metrics_async(spark, batch_id)
 
         except Exception as e:
             logger.error(f"Error in union enrichment foreachBatch: {e}")
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=False)
 
-    def _collect_metrics_async(self, spark, batch_id: int) -> None:
-        """Read record count from Delta log in a background thread."""
-        def _read_delta_metrics():
-            try:
-                log_path = f"{self.enriched_path}/_delta_log"
-                commits = spark.read.json(log_path)
-                if "commitInfo" in commits.columns:
-                    row = (
-                        commits.filter(F.col("commitInfo").isNotNull())
-                        .orderBy(F.col("commitInfo.timestamp").desc())
-                        .select(F.col("commitInfo.operationMetrics.numOutputRows"))
-                        .first()
-                    )
-                    if row and row[0] is not None:
-                        record_count = int(row[0])
-                        backend_metrics.record_enrichment_records("all", record_count)
-                        logger.info("📊 Batch %s metrics: %d records enriched", batch_id, record_count)
-                        return
-                logger.warning("⚠️ Batch %s: could not extract record count from Delta log", batch_id)
-            except Exception as e:
-                logger.warning("⚠️ Batch %s metrics collection failed: %s", batch_id, e)
-        
-        t = threading.Thread(target=_read_delta_metrics, daemon=True)
-        t.start()
 
     @profile_step(MODULE, "1_get_allowed_ids")
     def _get_allowed_ids(self) -> Tuple[Set[str], bool]:
