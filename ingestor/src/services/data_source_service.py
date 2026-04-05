@@ -312,12 +312,15 @@ class DataSourceRegistry:
             return False
     
     def _generate_ingestion_id(self, name: str, type_name: str) -> str:
-        """Generate unique ingestion ID."""
-        # Sanitize name
+        """Generate deterministic ingestion ID from name and type.
+        
+        The ID is stable across pods and restarts so that duplicate
+        data-source registrations for the same (name, type) pair always
+        produce the same ingestion_id, even when each pod has its own DB.
+        """
         sanitized = re.sub(r"[^a-zA-Z0-9]+", "_", name.lower().strip())
-        # Add type prefix and hash for uniqueness
-        timestamp = int(datetime.utcnow().timestamp())
-        unique_part = hashlib.md5(f"{name}_{type_name}_{timestamp}".encode()).hexdigest()[:8]
+        # Hash is based only on name + type — no timestamp, so it's deterministic
+        unique_part = hashlib.md5(f"{name}_{type_name}".encode()).hexdigest()[:8]
         return f"{unique_part}_{sanitized}_{type_name}"
 
 
