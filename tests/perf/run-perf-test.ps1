@@ -4,6 +4,7 @@
 # Usage:
 #   .\tests\perf\run-perf-test.ps1                                # defaults: 2 pods, 1500 rate, 300s, 10 threads
 #   .\tests\perf\run-perf-test.ps1 -Pods 4 -Rate 1000 -Duration 600
+#   .\tests\perf\run-perf-test.ps1 -Local -Namespace default      # local cluster (uses localhost registry)
 #
 # Aditionally you can scale down the pods that are not required for the test to free up cluster resources, e.g.:
 #  kubectl scale deploy -n soam frontend cadvisor grafana prometheus neo4j simulator-temperature --replicas=0
@@ -17,7 +18,8 @@ param(
     [int]$Rate = 1500,
     [int]$Duration = 3000,
     [int]$Threads = 10,
-    [string]$Namespace = "soam"
+    [string]$Namespace = "soam",
+    [switch]$Local
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,6 +63,9 @@ $manifest = $manifest -replace 'completions: 2', "completions: $Pods"
 $manifest = $manifest -replace '"1500"', "`"$Rate`""
 $manifest = $manifest -replace '"300"', "`"$Duration`""
 $manifest = $manifest -replace '"10"', "`"$Threads`""
+if ($Local) {
+    $manifest = $manifest -replace 'soamregistry\.azurecr\.io/simulator:latest', 'localhost:5000/soam/simulator:latest'
+}
 
 $manifest | kubectl apply -n $Namespace -f -
 if ($LASTEXITCODE -ne 0) { Write-Host "Failed to create Job" -ForegroundColor Red; exit 1 }
