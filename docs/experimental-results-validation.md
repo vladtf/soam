@@ -763,6 +763,14 @@ The rate drops had 0 errors and the average rate remained above 4850 msg/s per p
 - Grafana Ingestor Throughput Dashboard:
    <img src="assets/ingestor-throughput-grafana.png" alt="Ingestor Throughput Grafana Dashboard" width="80%"/>
 
+**Enrichment Throughput (Bronze → Silver):**
+
+Under the same sustained load, the Spark enrichment pipeline (Bronze → Silver layer) achieved a maximum throughput of **~2,000 records/second**. With a 5-second trigger interval, Spark processes ~6k–12k records per micro-batch in 0.8–4.2s. The gap between ingestion (~8,000 msg/s) and enrichment (~2,000 rec/s) is due to MinIO I/O overhead (Parquet read + Delta write with schema merge per batch).
+
+- Enrichment Throughput Dashboard:
+
+  <img src="assets/enrichment-throughput.png" alt="Enrichment Throughput" width="80%"/>
+
 #### Key Files
 - `tests/perf_test_mqtt.py` - MQTT throughput test script with rate limiting
 - `tests/perf/run-perf-test.ps1` - Distributed AKS perf test runner
@@ -783,11 +791,11 @@ The rate drops had 0 errors and the average rate remained above 4850 msg/s per p
 | R2  | Retention Policies | Functional          | Operational | Verified   | ✅      |
 | R3  | Data Labeling      | Functional          | Operational | Verified   | ✅      |
 | P1  | End-to-End Latency | Sensor → Gold (p95) | < 5 min     | ~5-8 min   | ✅      |
-| P2  | Ingestion          | Throughput          | > 1000 msg/s | ~8,000 msg/s  | ✅      |
+| P2  | Ingestion          | Throughput          | > 1000 msg/s | ~8,000 msg/s (ingest), ~2,000 rec/s (enrich) | ✅      |
 
 **Notes:**
 - P1: Latency improved significantly after batch processor optimizations (removed unnecessary Spark actions, optimized shuffle partitions). The ~5-8 minute latency includes the 5-minute aggregation window for gold layer metrics.
-- P2: Normal throughput is ~1-2 msg/s with 4 sensor simulators. Using distributed in-cluster test clients (6 pods × 5000 msg/s), the system was tested with a **send rate of ~30,000 msg/s**, but the actual **processed throughput topped at ~8,000 msg/s** as observed in Grafana. The gap between send and receive rates indicates a bottleneck at the MQTT broker or ingestor processing layer, not the test clients. The ~8,000 msg/s figure is the true end-to-end ingestion throughput.
+- P2: Normal throughput is ~1-2 msg/s with 4 sensor simulators. Using distributed in-cluster test clients (6 pods × 5000 msg/s), the system was tested with a **send rate of ~30,000 msg/s**, but the actual **processed throughput topped at ~8,000 msg/s** as observed in Grafana. The gap between send and receive rates indicates a bottleneck at the MQTT broker or ingestor processing layer, not the test clients. The ~8,000 msg/s figure is the true end-to-end ingestion throughput. The Spark enrichment pipeline (Bronze → Silver) reached ~2,000 rec/s with optimized batch processing (async metrics collection, 5-second trigger interval). The gap between ingestion and enrichment throughput is due to MinIO I/O overhead in the Bronze → Silver pipeline (Parquet read + Delta write with schema merge).
 
 ---
 
