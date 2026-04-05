@@ -31,8 +31,8 @@ class SparkConfig:
     # Stream processing settings (tuned for high throughput)
     TEMPERATURE_STREAM_TRIGGER = "15 seconds"
     ALERT_STREAM_TRIGGER = "15 seconds"
-    # Enrichment stream trigger - more frequent for lower latency
-    ENRICH_STREAM_TRIGGER = "10 seconds"
+    # Enrichment stream trigger - tuned for high throughput (batch takes ~3s)
+    ENRICH_STREAM_TRIGGER = "5 seconds"
     # Increased files per trigger for higher throughput under load
     MAX_FILES_PER_TRIGGER = 500
     # Watermark delay - using ingest_ts (processing time) instead of event_time

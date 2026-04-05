@@ -666,19 +666,19 @@ resource "helm_release" "spark" {
   }
   set {
     name  = "master.resources.requests.cpu"
-    value = "500m"
-  }
-  set {
-    name  = "master.resources.requests.memory"
-    value = "1Gi"
-  }
-  set {
-    name  = "master.resources.limits.cpu"
     value = "1"
   }
   set {
-    name  = "master.resources.limits.memory"
+    name  = "master.resources.requests.memory"
     value = "2Gi"
+  }
+  set {
+    name  = "master.resources.limits.cpu"
+    value = "2"
+  }
+  set {
+    name  = "master.resources.limits.memory"
+    value = "4Gi"
   }
   set {
     name  = "worker.replicaCount"
@@ -694,19 +694,19 @@ resource "helm_release" "spark" {
   }
   set {
     name  = "worker.resources.requests.cpu"
-    value = "500m"
-  }
-  set {
-    name  = "worker.resources.requests.memory"
-    value = "1Gi"
-  }
-  set {
-    name  = "worker.resources.limits.cpu"
     value = "2"
   }
   set {
-    name  = "worker.resources.limits.memory"
+    name  = "worker.resources.requests.memory"
     value = "4Gi"
+  }
+  set {
+    name  = "worker.resources.limits.cpu"
+    value = "4"
+  }
+  set {
+    name  = "worker.resources.limits.memory"
+    value = "8Gi"
   }
   set {
     name  = "image.registry"

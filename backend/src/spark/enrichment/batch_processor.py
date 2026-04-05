@@ -2,6 +2,7 @@
 Batch processing logic for enrichment streams.
 """
 import logging
+import threading
 import time
 from typing import Set, Tuple
 from pyspark.sql import DataFrame
@@ -34,6 +35,8 @@ class BatchProcessor:
         """Process a batch of enrichment data.
         
         Optimized to minimize Spark actions (each action = expensive job with shuffle).
+        Metric collection (record count) is decoupled into a background thread
+        so it doesn't block the next batch trigger.
         
         Args:
             batch_df: Input DataFrame
@@ -57,25 +60,48 @@ class BatchProcessor:
             # Step 4: Apply value transformations (lazy - builds execution plan)
             filtered_df = self._apply_transformations(filtered_df)
 
-            # Step 5: Write to Delta (SPARK ACTION - main write operation)
-            record_count = self._write_to_delta(filtered_df)
+            # Step 5: Write to Delta (SPARK ACTION - the only action in the batch)
+            self._write_to_delta(filtered_df)
 
-            logger.info("Union enrichment: wrote %d records to enriched", record_count)
-            
-            # Record metrics for successful batch processing
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=True)
-            backend_metrics.record_enrichment_records("all", record_count)
-            
-            # Record batch processing time as sensor-to-enrichment latency estimate
-            # This represents the time from batch trigger to write completion
             backend_metrics.record_sensor_to_enrichment_latency(batch_time)
+            
+            logger.info("✅ Union enrichment batch %s written in %.1fs", batch_id, batch_time)
+
+            # Collect record count metrics in background (doesn't block next batch)
+            spark = filtered_df.sparkSession
+            self._collect_metrics_async(spark, batch_id)
 
         except Exception as e:
             logger.error(f"Error in union enrichment foreachBatch: {e}")
-            # Record failed batch
             batch_time = time.time() - batch_start_time
             backend_metrics.record_spark_batch("enrichment", batch_time, success=False)
+
+    def _collect_metrics_async(self, spark, batch_id: int) -> None:
+        """Read record count from Delta log in a background thread."""
+        def _read_delta_metrics():
+            try:
+                log_path = f"{self.enriched_path}/_delta_log"
+                commits = spark.read.json(log_path)
+                if "commitInfo" in commits.columns:
+                    row = (
+                        commits.filter(F.col("commitInfo").isNotNull())
+                        .orderBy(F.col("commitInfo.timestamp").desc())
+                        .select(F.col("commitInfo.operationMetrics.numOutputRows"))
+                        .first()
+                    )
+                    if row and row[0] is not None:
+                        record_count = int(row[0])
+                        backend_metrics.record_enrichment_records("all", record_count)
+                        logger.info("📊 Batch %s metrics: %d records enriched", batch_id, record_count)
+                        return
+                logger.warning("⚠️ Batch %s: could not extract record count from Delta log", batch_id)
+            except Exception as e:
+                logger.warning("⚠️ Batch %s metrics collection failed: %s", batch_id, e)
+        
+        t = threading.Thread(target=_read_delta_metrics, daemon=True)
+        t.start()
 
     @profile_step(MODULE, "1_get_allowed_ids")
     def _get_allowed_ids(self) -> Tuple[Set[str], bool]:
@@ -105,24 +131,17 @@ class BatchProcessor:
             return filtered_df
 
     @profile_step(MODULE, "5_write_delta")
-    def _write_to_delta(self, filtered_df: DataFrame) -> int:
+    def _write_to_delta(self, filtered_df: DataFrame) -> None:
         """Write filtered dataframe to Delta storage.
         
         Args:
             filtered_df: Filtered DataFrame to write
-            
-        Returns:
-            Number of records written
         """
-        # Add enrichment_timestamp to track when data was processed by Spark
         enriched_df = filtered_df.withColumn(
             "enrichment_timestamp",
             F.current_timestamp()
         )
-        
-        # Cache to avoid recomputation for count after write
-        enriched_df.cache()
-        
+
         (
             enriched_df.write
             .format("delta")
@@ -132,7 +151,3 @@ class BatchProcessor:
             .partitionBy("ingestion_id")
             .save()
         )
-        
-        record_count = enriched_df.count()
-        enriched_df.unpersist()
-        return record_count
