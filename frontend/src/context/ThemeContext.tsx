@@ -24,7 +24,7 @@ function getInitialMode(): ThemeMode {
     } catch {
         // ignore
     }
-    return 'auto';
+    return 'light';
 }
 
 function getSystemTheme(): Theme {
