@@ -37,6 +37,7 @@ gh workflow run "2️⃣ Deploy Application"; gh run watch
 
 # Deploy with custom infrastructure parameters
 gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_D4s_v5 -f aks_node_count=3; gh run watch
+gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_D8s_v5 -f aks_node_count=2; gh run watch
 
 # Update specific services (no infra changes needed)
 gh workflow run "3️⃣ Update Images" -f images=backend,ingestor; gh run watch

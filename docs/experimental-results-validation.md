@@ -527,7 +527,7 @@ Status Code: 400
 | **Mechanism** | End-to-End Pipeline         |
 | **Metric**    | Sensor → Gold Layer Latency |
 | **Target**    | < 5 minutes (p95)           |
-| **Result**    | ✅ ~5-8 minutes (p95)        |
+| **Result**    | ✅ ~2 minutes (p95)          |
 
 #### Test Procedure
 
@@ -560,7 +560,7 @@ The dashboard shows three latency metrics with p50, p95, and p99 percentiles:
 | Metric                         | p50    | p95    | p99    |
 | ------------------------------ | ------ | ------ | ------ |
 | Sensor → Enrichment Latency    | ~3s    | ~5s    | ~8s    |
-| Sensor → Gold Layer Latency    | ~3 min | ~5 min | ~8 min |
+| Sensor → Gold Layer Latency    | ~1 min | ~2 min | ~3 min |
 | Sensor → Ingestor Delay        | ~10s   | ~20s   | ~25s   |
 
 #### Proof Screenshot
@@ -765,7 +765,18 @@ The rate drops had 0 errors and the average rate remained above 4850 msg/s per p
 
 **Enrichment Throughput (Bronze → Silver):**
 
-Under the same sustained load, the Spark enrichment pipeline (Bronze → Silver layer) achieved a maximum throughput of **~2,000 records/second**. With a 5-second trigger interval, Spark processes ~6k–12k records per micro-batch in 0.8–4.2s. The gap between ingestion (~8,000 msg/s) and enrichment (~2,000 rec/s) is due to MinIO I/O overhead (Parquet read + Delta write with schema merge per batch).
+Initial testing showed the Spark enrichment pipeline reaching only **~2,000 records/second** while ingestion sustained ~8,000 msg/s. A systematic investigation was conducted to identify the bottleneck:
+
+1. **Gold streams disabled** (temperature averages + alerts) → no change
+2. **All processing disabled** (bare read → write) → throughput jumped to match ingestion rate
+3. **Feature-by-feature re-enablement** → union schema, enrichment metadata, and Delta write extras had no impact; device filtering caused the drop
+4. **Optimization attempts** on the filter path (DB caching, removing per-row normalization, bulk updates) → no change
+
+**Root cause:** The enrichment throughput was not limited by processing speed — data was being **silently dropped** by the device filter. Each ingestor pod generated a unique `ingestion_id` (due to a timestamp in the hash), but the backend's device registration only matched one pod's ID. Data from all other pods was filtered out.
+
+**Fix:** Changed `_generate_ingestion_id()` in `ingestor/src/services/data_source_service.py` to be deterministic — removed the timestamp from the hash so all pods producing the same data source name and type generate the same `ingestion_id`.
+
+**Result after fix:** Enrichment throughput matched the ingestion rate, confirming the pipeline processing (union schema transformation, normalization, Delta writes) adds negligible overhead relative to I/O.
 
 - Enrichment Throughput Dashboard:
 
@@ -790,12 +801,12 @@ Under the same sustained load, the Spark enrichment pipeline (Bronze → Silver 
 | R1  | Authentication     | Functional          | Operational | Verified   | ✅      |
 | R2  | Retention Policies | Functional          | Operational | Verified   | ✅      |
 | R3  | Data Labeling      | Functional          | Operational | Verified   | ✅      |
-| P1  | End-to-End Latency | Sensor → Gold (p95) | < 5 min     | ~5-8 min   | ✅      |
-| P2  | Ingestion          | Throughput          | > 1000 msg/s | ~8,000 msg/s (ingest), ~2,000 rec/s (enrich) | ✅      |
+| P1  | End-to-End Latency | Sensor → Gold (p95) | < 5 min     | ~2 min     | ✅      |
+| P2  | Ingestion          | Throughput          | > 1000 msg/s | ~8,000 msg/s (ingest), ~8,000 rec/s (enrich) | ✅      |
 
 **Notes:**
-- P1: Latency improved significantly after batch processor optimizations (removed unnecessary Spark actions, optimized shuffle partitions). The ~5-8 minute latency includes the 5-minute aggregation window for gold layer metrics.
-- P2: Normal throughput is ~1-2 msg/s with 4 sensor simulators. Using distributed in-cluster test clients (6 pods × 5000 msg/s), the system was tested with a **send rate of ~30,000 msg/s**, but the actual **processed throughput topped at ~8,000 msg/s** as observed in Grafana. The gap between send and receive rates indicates a bottleneck at the MQTT broker or ingestor processing layer, not the test clients. The ~8,000 msg/s figure is the true end-to-end ingestion throughput. The Spark enrichment pipeline (Bronze → Silver) reached ~2,000 rec/s with optimized batch processing (async metrics collection, 5-second trigger interval). The gap between ingestion and enrichment throughput is due to MinIO I/O overhead in the Bronze → Silver pipeline (Parquet read + Delta write with schema merge).
+- P1: Latency improved significantly after batch processor optimizations (removed unnecessary Spark actions, optimized shuffle partitions) and the enrichment throughput fix (deterministic `ingestion_id` ensuring all data is processed). The ~2-minute gold layer latency includes the 1-minute aggregation window for temperature averages.
+- P2: Normal throughput is ~1-2 msg/s with 4 sensor simulators. Using distributed in-cluster test clients (6 pods × 5000 msg/s), the system was tested with a **send rate of ~30,000 msg/s**, but the actual **processed throughput topped at ~8,000 msg/s** as observed in Grafana. The gap between send and receive rates indicates a bottleneck at the MQTT broker or ingestor processing layer, not the test clients. The ~8,000 msg/s figure is the true end-to-end ingestion throughput. Initial enrichment throughput appeared limited to ~2,000 rec/s, but investigation revealed the gap was caused by a **non-deterministic `ingestion_id` generation** bug: each ingestor pod produced a unique ID (hash included a timestamp), so the backend device filter only matched one pod's data and silently dropped the rest. After fixing `_generate_ingestion_id()` to be deterministic (`md5(name + type)` without timestamp), enrichment throughput matched the ingestion rate, confirming the Spark pipeline adds negligible processing overhead.
 
 ---
 
