@@ -108,6 +108,10 @@ class EnrichmentWatchdog:
         This check handles the one-time case where raw_json appears as a new
         column (e.g., after the ingestor is upgraded to include it).
         """
+        from src.spark.config import SparkConfig
+        if SparkConfig.BYPASS_ENRICHMENT:
+            return  # Fixed schema in bypass mode — no evolution to detect
+
         now = time.time()
         if (now - self._last_schema_check) < self._schema_check_interval:
             return
