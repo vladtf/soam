@@ -41,6 +41,7 @@ gh workflow run "1️⃣ Deploy Infrastructure" -f aks_vm_size=Standard_D8s_v5 -
 
 # Update specific services (no infra changes needed)
 gh workflow run "3️⃣ Update Images" -f images=backend,ingestor; gh run watch
+gh workflow run "3️⃣ Update Images" -f images=backend; gh run watch
 
 # Tear down everything
 gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY; gh run watch
@@ -128,6 +129,7 @@ gh workflow run "3️⃣ Update Images" -f images=backend,frontend -f restart_po
 
 ```powershell
 gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY -f delete_step=all; gh run watch
+gh workflow run "4️⃣ Cleanup (Destroy All)" -f confirm=DESTROY -f delete_step=kubernetes-only; gh run watch
 ```
 
 ---
