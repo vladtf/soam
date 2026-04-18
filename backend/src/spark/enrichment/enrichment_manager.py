@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import StructType, StructField
-from pyspark.sql.types import IntegerType, LongType, DoubleType, FloatType, StringType, TimestampType
+from pyspark.sql.types import IntegerType, LongType, DoubleType, FloatType, StringType, TimestampType, MapType
 
 from .cleaner import DataCleaner
 from ..config import SparkConfig, SparkSchemas
@@ -258,6 +258,9 @@ class EnrichmentManager:
         Returns:
             Union schema DataFrame
         """
+        if SparkConfig.BYPASS_ENRICHMENT:
+            return self._transform_to_union_schema_fixed(raw_stream)
+
         cleaner: DataCleaner = DataCleaner()
         
         # Transform to union schema with normalization
@@ -274,6 +277,84 @@ class EnrichmentManager:
             logger.warning(f"Could not log union stream columns: {e}")
 
         return union_stream
+
+    def _get_fixed_schema(self) -> StructType:
+        """Return a hardcoded schema for baseline performance testing.
+        
+        Matches the parquet columns written by the ingestor for the perf_test_mqtt
+        payload (temperature, humidity, sensor_id, etc.). The ingestor writes all
+        numeric types as float64 (double) and strings as StringType.
+        """
+        logger.info("⏭️ Using fixed hardcoded schema (bypass mode)")
+        return StructType([
+            StructField("ingestion_id", StringType(), nullable=True),
+            StructField("timestamp", StringType(), nullable=True),
+            StructField("temperature", DoubleType(), nullable=True),
+            StructField("humidity", DoubleType(), nullable=True),
+            StructField("sensor_id", StringType(), nullable=True),
+            StructField("thread_id", DoubleType(), nullable=True),
+            StructField("sequence", DoubleType(), nullable=True),
+            StructField("source_type", StringType(), nullable=True),
+            StructField("ingestion_timestamp", StringType(), nullable=True),
+        ])
+
+    def _transform_to_union_schema_fixed(self, raw_stream: DataFrame) -> DataFrame:
+        """Transform raw stream to union schema WITHOUT normalization (baseline mode).
+        
+        Skips all dynamic operations:
+        - No DB rule lookup (DataCleaner)
+        - No column normalization
+        - No UnionSchemaTransformer
+        
+        Builds sensor_data and normalized_data maps directly from known columns.
+        """
+        logger.info("⏭️ Bypass mode: skipping normalization, building union schema directly")
+
+        # Columns to include in maps (everything except ingestion_id and timestamp)
+        skip_cols = {"ingestion_id", "timestamp"}
+        data_cols = [c for c in raw_stream.columns if c not in skip_cols]
+
+        # sensor_data: all columns as strings
+        sensor_map_args = []
+        for col_name in data_cols:
+            sensor_map_args.append(F.lit(col_name))
+            sensor_map_args.append(F.col(col_name).cast("string"))
+
+        sensor_data_map = (
+            F.create_map(*sensor_map_args)
+            if sensor_map_args
+            else F.lit(None).cast(MapType(StringType(), StringType()))
+        )
+
+        # normalized_data: numeric columns as doubles
+        norm_map_args = []
+        for col_name in data_cols:
+            norm_map_args.append(F.lit(col_name))
+            norm_map_args.append(F.col(col_name).cast("double"))
+
+        normalized_data_map = (
+            F.create_map(*norm_map_args)
+            if norm_map_args
+            else F.lit(None).cast(MapType(StringType(), DoubleType()))
+        )
+
+        # Filter out null values
+        sensor_data_map = F.map_filter(sensor_data_map, lambda k, v: v.isNotNull())
+        normalized_data_map = F.map_filter(normalized_data_map, lambda k, v: v.isNotNull())
+
+        # Parse timestamp with fallback
+        timestamp_col = F.coalesce(
+            F.to_timestamp(F.col("timestamp")),
+            F.to_timestamp(F.col("timestamp"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"),
+            F.current_timestamp()
+        )
+
+        return raw_stream.select(
+            F.col("ingestion_id"),
+            timestamp_col.alias("timestamp"),
+            sensor_data_map.alias("sensor_data"),
+            normalized_data_map.alias("normalized_data"),
+        )
 
     def _add_enrichment_metadata(self, union_stream: DataFrame) -> DataFrame:
         """Add enrichment metadata to union stream.
@@ -334,7 +415,11 @@ class EnrichmentManager:
 
         try:
             # Get streaming schema - this will fail fast if no data is available
-            schema: StructType = self._get_streaming_schema()
+            if SparkConfig.BYPASS_ENRICHMENT:
+                logger.info("🧪 BYPASS MODE: Using fixed schema, skipping dynamic inference")
+                schema = self._get_fixed_schema()
+            else:
+                schema = self._get_streaming_schema()
             self._active_schema_fields = frozenset(f.name for f in schema.fields)
             logger.info(f"✅ Active schema fields ({len(self._active_schema_fields)}): {sorted(self._active_schema_fields)}")
             

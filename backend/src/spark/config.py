@@ -1,10 +1,15 @@
 """
 Configuration constants and schemas for Spark operations.
 """
+import os
 from pyspark.sql import types as T
 
 class SparkConfig:
     """Configuration constants for Spark operations."""
+
+    # Bypass mode: skip dynamic schema inference, normalization, and value transformations.
+    # Used for baseline performance comparison experiments.
+    BYPASS_ENRICHMENT = os.getenv("SPARK_BYPASS_ENRICHMENT", "false").lower() == "true"
 
     # Temperature thresholds
     TEMP_THRESHOLD = 30.0  # °C - Temperature threshold for alerts

@@ -9,6 +9,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from .device_filter import DeviceFilter
 from .value_transformer import ValueTransformationProcessor
+from ..config import SparkConfig
 from src import metrics as backend_metrics
 from src.utils.step_profiler import profile_step
 
@@ -77,6 +78,8 @@ class BatchProcessor:
     @profile_step(MODULE, "1_get_allowed_ids")
     def _get_allowed_ids(self) -> Tuple[Set[str], bool]:
         """Get device filtering information from database."""
+        if SparkConfig.BYPASS_ENRICHMENT:
+            return (set(), True)  # Accept all devices, skip DB query
         return self.device_filter.get_allowed_ingestion_ids()
 
     @profile_step(MODULE, "2_should_process")
@@ -92,6 +95,8 @@ class BatchProcessor:
     @profile_step(MODULE, "4_apply_transformations")
     def _apply_transformations(self, filtered_df: DataFrame) -> DataFrame:
         """Apply value transformations to the dataframe."""
+        if SparkConfig.BYPASS_ENRICHMENT:
+            return filtered_df  # Skip transformations in bypass mode
         try:
             transformed_df = self.value_transformer.apply_transformations(filtered_df)
             logger.info("✅ Applied value transformations to batch")

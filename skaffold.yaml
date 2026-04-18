@@ -116,6 +116,11 @@ portForward:
     namespace: default
     port: 9000
     localPort: 9000
+  - resourceType: service
+    resourceName: mosquitto
+    namespace: default
+    port: 1883
+    localPort: 1883
 
 # Monitoring stack port forwarding
   - resourceType: service
