@@ -53,6 +53,50 @@ The experiment compares the **same pipeline** running in two modes:
 
 The dynamic schema inference pipeline processes data at effectively the same rate as the fixed-schema baseline. The ~1.6% difference in instantaneous rate is within normal variance and reverses when measured as effective throughput over the full test duration.
 
+### Raw Results (JSON)
+
+<details>
+<summary>Dynamic schema inference</summary>
+
+```json
+{
+  "mode": "Dynamic schema inference",
+  "bypass": false,
+  "target_rate": 10000,
+  "duration_seconds": 900,
+  "cooldown_seconds": 90,
+  "pods": 4,
+  "namespace": "soam",
+  "throughput_rate": 10255.1,
+  "effective_throughput": 9502.4,
+  "total_processed": 8552181.0,
+  "timestamp": "2026-04-18T18:19:00"
+}
+```
+
+</details>
+
+<details>
+<summary>Fixed schema (bypass)</summary>
+
+```json
+{
+  "mode": "Fixed schema (bypass)",
+  "bypass": true,
+  "target_rate": 10000,
+  "duration_seconds": 900,
+  "cooldown_seconds": 90,
+  "pods": 4,
+  "namespace": "soam",
+  "throughput_rate": 10425.1,
+  "effective_throughput": 9438.0,
+  "total_processed": 8494157.0,
+  "timestamp": "2026-04-18T19:51:49"
+}
+```
+
+</details>
+
 ## Grafana Throughput Graphs
 
 ### Dynamic Schema Inference (Current Pipeline)
