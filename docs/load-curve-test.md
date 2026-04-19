@@ -38,12 +38,10 @@ xychart-beta
     title "Load Curve: Throughput vs Input Rate"
     x-axis "Input Rate (msg/s)" [1000, 5000, 10000, 15000, 20000]
     y-axis "Throughput (rec/s)" 0 --> 14000
-    line "Ideal (1:1)" [1000, 5000, 10000, 15000, 20000]
     line "Throughput Rate" [1159, 7058, 10152, 13317, 7407]
-    line "Effective Throughput" [1464, 5000, 9519, 11301, 9959]
 ```
 
-> **Legend**: *Ideal (1:1)* = input equals output (no loss). *Throughput Rate* = `rate()` from Prometheus at end of step. *Effective Throughput* = total records / duration.
+> **Throughput Rate** = `rate(enrichment_records_processed_total[3m])` captured from Prometheus immediately after each step completes.
 
 ## Analysis
 
