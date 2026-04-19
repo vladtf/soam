@@ -207,6 +207,7 @@ Reset-Pipeline | Out-Null
 Start-Sleep 15
 
 $preCount = Query-Prometheus 'enrichment_records_processed_total'
+if ($null -eq $preCount) { $preCount = 0 }
 
 # Run publisher
 if ($Local) {
