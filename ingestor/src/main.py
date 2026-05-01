@@ -1,6 +1,7 @@
 """
 FastAPI application with proper dependency injection for the SOAM ingestor.
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -61,6 +62,22 @@ async def lifespan(app: FastAPI):
 
         # ── Start connectors ─────────────────────────────────────
         await manager.start_all_enabled_sources()
+
+        # ── Buffer TTL eviction task ─────────────────────────────
+        async def _evict_stale_buffers():
+            """Periodically evict partition buffers that exceeded their TTL."""
+            ttl = state.buffer_ttl_seconds
+            interval = max(30, ttl // 2)  # Check at half the TTL, min 30s
+            logger.info(f"🗑️ Buffer eviction task started (TTL={ttl}s, check every {interval}s)")
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    state.evict_stale_buffers()
+                except Exception as e:
+                    logger.error(f"❌ Buffer eviction error: {e}")
+
+        eviction_task = asyncio.create_task(_evict_stale_buffers())
+
         logger.info("🚀 SOAM Ingestor started successfully")
 
     except Exception as e:
@@ -71,6 +88,7 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ─────────────────────────────────────────────────
     logger.info("🛑 Shutting down SOAM Ingestor...")
+    eviction_task.cancel()
     try:
         if mgr := getattr(app.state, "data_source_manager", None):
             await mgr.shutdown_all()

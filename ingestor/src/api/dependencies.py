@@ -2,6 +2,7 @@
 Dependency injection for the SOAM ingestor FastAPI application.
 """
 import os
+import time
 import logging
 from fastapi import Depends
 from typing import Annotated
@@ -53,9 +54,12 @@ class IngestorState:
     def __init__(self, config: IngestorConfig):
         # Partitioned buffers per ingestion_id
         self.buffer_max_rows = int(os.getenv("BUFFER_MAX_ROWS", "100"))
+        # Buffer TTL in seconds — partitions with no new data are evicted after this
+        self.buffer_ttl_seconds = int(os.getenv("BUFFER_TTL_SECONDS", "300"))
         # Map of ingestion_id -> deque
         self.data_buffers = {}
-
+        # Map of ingestion_id -> last write timestamp (monotonic)
+        self._buffer_last_write = {}
         # Reference the module-level metrics (no re-initialization)
         self.messages_received = MESSAGES_RECEIVED
         self.messages_processed = MESSAGES_PROCESSED
@@ -70,11 +74,33 @@ class IngestorState:
             new_buf = deque(buf, maxlen=self.buffer_max_rows)
             self.data_buffers[ingestion_id] = new_buf
             buf = new_buf
+        self._buffer_last_write[ingestion_id] = time.monotonic()
         return buf
 
     def clear_all_buffers(self) -> None:
         for k in list(self.data_buffers.keys()):
             self.data_buffers[k].clear()
+        self._buffer_last_write.clear()
+
+    def evict_stale_buffers(self) -> int:
+        """Remove partition buffers that haven't received data within the TTL.
+
+        Returns the number of evicted partitions.
+        """
+        if self.buffer_ttl_seconds <= 0:
+            return 0
+        now = time.monotonic()
+        stale_keys = [
+            k for k, ts in self._buffer_last_write.items()
+            if (now - ts) > self.buffer_ttl_seconds
+        ]
+        for k in stale_keys:
+            self.data_buffers.pop(k, None)
+            self._buffer_last_write.pop(k, None)
+        if stale_keys:
+            logger.info(f"🗑️ Evicted {len(stale_keys)} stale buffer partition(s) "
+                        f"(TTL={self.buffer_ttl_seconds}s, remaining={len(self.data_buffers)})")
+        return len(stale_keys)
 
     def set_buffer_max_rows(self, max_rows: int) -> None:
         self.buffer_max_rows = max(1, int(max_rows))
