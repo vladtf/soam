@@ -26,9 +26,13 @@ case "$SIMULATOR_TYPE" in
     echo "Starting smart bin simulator..."
     exec python -m simulators.smart_bin_simulator
     ;;
+  aot_replay)
+    echo "Starting AoT file-replay simulator..."
+    exec python -m simulators.aot_replay_simulator
+    ;;
   *)
     echo "Error: Unknown SIMULATOR_TYPE '$SIMULATOR_TYPE'"
-    echo "Valid options are: temperature, traffic, air_quality, smart_bin"
+    echo "Valid options are: temperature, traffic, air_quality, smart_bin, aot_replay"
     exit 1
     ;;
 esac
