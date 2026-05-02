@@ -23,6 +23,9 @@ param(
     [string]$DataFile = "",
     [string]$Username = "admin",
     [string]$Password = "admin",
+    [string]$MetricsWindow = "3m",
+    [int]$CooldownSeconds = 60,
+    [string]$OutputFile = "",
     [switch]$Local
 )
 
@@ -34,6 +37,77 @@ $DataConfigMap = "aot-data"
 $ScriptPath = "$PSScriptRoot\perf_test_aot.py"
 $JobManifest = "$PSScriptRoot\aot-replay-job.yaml"
 
+if (-not $OutputFile) {
+    $OutputFile = "$PSScriptRoot\result_aot_${Rate}r_${Duration}s.json"
+}
+
+function Query-Prometheus {
+    param([string]$Query)
+    try {
+        $promPod = kubectl get pods -n $Namespace -l app=prometheus -o jsonpath="{.items[0].metadata.name}" 2>$null
+        if (-not $promPod) { return $null }
+        $raw = kubectl exec $promPod -n $Namespace -- sh -c "wget -qO- 'http://localhost:9090/api/v1/query?query=$Query' 2>/dev/null" 2>$null
+        if (-not $raw) { return $null }
+        $response = $raw | ConvertFrom-Json
+        if ($response.status -eq "success" -and $response.data.result.Count -gt 0) {
+            $total = 0.0
+            foreach ($r in $response.data.result) {
+                $val = [string]$r.value[1]
+                if ($val -ne "NaN" -and $val -ne "") { $total += [double]$val }
+            }
+            return $total
+        }
+        return $null
+    } catch { return $null }
+}
+
+function Capture-Metrics {
+    Write-Host ""
+    Write-Host "📊 Capturing enrichment throughput from Prometheus..." -ForegroundColor Yellow
+
+    $script:throughputVal = 0
+    $script:effectiveThroughput = 0
+    $script:totalProcessed = 0
+
+    $throughput = Query-Prometheus "rate(enrichment_records_processed_total[$MetricsWindow])"
+    $ingestRate = Query-Prometheus "sum(rate(ingestor_messages_received_total[$MetricsWindow]))"
+    $script:throughputVal = if ($throughput) { [math]::Round($throughput, 1) } else { 0 }
+    $ingestVal = if ($ingestRate) { [math]::Round($ingestRate, 1) } else { 0 }
+
+    Write-Host "  Enrichment rate ($MetricsWindow): $($script:throughputVal) rec/s" -ForegroundColor Cyan
+    Write-Host "  Ingestor recv rate ($MetricsWindow): $ingestVal msg/s" -ForegroundColor Cyan
+
+    if ($CooldownSeconds -gt 0) {
+        Write-Host "⏳ Waiting ${CooldownSeconds}s for pipeline drain..." -ForegroundColor Yellow
+        Start-Sleep $CooldownSeconds
+    }
+
+    $postCount = Query-Prometheus 'enrichment_records_processed_total'
+    $script:totalProcessed = if ($null -ne $script:preCount -and $null -ne $postCount) { [math]::Round($postCount - $script:preCount, 0) } else { 0 }
+    $script:effectiveThroughput = if ($script:totalProcessed -gt 0 -and $Duration -gt 0) { [math]::Round($script:totalProcessed / $Duration, 1) } else { 0 }
+
+    # Build result JSON
+    $result = [ordered]@{
+        test_type            = "AoT Real Data"
+        target_rate          = $Rate * $Pods
+        duration_seconds     = $Duration
+        cooldown_seconds     = $CooldownSeconds
+        pods                 = $Pods
+        namespace            = $Namespace
+        data_file            = (Split-Path $DataFile -Leaf)
+        data_messages        = [int]$msgCount
+        enrichment_rate      = $script:throughputVal
+        ingestor_rate        = $ingestVal
+        effective_throughput  = $script:effectiveThroughput
+        total_processed      = $script:totalProcessed
+        timestamp            = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
+    }
+
+    $script:resultJson = $result | ConvertTo-Json -Depth 3
+    $script:resultJson | Out-File -FilePath $OutputFile -Encoding UTF8
+    Write-Host "📊 Results saved to: $OutputFile" -ForegroundColor Green
+}
+
 function Cleanup-TestResources {
     Write-Host "`n🛑 Cleaning up test resources..." -ForegroundColor Yellow
     kubectl delete jobs -n $Namespace -l app=aot-perf-test 2>$null | Out-Null
@@ -44,6 +118,7 @@ function Cleanup-TestResources {
     foreach ($p in ($perfPods -split " ")) { if ($p -match "perf") { kubectl delete pod $p -n $Namespace --force --grace-period=0 2>$null | Out-Null } }
     kubectl delete configmap $ScriptConfigMap $DataConfigMap -n $Namespace 2>$null | Out-Null
     Write-Host "✅ Cleanup complete" -ForegroundColor Green
+    Stop-PrometheusPortForward
 }
 
 # Default to committed slice
@@ -257,6 +332,12 @@ foreach ($pod in $podList) {
     Write-Host "  - $pod"
 }
 
+# Start Prometheus port-forward and capture pre-count
+Start-PrometheusPortForward
+$preCount = Query-Prometheus 'enrichment_records_processed_total'
+if ($null -eq $preCount) { $preCount = 0 }
+Write-Host "  📊 Pre-test enrichment count: $preCount" -ForegroundColor DarkGray
+
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " Polling logs (~${Duration}s test)" -ForegroundColor Cyan
@@ -292,6 +373,38 @@ while ($true) {
     Start-Sleep -Seconds $pollInterval
 }
 } finally {
+    # Capture throughput from Prometheus before cleanup
+    Write-Host ""
+    Write-Host "📊 Capturing enrichment throughput from Prometheus..." -ForegroundColor Yellow
+    $throughput = Query-Prometheus "rate(enrichment_records_processed_total[$MetricsWindow])"
+
+    Write-Host "⏳ Waiting ${CooldownSeconds}s for pipeline drain..." -ForegroundColor Yellow
+    Start-Sleep $CooldownSeconds
+
+    $postCount = Query-Prometheus 'enrichment_records_processed_total'
+    $totalProcessed = if ($null -ne $preCount -and $null -ne $postCount) { [math]::Round($postCount - $preCount, 0) } else { 0 }
+    $effectiveThroughput = if ($totalProcessed -gt 0 -and $Duration -gt 0) { [math]::Round($totalProcessed / $Duration, 1) } else { 0 }
+    $throughputVal = if ($throughput) { [math]::Round($throughput, 1) } else { 0 }
+
+    # Build result JSON
+    $result = [ordered]@{
+        test_type            = "AoT Real Data"
+        target_rate          = $Rate * $Pods
+        duration_seconds     = $Duration
+        cooldown_seconds     = $CooldownSeconds
+        pods                 = $Pods
+        namespace            = $Namespace
+        data_file            = (Split-Path $DataFile -Leaf)
+        data_messages        = [int]$msgCount
+        throughput_rate       = $throughputVal
+        effective_throughput  = $effectiveThroughput
+        total_processed      = $totalProcessed
+        timestamp            = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
+    }
+
+    $json = $result | ConvertTo-Json -Depth 3
+    $json | Out-File -FilePath $OutputFile -Encoding UTF8
+
     Cleanup-TestResources
 }
 
@@ -312,11 +425,18 @@ Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " SUMMARY" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  Pods         : $Pods"
-Write-Host "  Rate/pod     : $Rate msg/s"
-Write-Host "  Total target : $($Rate * $Pods) msg/s"
-Write-Host "  Duration     : ${Duration}s"
-Write-Host "  Data source  : $(Split-Path $DataFile -Leaf) ($msgCount real AoT messages)"
+Write-Host "  Pods               : $Pods"
+Write-Host "  Rate/pod           : $Rate msg/s"
+Write-Host "  Total target       : $($Rate * $Pods) msg/s"
+Write-Host "  Duration           : ${Duration}s"
+Write-Host "  Data source        : $(Split-Path $DataFile -Leaf) ($msgCount real AoT messages)"
+Write-Host "  Throughput (rate)  : $throughputVal rec/s"
+Write-Host "  Throughput (eff.)  : $effectiveThroughput rec/s"
+Write-Host "  Total processed    : $totalProcessed"
+Write-Host ""
+Write-Host "📊 Results saved to: $OutputFile" -ForegroundColor Green
+Write-Host ""
+Write-Host $json -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "Verify pipeline processing:" -ForegroundColor Cyan
 Write-Host "  kubectl logs statefulset/ingestor -n $Namespace --tail=20"
