@@ -19,6 +19,9 @@ param(
     [int]$Duration = 3000,
     [int]$Threads = 10,
     [string]$Namespace = "soam",
+    [string]$MetricsWindow = "3m",
+    [int]$CooldownSeconds = 60,
+    [string]$OutputFile = "",
     [switch]$Local
 )
 
@@ -28,6 +31,75 @@ $JobName = "mqtt-perf-test"
 $ConfigMapName = "perf-test-script"
 $ScriptPath = "$PSScriptRoot\..\..\tests\perf_test_mqtt.py"
 $JobManifest = "$PSScriptRoot\perf-test-job.yaml"
+
+if (-not $OutputFile) {
+    $OutputFile = "$PSScriptRoot\result_perf_${Rate}r_${Duration}s.json"
+}
+
+function Query-Prometheus {
+    param([string]$Query)
+    try {
+        $promPod = kubectl get pods -n $Namespace -l app=prometheus -o jsonpath="{.items[0].metadata.name}" 2>$null
+        if (-not $promPod) { return $null }
+        $raw = kubectl exec $promPod -n $Namespace -- sh -c "wget -qO- 'http://localhost:9090/api/v1/query?query=$Query' 2>/dev/null" 2>$null
+        if (-not $raw) { return $null }
+        $response = $raw | ConvertFrom-Json
+        if ($response.status -eq "success" -and $response.data.result.Count -gt 0) {
+            $total = 0.0
+            foreach ($r in $response.data.result) {
+                $val = [string]$r.value[1]
+                if ($val -ne "NaN" -and $val -ne "") { $total += [double]$val }
+            }
+            return $total
+        }
+        return $null
+    } catch { return $null }
+}
+
+function Capture-Metrics {
+    Write-Host ""
+    Write-Host "📊 Capturing enrichment throughput from Prometheus..." -ForegroundColor Yellow
+
+    $script:throughputVal = 0
+    $script:ingestVal = 0
+    $script:effectiveThroughput = 0
+    $script:totalProcessed = 0
+
+    $throughput = Query-Prometheus "rate(enrichment_records_processed_total[$MetricsWindow])"
+    $ingestRate = Query-Prometheus "sum(rate(ingestor_messages_received_total[$MetricsWindow]))"
+    $script:throughputVal = if ($throughput) { [math]::Round($throughput, 1) } else { 0 }
+    $script:ingestVal = if ($ingestRate) { [math]::Round($ingestRate, 1) } else { 0 }
+
+    Write-Host "  Enrichment rate ($MetricsWindow): $($script:throughputVal) rec/s" -ForegroundColor Cyan
+    Write-Host "  Ingestor recv rate ($MetricsWindow): $($script:ingestVal) msg/s" -ForegroundColor Cyan
+
+    if ($CooldownSeconds -gt 0) {
+        Write-Host "⏳ Waiting ${CooldownSeconds}s for pipeline drain..." -ForegroundColor Yellow
+        Start-Sleep $CooldownSeconds
+    }
+
+    $postCount = Query-Prometheus 'enrichment_records_processed_total'
+    $script:totalProcessed = if ($null -ne $script:preCount -and $null -ne $postCount) { [math]::Round($postCount - $script:preCount, 0) } else { 0 }
+    $script:effectiveThroughput = if ($script:totalProcessed -gt 0 -and $Duration -gt 0) { [math]::Round($script:totalProcessed / $Duration, 1) } else { 0 }
+
+    $result = [ordered]@{
+        test_type            = "Synthetic MQTT"
+        target_rate          = $Rate * $Pods
+        duration_seconds     = $Duration
+        cooldown_seconds     = $CooldownSeconds
+        pods                 = $Pods
+        namespace            = $Namespace
+        enrichment_rate      = $script:throughputVal
+        ingestor_rate        = $script:ingestVal
+        effective_throughput  = $script:effectiveThroughput
+        total_processed      = $script:totalProcessed
+        timestamp            = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
+    }
+
+    $script:resultJson = $result | ConvertTo-Json -Depth 3
+    $script:resultJson | Out-File -FilePath $OutputFile -Encoding UTF8
+    Write-Host "📊 Results saved to: $OutputFile" -ForegroundColor Green
+}
 
 function Cleanup-TestResources {
     Write-Host "`n🛑 Cleaning up test resources..." -ForegroundColor Yellow
@@ -110,6 +182,11 @@ foreach ($pod in $podList) {
     Write-Host "  - $pod"
 }
 
+# Capture pre-test enrichment count
+$script:preCount = Query-Prometheus 'enrichment_records_processed_total'
+if ($null -eq $script:preCount) { $script:preCount = 0 }
+Write-Host "  📊 Pre-test enrichment count: $($script:preCount)" -ForegroundColor DarkGray
+
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " Streaming logs from pod: $($podList[0])" -ForegroundColor Cyan
@@ -148,6 +225,7 @@ while ($true) {
     Start-Sleep -Seconds $pollInterval
 }
 } finally {
+    Capture-Metrics
     Cleanup-TestResources
 }
 
@@ -168,7 +246,13 @@ Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " COMBINED SUMMARY" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  Pods used    : $($podList.Count)"
-Write-Host "  Rate per pod : $Rate msg/s"
-Write-Host "  Total target : $($Rate * $Pods) msg/s"
+Write-Host "  Pods used          : $($podList.Count)"
+Write-Host "  Rate per pod       : $Rate msg/s"
+Write-Host "  Total target       : $($Rate * $Pods) msg/s"
+Write-Host "  Enrichment rate    : $($script:throughputVal) rec/s"
+Write-Host "  Ingestor recv rate : $($script:ingestVal) msg/s"
+Write-Host "  Effective throughput: $($script:effectiveThroughput) rec/s"
+Write-Host "  Total processed    : $($script:totalProcessed)"
+Write-Host ""
+Write-Host $script:resultJson -ForegroundColor DarkGray
 Write-Host "======================================" -ForegroundColor Cyan
