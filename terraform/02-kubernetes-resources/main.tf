@@ -467,6 +467,17 @@ resource "kubernetes_stateful_set" "minio" {
       }
 
       spec {
+        topology_spread_constraint {
+          max_skew           = 1
+          topology_key       = "kubernetes.io/hostname"
+          when_unsatisfiable = "ScheduleAnyway"
+          label_selector {
+            match_labels = {
+              app = "minio"
+            }
+          }
+        }
+
         container {
           name  = "minio"
           image = "minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1"
@@ -724,6 +735,22 @@ resource "helm_release" "spark" {
     name  = "global.security.allowInsecureImages"
     value = "true"
   }
+  set {
+    name  = "worker.topologySpreadConstraints[0].maxSkew"
+    value = "1"
+  }
+  set {
+    name  = "worker.topologySpreadConstraints[0].topologyKey"
+    value = "kubernetes.io/hostname"
+  }
+  set {
+    name  = "worker.topologySpreadConstraints[0].whenUnsatisfiable"
+    value = "ScheduleAnyway"
+  }
+  set {
+    name  = "worker.topologySpreadConstraints[0].labelSelector.matchLabels.app\.kubernetes\.io/component"
+    value = "worker"
+  }
 }
 
 # =============================================================================
@@ -756,6 +783,17 @@ resource "kubernetes_deployment" "ingestor" {
       }
 
       spec {
+        topology_spread_constraint {
+          max_skew           = 1
+          topology_key       = "kubernetes.io/hostname"
+          when_unsatisfiable = "ScheduleAnyway"
+          label_selector {
+            match_labels = {
+              app = "ingestor"
+            }
+          }
+        }
+
         container {
           name  = "ingestor"
           image = "${var.acr_login_server}/ingestor:latest"
