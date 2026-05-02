@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aot-perf-test
+spec:
+  parallelism: 2
+  completions: 2
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: aot-perf-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: aot-perf
+          image: soamregistry.azurecr.io/simulator:latest
+          command:
+            - python
+            - /scripts/perf_test_aot.py
+            - --broker
+            - mosquitto
+            - --rate
+            - "100"
+            - --duration
+            - "300"
+            - --threads
+            - "5"
+            - --data
+            - /data/aot
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: test-script
+              mountPath: /scripts
+            - name: aot-data
+              mountPath: /data/aot
+      volumes:
+        - name: test-script
+          configMap:
+            name: aot-test-script
+        - name: aot-data
+          configMap:
+            name: aot-data

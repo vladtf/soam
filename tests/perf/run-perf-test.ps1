@@ -29,6 +29,18 @@ $ConfigMapName = "perf-test-script"
 $ScriptPath = "$PSScriptRoot\..\..\tests\perf_test_mqtt.py"
 $JobManifest = "$PSScriptRoot\perf-test-job.yaml"
 
+function Cleanup-TestResources {
+    Write-Host "`n🛑 Cleaning up test resources..." -ForegroundColor Yellow
+    kubectl delete jobs -n $Namespace -l app=mqtt-perf-test 2>$null | Out-Null
+    # Delete any perf-related pods/jobs that may be lingering
+    $perfJobs = kubectl get jobs -n $Namespace -o jsonpath="{.items[*].metadata.name}" 2>$null
+    foreach ($j in ($perfJobs -split " ")) { if ($j -match "perf") { kubectl delete job $j -n $Namespace --force --grace-period=0 2>$null | Out-Null } }
+    $perfPods = kubectl get pods -n $Namespace -o jsonpath="{.items[*].metadata.name}" 2>$null
+    foreach ($p in ($perfPods -split " ")) { if ($p -match "perf") { kubectl delete pod $p -n $Namespace --force --grace-period=0 2>$null | Out-Null } }
+    kubectl delete configmap $ConfigMapName -n $Namespace 2>$null | Out-Null
+    Write-Host "✅ Cleanup complete" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " MQTT Performance Test (AKS)" -ForegroundColor Cyan
@@ -111,6 +123,7 @@ Write-Host ""
 
 $pollInterval = 15
 $lastLines = @{}
+try {
 while ($true) {
     # Check if job completed
     $status = kubectl get job $JobName -n $Namespace -o jsonpath="{.status.conditions[?(@.type=='Complete')].status}" 2>$null
@@ -134,6 +147,9 @@ while ($true) {
 
     Start-Sleep -Seconds $pollInterval
 }
+} finally {
+    Cleanup-TestResources
+}
 
 # Show results from all pods
 Write-Host ""
@@ -156,10 +172,3 @@ Write-Host "  Pods used    : $($podList.Count)"
 Write-Host "  Rate per pod : $Rate msg/s"
 Write-Host "  Total target : $($Rate * $Pods) msg/s"
 Write-Host "======================================" -ForegroundColor Cyan
-
-# Cleanup
-Write-Host ""
-Write-Host "Cleaning up test resources..." -ForegroundColor Yellow
-kubectl delete job $JobName -n $Namespace 2>$null
-kubectl delete configmap $ConfigMapName -n $Namespace 2>$null
-Write-Host "✅ Cleanup complete" -ForegroundColor Green

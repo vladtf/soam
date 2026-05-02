@@ -14,3 +14,4 @@
 *.tf text eol=lf
 Dockerfile text eol=lf
 Pipfile text eol=lf
+tests/aot/data/aot_slice.json filter=lfs diff=lfs merge=lfs -text
