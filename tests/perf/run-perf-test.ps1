@@ -3,7 +3,7 @@
 #
 # Usage:
 #   .\tests\perf\run-perf-test.ps1                                # defaults: 2 pods, 1500 rate, 300s, 10 threads
-#   .\tests\perf\run-perf-test.ps1 -Pods 4 -Rate 1000 -Duration 600
+#   .\tests\perf\run-perf-test.ps1 -Pods 4 -Rate 2500 -Duration 60000 -Namespace soam
 #   .\tests\perf\run-perf-test.ps1 -Local -Namespace default      # local cluster (uses localhost registry)
 #
 # Aditionally you can scale down the pods that are not required for the test to free up cluster resources, e.g.:
