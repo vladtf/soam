@@ -748,7 +748,7 @@ resource "helm_release" "spark" {
     value = "ScheduleAnyway"
   }
   set {
-    name  = "worker.topologySpreadConstraints[0].labelSelector.matchLabels.app\.kubernetes\.io/component"
+    name  = "worker.topologySpreadConstraints[0].labelSelector.matchLabels.app\\.kubernetes\\.io/component"
     value = "worker"
   }
 }
